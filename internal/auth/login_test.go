@@ -63,7 +63,10 @@ func TestLoginSuccessDeterministic(t *testing.T) {
 		Profile:      "main",
 		ClientID:     "test-client-id",
 		RedirectURI:  redirectURI,
-		Scopes:       DefaultScopes,
+		Scopes: []string{
+			"player-data:pet-simulator-99:inventory:read",
+			"player-data:pet-simulator-99:profile:read",
+		},
 		AuthorizeURL: oauthSrv.URL + "/oauth/authorize",
 		TokenURL:     oauthSrv.URL + "/oauth/token",
 		HTTPClient:   oauthSrv.Client(),
@@ -178,7 +181,11 @@ func TestLoginMissingScopeDoesNotStore(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	_, _, err = Login(ctx, LoginOptions{
-		Profile: "main", ClientID: "cid", RedirectURI: redirectURI, Scopes: DefaultScopes,
+		Profile: "main", ClientID: "cid", RedirectURI: redirectURI,
+		Scopes: []string{
+			"player-data:pet-simulator-99:inventory:read",
+			"player-data:pet-simulator-99:profile:read",
+		},
 		AuthorizeURL: srv.URL + "/oauth/authorize", TokenURL: srv.URL + "/oauth/token",
 		HTTPClient: srv.Client(), TokenStore: store,
 		SecretSource: SecretSource{Env: func(string) string { return "sec" }, IsTTY: func() bool { return false }, Stderr: io.Discard},

@@ -59,7 +59,8 @@ func ParseScopeList(raw string) ([]string, error) {
 		if f == "" {
 			continue
 		}
-		if !strings.HasPrefix(f, scopePrefix) && !strings.Contains(f, ":") {
+		// Accept short forms such as inventory:read or extendedProfile:read.
+		if !strings.HasPrefix(f, scopePrefix) {
 			f = scopePrefix + f
 		}
 		if _, ok := seen[f]; ok {

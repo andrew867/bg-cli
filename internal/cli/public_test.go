@@ -100,7 +100,10 @@ func TestInvalidJSONExit5(t *testing.T) {
 
 func TestAccountExtendedRequiresScope(t *testing.T) {
 	store := auth.NewMemoryStore()
-	setupProfile(t, store, auth.DefaultScopes)
+	setupProfile(t, store, []string{
+		"player-data:pet-simulator-99:inventory:read",
+		"player-data:pet-simulator-99:profile:read",
+	})
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
 	defer srv.Close()
