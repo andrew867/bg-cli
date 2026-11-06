@@ -100,7 +100,10 @@ func TestInvalidJSONExit5(t *testing.T) {
 
 func TestAccountExtendedRequiresScope(t *testing.T) {
 	store := auth.NewMemoryStore()
-	setupProfile(t, store, auth.DefaultScopes)
+	setupProfile(t, store, []string{
+		"player-data:pet-simulator-99:inventory:read",
+		"player-data:pet-simulator-99:profile:read",
+	})
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
 	defer srv.Close()
@@ -117,7 +120,7 @@ func TestAccountExtendedRequiresScope(t *testing.T) {
 
 func TestAccountMailWithScope(t *testing.T) {
 	store := auth.NewMemoryStore()
-	setupProfile(t, store, append(auth.DefaultScopes, "player-data:pet-simulator-99:mail:read"))
+	setupProfile(t, store, auth.DefaultScopes)
 	body, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-mail-ok.json"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/account/mail" {

@@ -7,7 +7,7 @@ This guide covers routine operation of a private bg-cli installation.
 1. Create the developer app and record the client ID (non-secret).
 2. Store the client secret in a password manager.
 3. Register the exact loopback redirect URI used by the CLI.
-4. Enable inventory and profile scopes; add others only when needed.
+4. Enable all seven account read scopes on the developer app (login requests them by default).
 5. Confirm the OS credential store is available for the interactive user session.
 6. Run `bg-cli auth login` and verify `bg-cli auth status` shows `tokenPresent: true`.
 

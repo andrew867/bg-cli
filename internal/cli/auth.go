@@ -47,6 +47,9 @@ func newAuthLoginCmd(app *App) *cobra.Command {
 		Long: `Starts a loopback callback, opens the BIG Games consent page, exchanges the
 authorization code, and stores the access token in the OS credential store.
 
+By default every documented account read scope is requested. Pass --scopes to
+opt out and request a smaller set instead.
+
 Client secret is never accepted as a flag. Provide it via:
   - masked interactive prompt
   - environment variable BG_CLI_CLIENT_SECRET (clear after login)
@@ -126,7 +129,7 @@ Auth commands do not support --output raw.`,
 	}
 	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID (non-secret)")
 	cmd.Flags().StringVar(&redirectURI, "redirect-uri", "", "exact registered loopback redirect URI")
-	cmd.Flags().StringVar(&scopesRaw, "scopes", "", "comma/space-separated scopes (default inventory+profile read)")
+	cmd.Flags().StringVar(&scopesRaw, "scopes", "", "opt-out: request only these scopes (default: all seven account read scopes)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "print authorize URL instead of opening a browser")
 	_ = cmd.MarkFlagRequired("client-id")
 	_ = cmd.MarkFlagRequired("redirect-uri")

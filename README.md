@@ -39,7 +39,7 @@ go build -o bg-cli ./cmd/bg-cli
 
 1. Register a developer app at [BIG Games developer apps](https://db.biggames.io/settings/developer-apps).
 2. Add an exact loopback redirect URI, for example `http://127.0.0.1:8765/callback`.
-3. Enable only the scopes you need. Inventory and profile read are sufficient for the core account commands.
+3. Enable all account read scopes on the developer app (bg-cli requests all of them by default; narrow with `auth login --scopes` if you prefer).
 4. Log in:
 
 ```bash

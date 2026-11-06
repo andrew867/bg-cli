@@ -17,9 +17,7 @@ Do not treat a developer secret as a player bearer token. Label and validate eac
 1. Open https://db.biggames.io/settings/developer-apps
 2. Create a private application
 3. Register the exact redirect URI the CLI will use (scheme, host, path, and port). Example: `http://127.0.0.1:8765/callback`
-4. Enable only required scopes. Recommended baseline:
-   - `player-data:pet-simulator-99:inventory:read`
-   - `player-data:pet-simulator-99:profile:read`
+4. Enable all seven Pet Simulator 99 account read scopes on the app. `bg-cli auth login` requests all of them by default.
 5. Store the client secret in a password manager
 
 If the dashboard rejects loopback redirect URIs, stop. A confidential callback and token-exchange service is required for that deployment model.
@@ -37,7 +35,7 @@ Optional flags:
 
 | Flag | Purpose |
 | --- | --- |
-| `--scopes` | Comma- or space-separated scopes beyond the defaults |
+| `--scopes` | Opt out of the full set: request only this comma/space-separated list |
 | `--no-open` | Print the authorize URL instead of opening a browser |
 
 Client secret input (never a CLI flag):
