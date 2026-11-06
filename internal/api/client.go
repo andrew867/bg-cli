@@ -188,13 +188,14 @@ func (c *Client) GetPublic(ctx context.Context, path string, query url.Values, b
 	}
 	res := Result{HTTPStatus: resp.StatusCode, Headers: resp.Header.Clone(), Body: body, Endpoint: path}
 	var env upstreamEnvelope
-	if json.Unmarshal(body, &env) == nil {
-		res.Status = env.Status
-		res.Data = env.Data
-		res.Refresh = env.Refresh
-		if env.Error != nil {
-			res.ErrorMsg = env.Error.Message
-		}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return res, fmt.Errorf("invalid JSON: %w", err)
+	}
+	res.Status = env.Status
+	res.Data = env.Data
+	res.Refresh = env.Refresh
+	if env.Error != nil {
+		res.ErrorMsg = env.Error.Message
 	}
 	return res, nil
 }

@@ -46,3 +46,6 @@ jobs:
           GOOS=darwin GOARCH=amd64 go build -o dist/bg-cli-darwin-amd64 ./cmd/bg-cli
           GOOS=darwin GOARCH=arm64 go build -o dist/bg-cli-darwin-arm64 ./cmd/bg-cli
           ls -la dist
+      - name: Vulnerability scan
+        run: |
+          GOTOOLCHAIN=auto go run golang.org/x/vuln/cmd/govulncheck@latest ./...

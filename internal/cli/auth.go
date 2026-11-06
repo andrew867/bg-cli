@@ -105,7 +105,7 @@ Auth commands do not support --output raw.`,
 						code = exitcode.Usage
 					}
 				}
-				_ = app.writer().Write(output.NewError("auth login", nil, output.DefaultFreshnessNull(), &output.ErrorBody{
+				_ = app.emit(output.NewError("auth login", nil, output.DefaultFreshnessNull(), &output.ErrorBody{
 					Code:      "oauth_failure",
 					Message:   msg,
 					Retryable: false,
@@ -121,10 +121,7 @@ Auth commands do not support --output raw.`,
 				"message":   "Access token stored in the OS credential store. Secrets are never printed.",
 			}
 			env := output.NewSuccess("auth login", nil, output.DefaultFreshnessNull(), data)
-			if err := app.writer().Write(env); err != nil {
-				return err
-			}
-			return nil
+			return app.emit(env)
 		},
 	}
 	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID (non-secret)")
@@ -203,7 +200,7 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 				"expired":      time.Now().UTC().After(p.ExpiresAt),
 				"redirectUri":  p.RedirectURI,
 			}
-			return app.writer().Write(output.NewSuccess("auth status", nil, output.DefaultFreshnessNull(), data))
+			return app.emit(output.NewSuccess("auth status", nil, output.DefaultFreshnessNull(), data))
 		},
 	}
 	cmd.Flags().BoolVar(&check, "check", false, "perform one authenticated API request (may use refresh quota)")
@@ -246,7 +243,7 @@ To revoke server-side: open the BIG Games account dashboard → Connected apps.`
 				"profile": profile,
 				"message": "Local token and metadata deleted. Revoke Connected apps in the BIG Games dashboard to end server-side access.",
 			}
-			return app.writer().Write(output.NewSuccess("auth logout", nil, output.DefaultFreshnessNull(), data))
+			return app.emit(output.NewSuccess("auth logout", nil, output.DefaultFreshnessNull(), data))
 		},
 	}
 }
@@ -277,13 +274,13 @@ func newAuthProfilesCmd(app *App) *cobra.Command {
 				"defaultProfile": cfg.DefaultProfile,
 				"profiles":       list,
 			}
-			return app.writer().Write(output.NewSuccess("auth profiles", nil, output.DefaultFreshnessNull(), data))
+			return app.emit(output.NewSuccess("auth profiles", nil, output.DefaultFreshnessNull(), data))
 		},
 	}
 }
 
 func writeAuthError(app *App, command string, code int, errCode, msg string) error {
-	_ = app.writer().Write(output.NewError(command, nil, output.DefaultFreshnessNull(), &output.ErrorBody{
+	_ = app.emit(output.NewError(command, nil, output.DefaultFreshnessNull(), &output.ErrorBody{
 		Code:      errCode,
 		Message:   msg,
 		Retryable: false,

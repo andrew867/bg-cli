@@ -32,6 +32,11 @@ This client is unofficial and not endorsed by BIG Games.`,
 	cmd.AddCommand(newAccountInventoryCmd(app))
 	cmd.AddCommand(newAccountProfileCmd(app))
 	cmd.AddCommand(newAccountCurrenciesCmd(app))
+	cmd.AddCommand(newAccountPassthroughCmd(app, "extended-profile", "extendedProfile", api.ScopeExtendedProfile, "Fetch authorizing account extended profile"))
+	cmd.AddCommand(newAccountPassthroughCmd(app, "item-index", "itemIndex", api.ScopeItemIndex, "Fetch authorizing account item index"))
+	cmd.AddCommand(newAccountPassthroughCmd(app, "trades", "trades", api.ScopeTrades, "Fetch authorizing account trade history"))
+	cmd.AddCommand(newAccountPassthroughCmd(app, "booth", "booth", api.ScopeBooth, "Fetch authorizing account booth history"))
+	cmd.AddCommand(newAccountPassthroughCmd(app, "mail", "mail", api.ScopeMail, "Fetch authorizing account mail history"))
 	return cmd
 }
 
@@ -192,6 +197,25 @@ Missing Currency is reported with currencyFieldPresent=false (not invented zeroe
 	return cmd
 }
 
+func newAccountPassthroughCmd(app *App, use, view, scope, short string) *cobra.Command {
+	var af accountFlags
+	cmd := &cobra.Command{
+		Use:   use,
+		Short: short,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return app.runAccountView(cmd.Context(), accountViewRequest{
+				Command:       "account " + use,
+				View:          view,
+				RequiredScope: scope,
+				Flags:         af,
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&af.refresh, "refresh", false, "request refresh=true (consumes quota; needs --yes if non-interactive)")
+	cmd.Flags().BoolVar(&af.yes, "yes", false, "confirm quota-affecting --refresh when non-interactive")
+	return cmd
+}
+
 type accountViewRequest struct {
 	Command       string
 	View          string
@@ -214,7 +238,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 			code = ee.Code
 			msg = ee.Msg
 		}
-		_ = a.writer().Write(output.NewError(req.Command, nil, output.DefaultFreshnessNull(), &output.ErrorBody{
+		_ = a.emit(output.NewError(req.Command, nil, output.DefaultFreshnessNull(), &output.ErrorBody{
 			Code:      "auth_required",
 			Message:   msg,
 			Retryable: false,
@@ -236,7 +260,15 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 		path = "/v1/account/profile"
 		res, err = client.GetProfile(ctx, tok, opt)
 	default:
-		return &ExitError{Code: exitcode.Usage, Msg: "unknown account view"}
+		p, scope, ok := api.PathForView(req.View)
+		if !ok {
+			return &ExitError{Code: exitcode.Usage, Msg: "unknown account view"}
+		}
+		if scope != req.RequiredScope {
+			return &ExitError{Code: exitcode.Usage, Msg: "scope mismatch for account view"}
+		}
+		path = p
+		res, err = client.GetAccountView(ctx, path, tok, opt)
 	}
 	if err != nil {
 		msg := secrets.Redact(err.Error())
@@ -244,7 +276,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 		if strings.Contains(msg, "invalid JSON") {
 			code = exitcode.Upstream
 		}
-		_ = a.writer().Write(output.NewError(req.Command, nil, output.DefaultFreshnessNull(), &output.ErrorBody{
+		_ = a.emit(output.NewError(req.Command, nil, output.DefaultFreshnessNull(), &output.ErrorBody{
 			Code:      "request_failed",
 			Message:   msg,
 			Retryable: false,
@@ -280,7 +312,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 		}
 		msg = secrets.Redact(msg)
 		st := res.HTTPStatus
-		_ = a.writer().Write(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
+		_ = a.emit(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
 			Code:           "unauthorized",
 			Message:        msg,
 			Retryable:      false,
@@ -294,7 +326,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 			msg = "forbidden; missing scope — re-authorize with the required scope"
 		}
 		st := res.HTTPStatus
-		_ = a.writer().Write(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
+		_ = a.emit(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
 			Code:           "forbidden",
 			Message:        secrets.Redact(msg),
 			Retryable:      false,
@@ -305,7 +337,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 	if res.HTTPStatus == 429 {
 		st := res.HTTPStatus
 		ra := api.ParseRetryAfterSeconds(res.Headers)
-		_ = a.writer().Write(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
+		_ = a.emit(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
 			Code:              "rate_limited",
 			Message:           "HTTP 429 rate limited; Retry-After reported without sleeping",
 			Retryable:         true,
@@ -321,7 +353,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 		if msg == "" {
 			msg = fmt.Sprintf("upstream HTTP %d", res.HTTPStatus)
 		}
-		_ = a.writer().Write(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
+		_ = a.emit(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
 			Code:           "upstream_error",
 			Message:        secrets.Redact(msg),
 			Retryable:      false,
@@ -359,7 +391,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 			"rateLimit":      res.RateLimit(),
 			"quotaExhausted": refreshQuotaExhausted(res.Refresh),
 		}
-		return a.writer().Write(output.NewSuccess(req.Command, source, fresh, data))
+		return a.emit(output.NewSuccess(req.Command, source, fresh, data))
 	case "profile":
 		var profile any
 		_ = json.Unmarshal(res.Data, &profile)
@@ -368,7 +400,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 			"rateLimit":      res.RateLimit(),
 			"quotaExhausted": refreshQuotaExhausted(res.Refresh),
 		}
-		return a.writer().Write(output.NewSuccess(req.Command, source, freshnessFromResult(res, nil), data))
+		return a.emit(output.NewSuccess(req.Command, source, freshnessFromResult(res, nil), data))
 	case "currencies":
 		ext, cerr := api.ExtractCurrencies(res.Data)
 		if cerr != nil {
@@ -385,9 +417,20 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 		if refreshQuotaExhausted(res.Refresh) {
 			a.notice("quotaExhausted: true — upstream returned latest snapshot with HTTP 200")
 		}
-		return a.writer().Write(output.NewSuccess(req.Command, source, freshnessFromResult(res, nil), data))
+		return a.emit(output.NewSuccess(req.Command, source, freshnessFromResult(res, nil), data))
+	default:
+		var payload any
+		_ = json.Unmarshal(res.Data, &payload)
+		data := map[string]any{
+			"data":           payload,
+			"rateLimit":      res.RateLimit(),
+			"quotaExhausted": refreshQuotaExhausted(res.Refresh),
+		}
+		if refreshQuotaExhausted(res.Refresh) {
+			a.notice("quotaExhausted: true — upstream returned latest snapshot with HTTP 200")
+		}
+		return a.emit(output.NewSuccess(req.Command, source, freshnessFromResult(res, nil), data))
 	}
-	return &ExitError{Code: exitcode.Usage, Msg: "unhandled view"}
 }
 
 func freshnessFromResult(res api.Result, snapshotAt *time.Time) *output.Freshness {

@@ -7,7 +7,7 @@ import (
 )
 
 // version is overridden via -ldflags at release time.
-var version = "0.1.0-dev"
+var version = "0.1.0"
 
 func main() {
 	cli.Version = version

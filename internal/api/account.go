@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -64,6 +65,14 @@ func (c *Client) GetProfile(ctx context.Context, token string, opt AccountGetOpt
 	return c.getAccountView(ctx, "/v1/account/profile", token, opt, BodyLimitDefault)
 }
 
+// GetAccountView fetches an allowlisted account path.
+func (c *Client) GetAccountView(ctx context.Context, path, token string, opt AccountGetOptions) (Result, error) {
+	if !IsAccountPath(path) {
+		return Result{}, fmt.Errorf("path %q is not an allowlisted account route", path)
+	}
+	return c.getAccountView(ctx, path, token, opt, BodyLimitDefault)
+}
+
 // InventoryData is a partial decode for filtering and snapshot fields.
 type InventoryData struct {
 	Items     []json.RawMessage `json:"items"`
@@ -73,16 +82,25 @@ type InventoryData struct {
 }
 
 type inventoryItemMeta struct {
-	Class string `json:"class"`
-	ID    string `json:"id"`
-	Count int64  `json:"count"`
+	Class string          `json:"class"`
+	ID    string          `json:"id"`
+	Count json.RawMessage `json:"count"`
+}
+
+func countAsFloat(raw json.RawMessage) float64 {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0
+	}
+	var n float64
+	if json.Unmarshal(raw, &n) == nil {
+		return n
+	}
+	return 0
 }
 
 // FilterInventory applies exact case-insensitive class/id filters.
-// equippedOnly keeps rows that appear in equipped payloads when possible;
-// when equipped structure is opaque, it returns items unchanged and sets
-// equippedOnlyUnsupported.
-func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) (filtered json.RawMessage, rowCount int, quantitySum int64, err error) {
+// quantitySum is distinct from rowCount and may exceed int64 for game-native stacks.
+func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) (filtered json.RawMessage, rowCount int, quantitySum float64, err error) {
 	var inv InventoryData
 	if err := json.Unmarshal(data, &inv); err != nil {
 		return nil, 0, 0, err
@@ -98,9 +116,8 @@ func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) 
 			continue
 		}
 		out = append(out, raw)
-		quantitySum += meta.Count
+		quantitySum += countAsFloat(meta.Count)
 	}
-	// Equipped-only: keep items whose id appears under equipped JSON text (best-effort exact id match).
 	if equippedOnly {
 		eq := string(inv.Equipped)
 		kept := out[:0]
@@ -109,16 +126,14 @@ func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) 
 			_ = json.Unmarshal(raw, &meta)
 			if meta.ID != "" && strings.Contains(strings.ToLower(eq), `"`+strings.ToLower(meta.ID)+`"`) {
 				kept = append(kept, raw)
-				continue
 			}
-			// If equipped is empty/null, result is empty by definition of equipped-only.
 		}
 		out = kept
 		quantitySum = 0
 		for _, raw := range out {
 			var meta inventoryItemMeta
 			_ = json.Unmarshal(raw, &meta)
-			quantitySum += meta.Count
+			quantitySum += countAsFloat(meta.Count)
 		}
 	}
 	inv.Items = out

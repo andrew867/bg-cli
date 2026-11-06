@@ -16,7 +16,7 @@ import (
 )
 
 // Version is set by main / ldflags.
-var Version = "0.1.0-dev"
+var Version = "0.1.0"
 
 // Deps are injectable collaborators for tests.
 type Deps struct {
@@ -39,6 +39,7 @@ type GlobalFlags struct {
 	Pretty  bool
 	Timeout time.Duration
 	Quiet   bool
+	NoCache bool
 }
 
 // App holds root state.
@@ -70,6 +71,13 @@ func (a *App) notice(format string, args ...any) {
 
 func (a *App) writer() output.Writer {
 	return output.Writer{Out: a.stdout(), Pretty: a.Flags.Pretty, Clock: a.Deps.Clock}
+}
+
+func (a *App) emit(env output.Envelope) error {
+	if a.Flags.Output == "table" {
+		return output.WriteTable(a.stdout(), env)
+	}
+	return a.writer().Write(env)
 }
 
 func (a *App) tokenStore() auth.TokenStore {
@@ -111,10 +119,15 @@ Never pass client_secret as a flag. Supply it via masked prompt, stdin, or BG_CL
 	root.PersistentFlags().BoolVar(&app.Flags.Pretty, "pretty", false, "indent JSON output")
 	root.PersistentFlags().DurationVar(&app.Flags.Timeout, "timeout", 15*time.Second, "HTTP timeout (1s-60s)")
 	root.PersistentFlags().BoolVar(&app.Flags.Quiet, "quiet", false, "suppress non-error stderr notices")
+	root.PersistentFlags().BoolVar(&app.Flags.NoCache, "no-cache", false, "bypass public response cache")
 
 	root.AddCommand(newVersionCmd(app))
 	root.AddCommand(newAuthCmd(app))
 	root.AddCommand(newAccountCmd(app))
+	root.AddCommand(newPlayerCmd(app))
+	root.AddCommand(newLeaderboardCmd(app))
+	root.AddCommand(newCollectionCmd(app))
+	root.AddCommand(newMarketCmd(app))
 
 	return root
 }

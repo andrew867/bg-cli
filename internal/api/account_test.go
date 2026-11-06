@@ -124,7 +124,7 @@ func TestFilterInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rows != 1 || qty != 3 {
-		t.Fatalf("rows=%d qty=%d", rows, qty)
+		t.Fatalf("rows=%d qty=%v", rows, qty)
 	}
 	_ = filtered
 	_, rows, _, err = FilterInventory(env.Data, "Weapon", "", false)

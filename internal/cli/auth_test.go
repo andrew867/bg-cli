@@ -128,7 +128,7 @@ func TestVersion(t *testing.T) {
 	if code != 0 {
 		t.Fatal(code)
 	}
-	if !strings.Contains(stdout.String(), "0.1.0") {
+	if !strings.Contains(stdout.String(), Version) {
 		t.Fatalf("stdout %q", stdout.String())
 	}
 }
