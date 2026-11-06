@@ -11,6 +11,7 @@ import (
 
 	"github.com/andrew867/bg-cli/internal/api"
 	"github.com/andrew867/bg-cli/internal/exitcode"
+	"github.com/andrew867/bg-cli/internal/jsonutil"
 	"github.com/andrew867/bg-cli/internal/output"
 )
 
@@ -46,9 +47,9 @@ func newLeaderboardListCmd(app *App) *cobra.Command {
 			_ = json.Unmarshal(pr.Res.Data, &root)
 			var boards []map[string]any
 			if raw, ok := root["leaderboards"]; ok {
-				_ = json.Unmarshal(raw, &boards)
+				_ = jsonutil.Decode(raw, &boards)
 			} else {
-				_ = json.Unmarshal(pr.Res.Data, &boards)
+				_ = jsonutil.Decode(pr.Res.Data, &boards)
 			}
 			filtered := make([]map[string]any, 0, len(boards))
 			for _, b := range boards {
@@ -105,10 +106,8 @@ func newLeaderboardShowCmd(app *App) *cobra.Command {
 			if err := app.mapPublicHTTP("leaderboard show", path, pr); err != nil {
 				return err
 			}
-			var payload any
-			_ = json.Unmarshal(pr.Res.Data, &payload)
 			return app.writePublicSuccess("leaderboard show", path, pr, map[string]any{
-				"page": payload,
+				"page": jsonutil.CloneRaw(pr.Res.Data),
 			}, nil)
 		},
 	}
@@ -150,10 +149,8 @@ func newLeaderboardPlayerCmd(app *App) *cobra.Command {
 			if err := app.mapPublicHTTP("leaderboard player", path, pr); err != nil {
 				return err
 			}
-			var payload any
-			_ = json.Unmarshal(pr.Res.Data, &payload)
 			return app.writePublicSuccess("leaderboard player", path, pr, map[string]any{
-				"player": payload,
+				"player": jsonutil.CloneRaw(pr.Res.Data),
 			}, nil)
 		},
 	}

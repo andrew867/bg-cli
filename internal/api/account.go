@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/url"
 	"strings"
 	"time"
@@ -87,25 +88,27 @@ type inventoryItemMeta struct {
 	Count json.RawMessage `json:"count"`
 }
 
-func countAsFloat(raw json.RawMessage) float64 {
-	if len(raw) == 0 || string(raw) == "null" {
-		return 0
+func addCount(sum *big.Int, raw json.RawMessage) {
+	if sum == nil || len(raw) == 0 || string(raw) == "null" {
+		return
 	}
-	var n float64
-	if json.Unmarshal(raw, &n) == nil {
-		return n
+	s := strings.TrimSpace(string(raw))
+	n, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return
 	}
-	return 0
+	sum.Add(sum, n)
 }
 
 // FilterInventory applies exact case-insensitive class/id filters.
-// quantitySum is distinct from rowCount and may exceed int64 for game-native stacks.
-func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) (filtered json.RawMessage, rowCount int, quantitySum float64, err error) {
+// quantitySum is distinct from rowCount and preserves exact integer text via json.Number.
+func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) (filtered json.RawMessage, rowCount int, quantitySum json.Number, err error) {
 	var inv InventoryData
 	if err := json.Unmarshal(data, &inv); err != nil {
-		return nil, 0, 0, err
+		return nil, 0, "0", err
 	}
 	out := make([]json.RawMessage, 0, len(inv.Items))
+	sum := new(big.Int)
 	for _, raw := range inv.Items {
 		var meta inventoryItemMeta
 		_ = json.Unmarshal(raw, &meta)
@@ -116,32 +119,28 @@ func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) 
 			continue
 		}
 		out = append(out, raw)
-		quantitySum += countAsFloat(meta.Count)
+		addCount(sum, meta.Count)
 	}
 	if equippedOnly {
 		eq := string(inv.Equipped)
 		kept := out[:0]
+		sum = new(big.Int)
 		for _, raw := range out {
 			var meta inventoryItemMeta
 			_ = json.Unmarshal(raw, &meta)
 			if meta.ID != "" && strings.Contains(strings.ToLower(eq), `"`+strings.ToLower(meta.ID)+`"`) {
 				kept = append(kept, raw)
+				addCount(sum, meta.Count)
 			}
 		}
 		out = kept
-		quantitySum = 0
-		for _, raw := range out {
-			var meta inventoryItemMeta
-			_ = json.Unmarshal(raw, &meta)
-			quantitySum += countAsFloat(meta.Count)
-		}
 	}
 	inv.Items = out
 	b, err := json.Marshal(inv)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, "0", err
 	}
-	return b, len(out), quantitySum, nil
+	return b, len(out), json.Number(sum.String()), nil
 }
 
 // SnapshotFromInventory returns fetchedAt/cached without inventing values.

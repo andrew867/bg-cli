@@ -40,6 +40,37 @@ func (c *Client) http() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
+// PublicCheckRedirect allows only same-host HTTPS redirects (loopback HTTP in tests).
+func PublicCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) == 0 {
+		return nil
+	}
+	if len(via) >= 5 {
+		return fmt.Errorf("stopped after 5 public redirects")
+	}
+	origin := via[0].URL
+	next := req.URL
+	if next == nil || origin == nil {
+		return fmt.Errorf("public redirect missing URL")
+	}
+	// Compare host:port so redirects cannot jump to another listener on the same name.
+	if !strings.EqualFold(next.Host, origin.Host) {
+		return fmt.Errorf("public redirects must stay on the same host")
+	}
+	switch strings.ToLower(next.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		host := next.Hostname()
+		if host == "127.0.0.1" || host == "localhost" {
+			return nil
+		}
+		return fmt.Errorf("public redirects must use https")
+	default:
+		return fmt.Errorf("public redirects must use https")
+	}
+}
+
 // Result is a decoded upstream response plus observed metadata.
 type Result struct {
 	HTTPStatus int
@@ -172,7 +203,10 @@ func (c *Client) GetPublic(ctx context.Context, path string, query url.Values, b
 	}
 	req.Header.Set("Accept", "application/json")
 	// Deliberately no Authorization header.
-	resp, err := c.http().Do(req)
+	client := c.http()
+	transportClient := *client
+	transportClient.CheckRedirect = PublicCheckRedirect
+	resp, err := transportClient.Do(req)
 	if err != nil {
 		return Result{Endpoint: path}, err
 	}
