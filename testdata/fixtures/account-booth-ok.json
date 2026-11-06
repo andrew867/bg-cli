@@ -1,0 +1,45 @@
+{
+  "status": "ok",
+  "data": {
+    "entries": [
+      {
+        "timestamp": 1793966400,
+        "kind": "sale",
+        "otherParty": {
+          "uid": 987654321,
+          "displayName": "Synthetic Buyer"
+        },
+        "given": [
+          {
+            "kind": "enriched",
+            "id": "Test Cat",
+            "displayName": "Test Cat",
+            "icon": "rbxassetid://100000001",
+            "goldenIcon": "",
+            "count": 1,
+            "rap": 1250,
+            "rapApproximate": false,
+            "exists": 5000,
+            "rarity": "Basic",
+            "variant": "Regular",
+            "collection": "Pets",
+            "rawData": {
+              "id": "Test Cat",
+              "_am": 1
+            }
+          }
+        ],
+        "received": []
+      }
+    ]
+  },
+  "refresh": {
+    "consumedThisCall": false,
+    "used": 4,
+    "limit": 48,
+    "resetsAt": "2026-11-07T00:00:00.000Z",
+    "nextRefreshEligibleAt": "2026-11-06T12:10:00.000Z",
+    "quotaExhausted": false,
+    "skipped": "fresh"
+  }
+}

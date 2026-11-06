@@ -1,1 +1,101 @@
 # bg-cli
+
+`bg-cli` is an unofficial, owner-operated command-line client for the official BIG Games HTTP APIs. Pet Simulator 99 is the first supported game surface. The tool is read-only with respect to game state: it authorizes accounts through OAuth, reads consented private snapshots, and reads public leaderboard and catalog data.
+
+**Not affiliated with or endorsed by BIG Games.**
+
+## Features
+
+- OAuth 2.0 Authorization Code with PKCE (S256) against `db.biggames.io`
+- Access tokens stored in the operating system credential store only
+- Authenticated account reads for inventory, profile, currencies, and related views
+- Public leaderboards, opted-in player views, collections, RAP, and exists
+- Stable JSON output (default), optional table view, and raw upstream bodies for data commands
+- Deterministic exit codes suitable for scripting
+
+## Requirements
+
+- Go 1.23 or newer to build from source
+- A BIG Games developer application for private account access
+- An OS credential store: Windows Credential Manager, macOS Keychain, or Linux Secret Service
+
+## Install
+
+```bash
+go install github.com/andrew867/bg-cli/cmd/bg-cli@latest
+```
+
+From a local checkout:
+
+```bash
+git clone https://github.com/andrew867/bg-cli.git
+cd bg-cli
+go build -o bg-cli ./cmd/bg-cli
+```
+
+Prebuilt binaries for Windows, Linux, and macOS are published with tagged releases.
+
+## Quick start
+
+1. Register a developer app at [BIG Games developer apps](https://db.biggames.io/settings/developer-apps).
+2. Add an exact loopback redirect URI, for example `http://127.0.0.1:8765/callback`.
+3. Enable only the scopes you need. Inventory and profile read are sufficient for the core account commands.
+4. Log in:
+
+```bash
+bg-cli auth login \
+  --profile main \
+  --client-id YOUR_CLIENT_ID \
+  --redirect-uri http://127.0.0.1:8765/callback
+```
+
+Provide the client secret through the masked prompt, stdin, or the `BG_CLI_CLIENT_SECRET` environment variable for that process only. Never pass the secret as a command-line flag.
+
+```bash
+bg-cli account currencies --profile main --pretty
+bg-cli account inventory --profile main --pretty
+bg-cli leaderboard list --pretty
+```
+
+## Documentation
+
+| Document | Description |
+| --- | --- |
+| [Installation](docs/installation.md) | Build, install, and verify |
+| [Authentication](docs/authentication.md) | Developer apps, OAuth, profiles, rotation |
+| [Command reference](docs/commands.md) | Flags and subcommands |
+| [Output and errors](docs/output-and-errors.md) | JSON schema, exit codes, freshness |
+| [Security](docs/security.md) | Secret handling and threat model |
+| [Operator guide](docs/operator-guide.md) | Day-two operations |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+
+## Important limits
+
+- One access token reads **only** the Roblox account that authorized it.
+- Account payloads are **cached snapshots**, not live game state. Refresh cadence is governed by BIG Games quota.
+- Missing currency fields or leaderboard rows are **not** interpreted as zero.
+- RAP is an index, not a guaranteed sale price. Exists counts are global, not per-player.
+- Distributing a shared `client_secret` inside a public binary is unsupported. Public multi-tenant deployments require a confidential token-exchange backend.
+
+## Development
+
+```bash
+go test ./...
+go test -race ./...
+go vet ./...
+gofmt -l .
+```
+
+Cross-compile targets:
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o dist/bg-cli-windows-amd64.exe ./cmd/bg-cli
+GOOS=linux   GOARCH=amd64 go build -o dist/bg-cli-linux-amd64 ./cmd/bg-cli
+GOOS=darwin  GOARCH=amd64 go build -o dist/bg-cli-darwin-amd64 ./cmd/bg-cli
+GOOS=darwin  GOARCH=arm64 go build -o dist/bg-cli-darwin-arm64 ./cmd/bg-cli
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).

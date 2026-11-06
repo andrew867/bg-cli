@@ -1,0 +1,13 @@
+/bg-cli
+/bg-cli.exe
+/dist/
+SHA256SUMS
+*.sha256
+
+*.exe
+*.test
+*.out
+.idea/
+.vscode/
+*.swp
+.DS_Store

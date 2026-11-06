@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ps99ctl/cli-output.schema.json",
+  "title": "ps99ctl stable JSON output",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "ok",
+    "command",
+    "source",
+    "freshness"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/source"
+        }
+      ]
+    },
+    "freshness": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/freshness"
+        }
+      ]
+    },
+    "data": {},
+    "error": {
+      "$ref": "#/$defs/error"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "ok": {
+          "const": true
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "ok": {
+          "const": false
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "not": {
+        "required": [
+          "data"
+        ]
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": [
+        "provider",
+        "classification",
+        "baseUrl",
+        "endpoint",
+        "httpStatus",
+        "retrievedAt",
+        "fromLocalCache"
+      ],
+      "properties": {
+        "provider": {
+          "const": "BIG Games"
+        },
+        "classification": {
+          "const": "official"
+        },
+        "baseUrl": {
+          "const": "https://ps99.biggamesapi.io"
+        },
+        "endpoint": {
+          "type": "string",
+          "pattern": "^/(v1|api)/"
+        },
+        "httpStatus": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "retrievedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fromLocalCache": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "freshness": {
+      "type": "object",
+      "required": [
+        "snapshotAt",
+        "isStale",
+        "meaning"
+      ],
+      "properties": {
+        "snapshotAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "isStale": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "meaning": {
+          "const": "cached player snapshot, not real time"
+        },
+        "refresh": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "upstreamStatus": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "retryAfterSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "details": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

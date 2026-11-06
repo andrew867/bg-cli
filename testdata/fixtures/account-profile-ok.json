@@ -1,0 +1,28 @@
+{
+  "status": "ok",
+  "data": {
+    "Rank": 12,
+    "Currency": {
+      "Diamonds": {
+        "id": "Diamonds",
+        "_am": 123456789
+      },
+      "SyntheticEventCoins": {
+        "id": "SyntheticEventCoins",
+        "_am": 9876543210
+      }
+    },
+    "Statistics": {
+      "Eggs Opened": 42
+    }
+  },
+  "refresh": {
+    "consumedThisCall": true,
+    "used": 4,
+    "limit": 48,
+    "resetsAt": "2026-11-07T00:00:00.000Z",
+    "nextRefreshEligibleAt": "2026-11-06T12:10:00.000Z",
+    "quotaExhausted": false,
+    "skipped": null
+  }
+}

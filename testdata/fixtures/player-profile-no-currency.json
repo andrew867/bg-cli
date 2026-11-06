@@ -1,0 +1,26 @@
+{
+  "status": "ok",
+  "data": {
+    "account": {
+      "robloxUserId": "123456789",
+      "username": "test_user",
+      "displayName": "Test User",
+      "publicViews": {
+        "profile": true
+      }
+    },
+    "views": {
+      "profile": {
+        "available": true,
+        "isStale": false,
+        "fetchedAt": "2026-11-06T12:00:00.000Z",
+        "data": {
+          "Rank": 12,
+          "Statistics": {
+            "Eggs Opened": 42
+          }
+        }
+      }
+    }
+  }
+}
