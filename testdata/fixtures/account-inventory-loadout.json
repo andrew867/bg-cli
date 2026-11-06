@@ -68,10 +68,11 @@
       },
       "enchants": {
         "list": [
-          { "id": "Lucky Eggs", "class": "Enchant", "level": 0, "uid": "enc-1" }
+          { "id": "Lucky Eggs", "class": "Enchant", "level": 0, "uid": "enc-1", "slot": "1", "paid": false }
         ],
-        "equippedCount": 1,
-        "maxEquipped": 5
+        "paidCount": 0,
+        "maxEnchants": 5,
+        "maxPaidEnchants": 2
       },
       "ultimate": null,
       "hoverboard": null,

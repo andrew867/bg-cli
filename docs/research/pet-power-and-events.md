@@ -51,6 +51,17 @@ Not found in public collections / account inventory as of this research:
 
 Official inventory docs treat enchant `level = 0` as not found / unresolved — **not** tier I.
 
+### Equipped loadout field names (official)
+
+From [v1/account.md](https://github.com/BIG-Games-LLC/ps99-public-api-docs/blob/master/v1/account.md):
+
+- **Pets:** `{ list, equippedCount, maxEquipped }`
+- **Enchants:** `{ list, paidCount, maxEnchants, maxPaidEnchants }` — **no** `equippedCount` / `maxEquipped`
+
+bg-cli derives enchant `equippedCount` from the sum of list-entry quantities and reads `maxEnchants` for the slot cap.
+
+Observed in the wild: multiple equipped Butler Penguins can share one `uid`. Treat `uid` as **stack identity**, not a unique instance key; preserve each `list`/`slot` entry and its quantity.
+
 ## Normal Huge damage mechanics
 
 Verified from public config:

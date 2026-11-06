@@ -53,15 +53,32 @@ func LoadAnnotations(path string) (AnnotationFile, error) {
 }
 
 // MatchAnnotation finds the best annotation for an equipped slot.
+// Prefer instanceKey/slot keys. UID alone is treated as a stack identity and is only
+// used when a single annotation matches that stack key — shared UIDs across multiple
+// equipped Butler Penguins must not collapse distinct slots.
 func (f AnnotationFile) MatchAnnotation(slot EquippedSlot) (PetAnnotation, bool) {
+	if slot.Slot != "" {
+		for _, p := range f.Pets {
+			if p.InstanceKey != "" && (p.InstanceKey == slot.Slot || p.InstanceKey == "slot:"+slot.Slot) {
+				return p, true
+			}
+		}
+	}
 	if slot.UID != "" {
+		matches := []PetAnnotation{}
 		for _, p := range f.Pets {
 			if p.UID != "" && p.UID == slot.UID {
-				return p, true
+				matches = append(matches, p)
 			}
 			if p.InstanceKey != "" && p.InstanceKey == slot.UID {
-				return p, true
+				matches = append(matches, p)
 			}
+		}
+		if len(matches) == 1 {
+			return matches[0], true
+		}
+		if len(matches) > 1 {
+			return PetAnnotation{ID: slot.ID, Notes: "ambiguous: uid is stack-identity and matches multiple annotations; use instanceKey/slot"}, false
 		}
 	}
 	var byID []PetAnnotation
@@ -74,8 +91,7 @@ func (f AnnotationFile) MatchAnnotation(slot EquippedSlot) (PetAnnotation, bool)
 		return byID[0], true
 	}
 	if len(byID) > 1 {
-		// Ambiguous: type alone cannot distinguish duplicates.
-		return PetAnnotation{ID: slot.ID, Notes: "ambiguous: multiple annotations for pet id without uid/instanceKey"}, false
+		return PetAnnotation{ID: slot.ID, Notes: "ambiguous: multiple annotations for pet id; uid is not a unique instance key — use slot/instanceKey"}, false
 	}
 	return PetAnnotation{}, false
 }

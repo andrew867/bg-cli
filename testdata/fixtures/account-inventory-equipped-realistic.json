@@ -1,0 +1,71 @@
+{
+  "items": [
+    {
+      "class": "Pet",
+      "id": "Butler Penguin",
+      "count": 20,
+      "displayName": "Butler Penguin",
+      "rawData": { "id": "Butler Penguin", "_am": 20 }
+    },
+    {
+      "class": "Enchant",
+      "id": "Strong Pets",
+      "count": 3,
+      "displayName": "Strong Pets"
+    },
+    {
+      "class": "Enchant",
+      "id": "Coins",
+      "count": 2,
+      "displayName": "Coins"
+    },
+    {
+      "class": "Enchant",
+      "id": "Treasure Hunter",
+      "count": 1,
+      "displayName": "Treasure Hunter"
+    },
+    {
+      "class": "Enchant",
+      "id": "Criticals",
+      "count": 1,
+      "displayName": "Criticals"
+    },
+    {
+      "class": "Enchant",
+      "id": "Lucky Eggs",
+      "count": 1,
+      "displayName": "Lucky Eggs"
+    }
+  ],
+  "equipped": {
+    "pets": {
+      "list": [
+        { "uid": "stack-butler-shared", "slot": "1", "id": "Butler Penguin", "displayName": "Butler Penguin", "shiny": false, "golden": false, "rainbow": false },
+        { "uid": "stack-butler-shared", "slot": "2", "id": "Butler Penguin", "displayName": "Butler Penguin", "shiny": false, "golden": false, "rainbow": false },
+        { "uid": "stack-butler-shared", "slot": "3", "id": "Butler Penguin", "displayName": "Butler Penguin", "shiny": false, "golden": true, "rainbow": false },
+        { "uid": "stack-butler-shared", "slot": "4", "id": "Butler Penguin", "displayName": "Butler Penguin", "shiny": false, "golden": false, "rainbow": false },
+        { "uid": "stack-butler-shared", "slot": "5", "id": "Butler Penguin", "displayName": "Butler Penguin", "shiny": false, "golden": false, "rainbow": false }
+      ],
+      "equippedCount": 5,
+      "maxEquipped": 66
+    },
+    "enchants": {
+      "list": [
+        { "uid": "ench-1", "slot": "1", "id": "Strong Pets", "displayName": "Strong Pets", "paid": false, "level": 0 },
+        { "uid": "ench-2", "slot": "2", "id": "Coins", "displayName": "Coins", "paid": false, "level": 0 },
+        { "uid": "ench-3", "slot": "3", "id": "Treasure Hunter", "displayName": "Treasure Hunter", "paid": false, "level": 0 },
+        { "uid": "ench-4", "slot": "4", "id": "Criticals", "displayName": "Criticals", "paid": false, "level": 0 },
+        { "uid": "ench-5", "slot": "5", "id": "Lucky Eggs", "displayName": "Lucky Eggs", "paid": false, "level": 0 }
+      ],
+      "paidCount": 0,
+      "maxEnchants": 6,
+      "maxPaidEnchants": 2
+    },
+    "ultimate": null,
+    "hoverboard": null,
+    "booth": null
+  },
+  "fetchedAt": "2026-11-06T16:00:00.000Z",
+  "cached": false
+}

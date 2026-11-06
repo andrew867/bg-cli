@@ -113,10 +113,19 @@ func breakdownPet(slot EquippedSlot, pl PlayerLoadout, opt InspectOptions, world
 		PetID: slot.ID, UID: slot.UID, WorldID: world,
 		Missing: []string{}, Warnings: []string{},
 	}
+	if slot.Slot != "" {
+		b.Warnings = append(b.Warnings, "equippedSlot="+slot.Slot)
+	}
+	if slot.Quantity > 1 {
+		b.Warnings = append(b.Warnings, fmt.Sprintf("equippedQuantity=%d (list entry not collapsed by uid)", slot.Quantity))
+	}
+	if slot.UID != "" {
+		b.Warnings = append(b.Warnings, "uidRole=stack-identity (not unique instance)")
+	}
 	ann, annOK := opt.Annotations.MatchAnnotation(slot)
 	if !annOK && ann.Notes != "" {
 		b.Warnings = append(b.Warnings, ann.Notes)
-		b.Missing = append(b.Missing, "ambiguous pet annotation without uid/instanceKey")
+		b.Missing = append(b.Missing, "ambiguous pet annotation; prefer slot/instanceKey over shared uid")
 	}
 
 	// 1. Published base

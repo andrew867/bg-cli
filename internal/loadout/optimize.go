@@ -81,8 +81,9 @@ func Optimize(reg Registry, pl PlayerLoadout, opt OptimizeOptions) (OptimizeResu
 	}
 	res.Assumptions = append(res.Assumptions,
 		"Only owned enchant/pet stacks may be recommended.",
-		"Enchant recommendations never exceed equipped.enchants.maxEquipped.",
+		"Enchant recommendations never exceed equipped.enchants.maxEnchants (official field; legacy maxEquipped accepted as fallback).",
 		"Pet slot limits prefer world registry; inventory general maxEquipped is used only for world=general.",
+		"Equipped pet uid is treated as stack-identity; quantities are preserved per list/slot entry and never deduplicated by uid.",
 	)
 
 	res.PetSlotLimit, res.PetSlotLimitSource = resolvePetSlots(reg, pl, est.WorldID, &res.Warnings)
@@ -248,10 +249,18 @@ func resolvePetSlots(reg Registry, pl PlayerLoadout, worldID string, warnings *[
 	return nil, "unknown"
 }
 
+// idsOf expands equipped entries by quantity (no UID dedupe). Five Butler Penguins
+// sharing one uid still yield five id entries (or a single id repeated by quantity).
 func idsOf(slots []EquippedSlot) []string {
 	out := make([]string, 0, len(slots))
 	for _, s := range slots {
-		out = append(out, s.ID)
+		q := s.Quantity
+		if q < 1 {
+			q = 1
+		}
+		for i := 0; i < q; i++ {
+			out = append(out, s.ID)
+		}
 	}
 	return out
 }

@@ -28,7 +28,7 @@ Snapshot diff never contacts the network. Keep both manifests and their sibling 
 
 Loadout optimize never invents DPS. When Halloween Games (or other event) pet slot limits are unverified, the tool leaves them unknown instead of copying general `maxEquipped`. Use `account loadout calibrate` or `account experiment compare` on controlled snapshot pairs to measure currency rates, then manually promote measured magnitudes into a registry file if desired.
 
-For Huge levels and charms missing from the account API, pass `--annotations` JSON (see `testdata/fixtures/loadout-annotations-halloween.json`). Cache public collections with provenance via `--pets-collection` / `--charms-collection`. Read `docs/research/pet-power-and-events.md` before treating any event percentage as a verified formula.
+For Huge levels and charms missing from the account API, pass `--annotations` JSON (see `testdata/fixtures/loadout-annotations-halloween.json`). Prefer `instanceKey`/`slot` over `uid` — equipped `uid` values can be shared stack identities. Cache public collections with provenance via `--pets-collection` / `--charms-collection`. Read `docs/research/pet-power-and-events.md` before treating any event percentage as a verified formula.
 
 Shell completions: `bg-cli completion powershell | Out-String | Invoke-Expression` (Windows) or `source <(bg-cli completion bash)` (Linux/macOS).
 
