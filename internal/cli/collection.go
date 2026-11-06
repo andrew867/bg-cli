@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
 	"net/url"
 
 	"github.com/spf13/cobra"
 
 	"github.com/andrew867/bg-cli/internal/api"
+	"github.com/andrew867/bg-cli/internal/jsonutil"
 )
 
 func newCollectionCmd(app *App) *cobra.Command {
@@ -32,10 +32,8 @@ func newCollectionListCmd(app *App) *cobra.Command {
 			if err := app.mapPublicHTTP("collection list", path, pr); err != nil {
 				return err
 			}
-			var names any
-			_ = json.Unmarshal(pr.Res.Data, &names)
 			return app.writePublicSuccess("collection list", path, pr, map[string]any{
-				"collections": names,
+				"collections": jsonutil.CloneRaw(pr.Res.Data),
 			}, nil)
 		},
 	}
@@ -56,10 +54,8 @@ func newCollectionShowCmd(app *App) *cobra.Command {
 			if err := app.mapPublicHTTP("collection show", path, pr); err != nil {
 				return err
 			}
-			var payload any
-			_ = json.Unmarshal(pr.Res.Data, &payload)
 			return app.writePublicSuccess("collection show", path, pr, map[string]any{
-				"collection": payload,
+				"collection": jsonutil.CloneRaw(pr.Res.Data),
 			}, nil)
 		},
 	}

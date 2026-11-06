@@ -94,8 +94,17 @@ func TestAccountInventoryOK(t *testing.T) {
 	if data["rowCount"].(float64) != 1 {
 		t.Fatalf("%v", data["rowCount"])
 	}
-	if data["quantitySum"].(float64) != 3 {
-		t.Fatalf("quantity distinct from row semantics: %v", data)
+	switch q := data["quantitySum"].(type) {
+	case float64:
+		if q != 3 {
+			t.Fatalf("quantitySum=%v", q)
+		}
+	case json.Number:
+		if q != "3" {
+			t.Fatalf("quantitySum=%v", q)
+		}
+	default:
+		t.Fatalf("quantitySum type %T", data["quantitySum"])
 	}
 }
 

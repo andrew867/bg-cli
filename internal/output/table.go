@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -59,6 +60,16 @@ func writeDataTable(w io.Writer, prefix string, v any, depth int) error {
 		return err
 	case string:
 		_, err := fmt.Fprintf(w, "%s\t%s\n", prefix, sanitizeTableCell(t))
+		return err
+	case json.Number:
+		_, err := fmt.Fprintf(w, "%s\t%s\n", prefix, string(t))
+		return err
+	case json.RawMessage:
+		var nested any
+		if json.Unmarshal(t, &nested) == nil {
+			return writeDataTable(w, prefix, nested, depth)
+		}
+		_, err := fmt.Fprintf(w, "%s\t%s\n", prefix, sanitizeTableCell(string(t)))
 		return err
 	case float64:
 		// Avoid scientific notation for common integer-valued floats.

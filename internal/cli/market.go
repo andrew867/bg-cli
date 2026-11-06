@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -94,17 +95,18 @@ func newMarketExistsCmd(app *App) *cobra.Command {
 
 func filterMarketMap(raw json.RawMessage, category, id string) (any, error) {
 	if category == "" && id == "" {
-		var payload any
-		if err := json.Unmarshal(raw, &payload); err != nil {
-			return nil, err
+		if !json.Valid(raw) {
+			return nil, fmt.Errorf("invalid JSON")
 		}
-		return payload, nil
+		out := make(json.RawMessage, len(raw))
+		copy(out, raw)
+		return out, nil
 	}
 	var asMap map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &asMap); err != nil {
-		var payload any
-		_ = json.Unmarshal(raw, &payload)
-		return payload, nil
+		out := make(json.RawMessage, len(raw))
+		copy(out, raw)
+		return out, nil
 	}
 	out := map[string]json.RawMessage{}
 	for k, v := range asMap {

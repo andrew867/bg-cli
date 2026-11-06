@@ -15,6 +15,7 @@ import (
 	"github.com/andrew867/bg-cli/internal/api"
 	"github.com/andrew867/bg-cli/internal/config"
 	"github.com/andrew867/bg-cli/internal/exitcode"
+	"github.com/andrew867/bg-cli/internal/jsonutil"
 	"github.com/andrew867/bg-cli/internal/output"
 	"github.com/andrew867/bg-cli/internal/redact"
 )
@@ -379,11 +380,9 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 			return &ExitError{Code: exitcode.Upstream, Msg: ferr.Error()}
 		}
 		snap, cached := api.SnapshotFromInventory(res.Data)
-		var invObj map[string]any
-		_ = json.Unmarshal(filtered, &invObj)
 		fresh := freshnessFromResult(res, snap)
 		data := map[string]any{
-			"inventory":      invObj,
+			"inventory":      jsonutil.CloneRaw(filtered),
 			"rowCount":       rowCount,
 			"quantitySum":    qtySum,
 			"rowCountNote":   "rowCount is filtered item rows, not total item quantity",
@@ -393,10 +392,8 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 		}
 		return a.emit(output.NewSuccess(req.Command, source, fresh, data))
 	case "profile":
-		var profile any
-		_ = json.Unmarshal(res.Data, &profile)
 		data := map[string]any{
-			"profile":        profile,
+			"profile":        jsonutil.CloneRaw(res.Data),
 			"rateLimit":      res.RateLimit(),
 			"quotaExhausted": refreshQuotaExhausted(res.Refresh),
 		}
@@ -419,10 +416,8 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 		}
 		return a.emit(output.NewSuccess(req.Command, source, freshnessFromResult(res, nil), data))
 	default:
-		var payload any
-		_ = json.Unmarshal(res.Data, &payload)
 		data := map[string]any{
-			"data":           payload,
+			"data":           jsonutil.CloneRaw(res.Data),
 			"rateLimit":      res.RateLimit(),
 			"quotaExhausted": refreshQuotaExhausted(res.Refresh),
 		}
@@ -436,7 +431,7 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 func freshnessFromResult(res api.Result, snapshotAt *time.Time) *output.Freshness {
 	var refresh any
 	if len(res.Refresh) > 0 && string(res.Refresh) != "null" {
-		_ = json.Unmarshal(res.Refresh, &refresh)
+		refresh = jsonutil.CloneRaw(res.Refresh)
 	}
 	return &output.Freshness{
 		SnapshotAt: snapshotAt,

@@ -10,6 +10,7 @@ import (
 
 	"github.com/andrew867/bg-cli/internal/api"
 	"github.com/andrew867/bg-cli/internal/exitcode"
+	"github.com/andrew867/bg-cli/internal/jsonutil"
 	"github.com/andrew867/bg-cli/internal/output"
 )
 
@@ -40,10 +41,8 @@ func newPlayerViewsCmd(app *App) *cobra.Command {
 			if err := app.mapPublicHTTP("player views", path, pr); err != nil {
 				return err
 			}
-			var payload any
-			_ = json.Unmarshal(pr.Res.Data, &payload)
 			return app.writePublicSuccess("player views", path, pr, map[string]any{
-				"player": payload,
+				"player": jsonutil.CloneRaw(pr.Res.Data),
 			}, nil)
 		},
 	}
@@ -81,7 +80,7 @@ func newPlayerShowCmd(app *App) *cobra.Command {
 				_ = json.Unmarshal(raw, &vm)
 				for name, vraw := range vm {
 					var meta map[string]any
-					_ = json.Unmarshal(vraw, &meta)
+					_ = jsonutil.Decode(vraw, &meta)
 					avail, _ := meta["available"].(bool)
 					if !avail {
 						reason, _ := meta["reason"].(string)
@@ -91,7 +90,7 @@ func newPlayerShowCmd(app *App) *cobra.Command {
 						unavailable = append(unavailable, map[string]any{"view": name, "reason": reason})
 						continue
 					}
-					viewsObj[name] = meta
+					viewsObj[name] = jsonutil.CloneRaw(vraw)
 				}
 			}
 			if len(unavailable) > 0 && len(viewsObj) == 0 {
@@ -110,23 +109,31 @@ func newPlayerShowCmd(app *App) *cobra.Command {
 			var snap *time.Time
 			// Prefer explicit fetchedAt inside a view when present.
 			for _, v := range viewsObj {
-				if m, ok := v.(map[string]any); ok {
-					if s, ok := m["fetchedAt"].(string); ok && s != "" {
-						if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-							snap = &t
-							break
-						}
-						if t, err := time.Parse(time.RFC3339, s); err == nil {
-							snap = &t
-							break
-						}
-					}
+				raw, ok := v.(json.RawMessage)
+				if !ok {
+					continue
+				}
+				var m map[string]any
+				if jsonutil.Decode(raw, &m) != nil {
+					continue
+				}
+				s, _ := m["fetchedAt"].(string)
+				if s == "" {
+					continue
+				}
+				if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+					snap = &t
+					break
+				}
+				if t, err := time.Parse(time.RFC3339, s); err == nil {
+					snap = &t
+					break
 				}
 			}
 
 			var account any
 			if raw, ok := root["account"]; ok {
-				_ = json.Unmarshal(raw, &account)
+				account = jsonutil.CloneRaw(raw)
 			}
 			return app.writePublicSuccess("player show", path, pr, map[string]any{
 				"account":     account,
