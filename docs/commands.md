@@ -53,6 +53,7 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account profile` | `/v1/account/profile` | profile:read |
 | `account currencies` | `/v1/account/profile` | profile:read |
 | `account quota` | `/v1/account/profile` | profile:read |
+| `account snapshot` | inventory + profile + extendedProfile | inventory + profile + extendedProfile |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -72,10 +73,25 @@ Currencies filter: `--id`.
 
 `account quota` returns refresh used/limit/`resetsAt` plus rate-limit remaining and `Retry-After` without printing the profile body.
 
+`account snapshot` writes a dated five-file dump (plus manifest) into `--dir` (default `.`):
+
+```text
+{yyyy-MM-dd-HHmmss}-{prefix}-inv.json
+{yyyy-MM-dd-HHmmss}-{prefix}-prof.json
+{yyyy-MM-dd-HHmmss}-{prefix}-extprof.json
+{yyyy-MM-dd-HHmmss}-{prefix}-inventory.csv
+{yyyy-MM-dd-HHmmss}-{prefix}-currencies.csv
+{yyyy-MM-dd-HHmmss}-{prefix}-manifest.json
+```
+
+The manifest records API `fetchedAt` when present, file sizes, `petQuantitySum`, currency amounts, and profile Statistics for comparing two runs. Stdout gets a small summary only.
+
 Export examples:
 
 ```bash
 bg-cli account quota --profile main --pretty
+bg-cli account snapshot --profile main --dir . --prefix ps99
+bg-cli account snapshot --profile main --dir D:\snaps --join-rap --excel
 bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv
 bg-cli account currencies --profile main --output csv --excel > currencies.csv
 bg-cli account inventory --profile main --output table

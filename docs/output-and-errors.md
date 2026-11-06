@@ -45,6 +45,10 @@ CSV currencies columns: `key`, `id`, `_am`, `amount` (`amount` mirrors exact `_a
 
 `account quota` surfaces refresh quota (`used`, `limit`, `resetsAt`, `nextRefreshEligibleAt`, `quotaExhausted`) and HTTP rate-limit headers (`remaining`, `Retry-After`) without dumping account payloads.
 
+## Snapshot export
+
+`account snapshot` writes dated JSON/CSV files into `--dir` and a `*-manifest.json` that includes API `snapshotAt` (from inventory `fetchedAt` when present), `petQuantitySum`, exact currency amounts, and profile Statistics. Stdout is only a compact summary envelope — not the payload files.
+
 ## Exit codes
 
 | Code | Meaning |

@@ -55,6 +55,7 @@ Provide the client secret through the masked prompt, stdin, or the `BG_CLI_CLIEN
 ```bash
 bg-cli doctor
 bg-cli account quota --profile main --pretty
+bg-cli account snapshot --profile main --dir . --prefix ps99
 bg-cli account currencies --profile main --pretty
 bg-cli account inventory --profile main --pretty
 bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv

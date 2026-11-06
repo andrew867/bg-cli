@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Currency CSV adds an Excel-friendly `amount` column (mirrors exact `_am`); `--excel` writes a UTF-8 BOM
 - Inventory CSV includes pet variant columns (`variant`, `golden`, `rainbow`, `shiny`, `pt`, `sh`, `stackKey`) derived from `rawData`
 - Inventory responses add `petRowCount` / `petQuantitySum`; `quantitySum` is documented as an all-rows count sum (may include currency stacks)
+- `account snapshot` writes dated inventory/profile/extended-profile JSON + inventory/currencies CSV plus a compare-friendly manifest
 
 ## [0.1.2] - 2026-11-06
 

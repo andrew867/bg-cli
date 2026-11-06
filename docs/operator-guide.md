@@ -16,6 +16,7 @@ This guide covers routine operation of a private bg-cli installation.
 
 ```bash
 bg-cli account quota --profile main --pretty
+bg-cli account snapshot --profile main --dir . --prefix ps99
 bg-cli account currencies --profile main --pretty
 bg-cli account inventory --profile main --class Pet --pretty
 bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv
