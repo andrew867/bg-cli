@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `account power inspect`: layered pet-power models per world/event with public-config provenance, optional annotations for Huge levels/charms, and competing Halloween 31% models (A–D)
 - `account experiment compare`: offline controlled snapshot experiments with confounder checks per currency ID
 - Research notes: `docs/research/pet-power-and-events.md`
+- `account forge observe|analyze|optimize|ledger`: offline Halloween Forge probability fitting and recipe optimization from UI observations (capped-linear Butler-only model, mixed-recipe uncertainty, local attempt ledger)
+- Research notes: `docs/research/halloween-forge.md`; operator flow: `docs/operator-guide-analysis.md`
 
 ## [0.1.2] - 2026-11-06
 

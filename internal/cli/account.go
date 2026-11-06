@@ -38,6 +38,7 @@ This client is unofficial and not endorsed by BIG Games.`,
 	cmd.AddCommand(newAccountLoadoutCmd(app))
 	cmd.AddCommand(newAccountPowerCmd(app))
 	cmd.AddCommand(newAccountExperimentCmd(app))
+	cmd.AddCommand(newAccountForgeCmd(app))
 	cmd.AddCommand(newAccountPassthroughCmd(app, "extended-profile", "extendedProfile", api.ScopeExtendedProfile, "Fetch authorizing account extended profile"))
 	cmd.AddCommand(newAccountPassthroughCmd(app, "item-index", "itemIndex", api.ScopeItemIndex, "Fetch authorizing account item index"))
 	cmd.AddCommand(newAccountPassthroughCmd(app, "trades", "trades", api.ScopeTrades, "Fetch authorizing account trade history"))

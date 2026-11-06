@@ -66,7 +66,12 @@ bg-cli account inventory --profile main --output csv --join-rap --excel > invent
 bg-cli leaderboard list --pretty
 ```
 
-Research notes for public pet-power fields and Halloween unknowns: [`docs/research/pet-power-and-events.md`](docs/research/pet-power-and-events.md).
+Research notes: [`docs/research/pet-power-and-events.md`](docs/research/pet-power-and-events.md), [`docs/research/halloween-forge.md`](docs/research/halloween-forge.md). Analysis operator flow: [`docs/operator-guide-analysis.md`](docs/operator-guide-analysis.md).
+
+```bash
+bg-cli account forge analyze --observations ./testdata/fixtures/forge-observations-butler-2026-11-06.json --pretty
+bg-cli account forge optimize --observations ./testdata/fixtures/forge-observations-butler-2026-11-06.json --objective min-butlers --pretty
+```
 
 ## Documentation
 
