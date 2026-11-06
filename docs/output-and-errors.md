@@ -27,8 +27,13 @@ Rules:
 | Mode | Behavior |
 | --- | --- |
 | `json` | One schema-shaped object (default) |
-| `table` | Compact tab-separated summary for terminals |
+| `table` | Richer terminal tables for inventory, currencies, and leaderboard list; otherwise a compact key dump |
 | `raw` | Exact upstream bytes for data endpoints; rejected for `auth` |
+| `csv` | Spreadsheet rows for `account inventory` / `account currencies` with exact numeric text; rejected elsewhere and for `auth` |
+
+CSV inventory columns (stable order): `class`, `id`, `count`, `displayName`, `rap`, `rapApproximate`, `exists`, `rarity`, `rarityNumber`, `collection`.
+
+CSV currencies columns: `key`, `id`, `_am`.
 
 ## Exit codes
 
