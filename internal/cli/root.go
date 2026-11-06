@@ -4,6 +4,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"time"
 
@@ -23,7 +24,8 @@ type Deps struct {
 	Stderr     io.Writer
 	TokenStore auth.TokenStore
 	Clock      output.Clock
-	HTTPClient interface{} // reserved for later milestones
+	HTTPClient *http.Client
+	BaseURL    string // tests inject local servers; production leaves empty
 	OpenURL    func(string) error
 	Env        func(string) string
 	IsTTY      func() bool
@@ -112,6 +114,7 @@ Never pass client_secret as a flag. Supply it via masked prompt, stdin, or BG_CL
 
 	root.AddCommand(newVersionCmd(app))
 	root.AddCommand(newAuthCmd(app))
+	root.AddCommand(newAccountCmd(app))
 
 	return root
 }

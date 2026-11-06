@@ -35,6 +35,18 @@ cd bg-cli
 go build -o bg-cli ./cmd/bg-cli
 ```
 
+## Account reads (Milestone 3)
+
+Requires a logged-in profile with the matching scope:
+
+```bash
+bg-cli account inventory --profile main
+bg-cli account profile --profile main
+bg-cli account currencies --profile main
+```
+
+`--refresh` may consume daily quota and requires `--yes` when not interactive. Account bodies are never cached to disk. Missing `Currency` is reported as `currencyFieldPresent: false`, not zeroes.
+
 ## Authentication setup
 
 1. Register a private developer app at https://db.biggames.io/settings/developer-apps

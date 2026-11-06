@@ -185,7 +185,12 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 					return exitf(exitcode.Usage, "--check may consume refresh quota; pass --yes for non-interactive use")
 				}
 				app.notice("Warning: --check performs an authenticated API request and may affect refresh quota.")
-				return writeAuthError(app, "auth status", exitcode.Usage, "not_implemented", "auth status --check is available after account API milestone")
+				return app.runAccountView(cmd.Context(), accountViewRequest{
+					Command:       "auth status",
+					View:          "profile",
+					RequiredScope: "player-data:pet-simulator-99:profile:read",
+					Flags:         accountFlags{},
+				})
 			}
 
 			data := map[string]any{
