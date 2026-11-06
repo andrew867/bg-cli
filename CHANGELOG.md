@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (none)
+- `account quota` summarizes refresh used/limit and rate-limit / Retry-After headers without dumping profile bodies
+- `account inventory --join-rap` joins public market RAP into CSV (`marketRap` / `marketRapMatched`)
+- Currency CSV adds an Excel-friendly `amount` column (mirrors exact `_am`); `--excel` writes a UTF-8 BOM
 
 ## [0.1.2] - 2026-11-06
 

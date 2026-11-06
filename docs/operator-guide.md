@@ -15,9 +15,10 @@ This guide covers routine operation of a private bg-cli installation.
 ## Daily use
 
 ```bash
+bg-cli account quota --profile main --pretty
 bg-cli account currencies --profile main --pretty
 bg-cli account inventory --profile main --class Pet --pretty
-bg-cli account inventory --profile main --output csv > inventory.csv
+bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv
 bg-cli leaderboard list --pretty
 ```
 

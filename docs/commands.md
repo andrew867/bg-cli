@@ -16,6 +16,7 @@ bg-cli [global flags] <group> <command> [arguments] [command flags]
 | `--timeout` | `15s` | HTTP timeout between 1s and 60s |
 | `--quiet` | false | Suppress non-error stderr notices |
 | `--no-cache` | false | Bypass the public response cache |
+| `--excel` | false | CSV only: write a UTF-8 BOM so Excel detects encoding |
 | `--version` / `version` | n/a | Print version |
 | `--help` | n/a | Print help |
 
@@ -23,7 +24,7 @@ Stdout carries data. Diagnostics go to stderr. Secrets are never printed.
 
 `raw` prints exact upstream response bytes for data endpoints and is unavailable for `auth` commands.
 
-`csv` writes spreadsheet rows for `account inventory` and `account currencies` only. Counts and `_am` values keep exact JSON number text (no float64 rounding). Other commands reject `--output csv`.
+`csv` writes spreadsheet rows for `account inventory`, `account currencies`, and `account quota`. Counts and `_am` / `amount` values keep exact JSON number text (no float64 rounding). Other commands reject `--output csv`.
 
 ## Meta
 
@@ -51,6 +52,7 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account inventory` | `/v1/account/inventory` | inventory:read |
 | `account profile` | `/v1/account/profile` | profile:read |
 | `account currencies` | `/v1/account/profile` | profile:read |
+| `account quota` | `/v1/account/profile` | profile:read |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -65,13 +67,17 @@ Common flags:
 | `--yes` | Confirm `--refresh` when stdin is not a TTY |
 
 Inventory filters: `--class`, `--id`, `--equipped-only` (exact, case-insensitive).  
+Inventory RAP join: `--join-rap` (public `/api/rap` by class+id; adds CSV columns `marketRap`, `marketRapMatched`).  
 Currencies filter: `--id`.
+
+`account quota` returns refresh used/limit/`resetsAt` plus rate-limit remaining and `Retry-After` without printing the profile body.
 
 Export examples:
 
 ```bash
-bg-cli account inventory --profile main --output csv > inventory.csv
-bg-cli account currencies --profile main --output csv > currencies.csv
+bg-cli account quota --profile main --pretty
+bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv
+bg-cli account currencies --profile main --output csv --excel > currencies.csv
 bg-cli account inventory --profile main --output table
 ```
 

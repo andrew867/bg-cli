@@ -29,11 +29,17 @@ Rules:
 | `json` | One schema-shaped object (default) |
 | `table` | Richer terminal tables for inventory, currencies, and leaderboard list; otherwise a compact key dump |
 | `raw` | Exact upstream bytes for data endpoints; rejected for `auth` |
-| `csv` | Spreadsheet rows for `account inventory` / `account currencies` with exact numeric text; rejected elsewhere and for `auth` |
+| `csv` | Spreadsheet rows for `account inventory` / `account currencies` / `account quota` with exact numeric text; rejected elsewhere and for `auth` |
 
-CSV inventory columns (stable order): `class`, `id`, `count`, `displayName`, `rap`, `rapApproximate`, `exists`, `rarity`, `rarityNumber`, `collection`.
+CSV inventory columns (stable order): `class`, `id`, `count`, `displayName`, `rap`, `rapApproximate`, `exists`, `rarity`, `rarityNumber`, `collection`. With `--join-rap`: also `marketRap`, `marketRapMatched`.
 
-CSV currencies columns: `key`, `id`, `_am`.
+CSV currencies columns: `key`, `id`, `_am`, `amount` (`amount` mirrors exact `_am` for Excel).
+
+`--excel` prefixes CSV with a UTF-8 BOM.
+
+## Quota summary
+
+`account quota` surfaces refresh quota (`used`, `limit`, `resetsAt`, `nextRefreshEligibleAt`, `quotaExhausted`) and HTTP rate-limit headers (`remaining`, `Retry-After`) without dumping account payloads.
 
 ## Exit codes
 

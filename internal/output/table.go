@@ -47,10 +47,33 @@ func WriteTable(w io.Writer, env Envelope) error {
 		if writeLeaderboardListTable(w, env.Data) == nil {
 			return nil
 		}
+	case "account quota":
+		if writeQuotaTable(w, env.Data) == nil {
+			return nil
+		}
 	case "auth status", "auth profiles", "auth login", "auth logout":
 		return writeDataTable(w, "data", env.Data, 0)
 	}
 	return writeDataTable(w, "data", env.Data, 0)
+}
+
+func writeQuotaTable(w io.Writer, data any) error {
+	m, ok := asMap(data)
+	if !ok {
+		return fmt.Errorf("not map")
+	}
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	keys := []string{
+		"used", "limit", "remaining", "retryAfter",
+		"quotaExhausted", "resetsAt", "nextRefreshEligibleAt",
+		"consumedThisCall", "refreshPresent", "httpStatus",
+	}
+	for _, k := range keys {
+		if v, ok := m[k]; ok && v != nil {
+			_, _ = fmt.Fprintf(tw, "%s\t%s\n", k, sanitizeTableCell(stringifyCell(v)))
+		}
+	}
+	return tw.Flush()
 }
 
 func writeInventoryTable(w io.Writer, data any) error {

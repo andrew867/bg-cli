@@ -23,22 +23,54 @@ var InventoryCSVColumns = []string{
 	"collection",
 }
 
+// InventoryCSVOptions controls optional inventory CSV enrichment.
+type InventoryCSVOptions struct {
+	RAPIndex RAPIndex
+	Excel    bool // UTF-8 BOM for Excel
+}
+
+// CurrencyCSVOptions controls optional currency CSV polish.
+type CurrencyCSVOptions struct {
+	Excel bool // UTF-8 BOM + amount column mirrored from _am
+}
+
 // WriteInventoryCSV writes inventory item rows as CSV with exact numeric text.
 // Counts, RAP, exists, and similar fields are copied from JSON number literals
 // (or stringified scalars) without float64 conversion.
-func WriteInventoryCSV(w io.Writer, inventory json.RawMessage) error {
+func WriteInventoryCSV(w io.Writer, inventory json.RawMessage, opts InventoryCSVOptions) error {
 	items, err := inventoryItems(inventory)
 	if err != nil {
 		return err
 	}
+	if opts.Excel {
+		if _, err := io.WriteString(w, "\ufeff"); err != nil {
+			return err
+		}
+	}
+	cols := append([]string{}, InventoryCSVColumns...)
+	joinRAP := opts.RAPIndex != nil
+	if joinRAP {
+		cols = append(cols, "marketRap", "marketRapMatched")
+	}
 	cw := csv.NewWriter(w)
-	if err := cw.Write(InventoryCSVColumns); err != nil {
+	if err := cw.Write(cols); err != nil {
 		return err
 	}
 	for _, item := range items {
-		row := make([]string, len(InventoryCSVColumns))
+		row := make([]string, len(cols))
 		for i, col := range InventoryCSVColumns {
 			row[i] = scalarCSV(item[col])
+		}
+		if joinRAP {
+			class := scalarCSV(item["class"])
+			id := scalarCSV(item["id"])
+			if v, ok := opts.RAPIndex.Lookup(class, id); ok {
+				row[len(InventoryCSVColumns)] = scalarCSV(v)
+				row[len(InventoryCSVColumns)+1] = "true"
+			} else {
+				row[len(InventoryCSVColumns)] = ""
+				row[len(InventoryCSVColumns)+1] = "false"
+			}
 		}
 		if err := cw.Write(row); err != nil {
 			return err
@@ -49,9 +81,16 @@ func WriteInventoryCSV(w io.Writer, inventory json.RawMessage) error {
 }
 
 // WriteCurrenciesCSV writes currency map entries with exact _am text.
-func WriteCurrenciesCSV(w io.Writer, currencies map[string]json.RawMessage) error {
+// When Excel polish is on, also writes a mirrored amount column and a UTF-8 BOM.
+func WriteCurrenciesCSV(w io.Writer, currencies map[string]json.RawMessage, opts CurrencyCSVOptions) error {
+	if opts.Excel {
+		if _, err := io.WriteString(w, "\ufeff"); err != nil {
+			return err
+		}
+	}
 	cw := csv.NewWriter(w)
-	if err := cw.Write([]string{"key", "id", "_am"}); err != nil {
+	header := []string{"key", "id", "_am", "amount"}
+	if err := cw.Write(header); err != nil {
 		return err
 	}
 	keys := make([]string, 0, len(currencies))
@@ -62,12 +101,62 @@ func WriteCurrenciesCSV(w io.Writer, currencies map[string]json.RawMessage) erro
 	for _, k := range keys {
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(currencies[k], &fields)
-		if err := cw.Write([]string{k, scalarCSV(fields["id"]), scalarCSV(fields["_am"])}); err != nil {
+		am := scalarCSV(fields["_am"])
+		if err := cw.Write([]string{k, scalarCSV(fields["id"]), am, am}); err != nil {
 			return err
 		}
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// WriteQuotaCSV writes a single quota/rate-limit summary row.
+func WriteQuotaCSV(w io.Writer, data map[string]any, excel bool) error {
+	if excel {
+		if _, err := io.WriteString(w, "\ufeff"); err != nil {
+			return err
+		}
+	}
+	cw := csv.NewWriter(w)
+	cols := []string{
+		"used", "limit", "remaining", "retryAfter",
+		"quotaExhausted", "resetsAt", "nextRefreshEligibleAt",
+		"consumedThisCall", "httpStatus",
+	}
+	if err := cw.Write(cols); err != nil {
+		return err
+	}
+	row := make([]string, len(cols))
+	for i, c := range cols {
+		row[i] = stringifyCSVAny(data[c])
+	}
+	if err := cw.Write(row); err != nil {
+		return err
+	}
+	cw.Flush()
+	return cw.Error()
+}
+
+func stringifyCSVAny(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case json.Number:
+		return string(t)
+	case json.RawMessage:
+		return scalarCSV(t)
+	case string:
+		return t
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case float64:
+		return fmt.Sprintf("%.0f", t)
+	default:
+		return fmt.Sprint(t)
+	}
 }
 
 func inventoryItems(inventory json.RawMessage) ([]map[string]json.RawMessage, error) {
