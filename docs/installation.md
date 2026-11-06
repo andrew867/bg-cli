@@ -1,22 +1,34 @@
 # Installation
 
-## Binary releases
+## Prebuilt binaries (recommended)
 
-Download the archive for your platform from the GitHub Releases page. Verify the published checksums before installing.
+Tagged releases publish self-contained archives built with [GoReleaser](https://goreleaser.com):
 
-| Platform | Artifact |
+| Platform | Archive |
 | --- | --- |
-| Windows amd64 | `bg-cli-windows-amd64.exe` |
-| Linux amd64 | `bg-cli-linux-amd64` |
-| macOS amd64 | `bg-cli-darwin-amd64` |
-| macOS arm64 | `bg-cli-darwin-arm64` |
+| Linux amd64 | `bg-cli_Linux_x86_64.tar.gz` |
+| Linux arm64 | `bg-cli_Linux_arm64.tar.gz` |
+| macOS Intel | `bg-cli_Darwin_x86_64.tar.gz` |
+| macOS Apple Silicon | `bg-cli_Darwin_arm64.tar.gz` |
+| Windows amd64 | `bg-cli_Windows_x86_64.zip` |
+| Source tree | `bg-cli-<version>-source.tar.gz` |
+| Checksums | `bg-cli_<version>_checksums.txt` |
 
-Place the binary on your `PATH` and confirm:
+Binaries are statically linked (`CGO_ENABLED=0`). Extract the archive and place `bg-cli` (or `bg-cli.exe`) on your `PATH`.
 
 ```bash
+# Example: Linux amd64
+tar -xzf bg-cli_Linux_x86_64.tar.gz
+sudo mv bg-cli /usr/local/bin/
 bg-cli version
-bg-cli --help
+
+# Verify checksums
+sha256sum -c bg-cli_0.1.0_checksums.txt
 ```
+
+On Windows, extract the zip and add the folder containing `bg-cli.exe` to your user `PATH`, or run it from the extraction directory.
+
+CI also uploads snapshot archives as workflow artifacts on pushes and pull requests targeting `main` (14-day retention). Prefer tagged GitHub Releases for production installs.
 
 ## Install with Go
 
@@ -24,18 +36,41 @@ bg-cli --help
 go install github.com/andrew867/bg-cli/cmd/bg-cli@latest
 ```
 
-The `bg-cli` binary is written to `$(go env GOPATH)/bin`. Ensure that directory is on your `PATH`.
+Or pin a release tag:
+
+```bash
+go install github.com/andrew867/bg-cli/cmd/bg-cli@v0.1.0
+```
+
+The binary is written to `$(go env GOPATH)/bin`. Ensure that directory is on your `PATH`.
 
 ## Build from source
 
 ```bash
 git clone https://github.com/andrew867/bg-cli.git
 cd bg-cli
+git checkout v0.1.0   # optional pin
 go build -o bg-cli ./cmd/bg-cli
 ./bg-cli version
 ```
 
 Required toolchain: Go 1.23 or newer.
+
+Local multi-platform archives (developers):
+
+```bash
+goreleaser release --snapshot --clean --skip=publish
+ls dist/
+```
+
+## Publishing a release
+
+Maintainers create a semver tag. GitHub Actions runs GoReleaser and attaches archives, the source tarball, and checksums to the GitHub Release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
 
 ## Configuration locations
 
@@ -44,8 +79,6 @@ Required toolchain: Go 1.23 or newer.
 | Non-secret profile metadata | `$BG_CLI_CONFIG_DIR` or OS user config dir `/bg-cli/config.json` |
 | Access tokens | OS credential store service `bg-cli` |
 | Public response cache | `$BG_CLI_CACHE_DIR` or OS user cache dir `/bg-cli/public` |
-
-Override directories with environment variables when running in constrained environments. Tokens are never written to the config or cache directories.
 
 ## Credential store prerequisites
 
