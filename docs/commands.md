@@ -27,7 +27,7 @@ Stdout carries data. Diagnostics go to stderr. Secrets are never printed.
 
 | Command | Description |
 | --- | --- |
-| `auth login` | OAuth login; stores token in the OS credential store |
+| `auth login` | OAuth login (all account scopes by default; `--scopes` to opt out); stores token in the OS credential store |
 | `auth status` | Local metadata; `--check` optionally probes the API |
 | `auth profiles` | List local profiles |
 | `auth logout` | Delete local token and metadata |

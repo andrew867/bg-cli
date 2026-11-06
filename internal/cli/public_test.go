@@ -117,7 +117,7 @@ func TestAccountExtendedRequiresScope(t *testing.T) {
 
 func TestAccountMailWithScope(t *testing.T) {
 	store := auth.NewMemoryStore()
-	setupProfile(t, store, append(auth.DefaultScopes, "player-data:pet-simulator-99:mail:read"))
+	setupProfile(t, store, auth.DefaultScopes)
 	body, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-mail-ok.json"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/account/mail" {

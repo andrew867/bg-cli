@@ -18,11 +18,9 @@ var KnownScopes = []string{
 	"player-data:pet-simulator-99:mail:read",
 }
 
-// DefaultScopes are requested by auth login unless overridden.
-var DefaultScopes = []string{
-	"player-data:pet-simulator-99:inventory:read",
-	"player-data:pet-simulator-99:profile:read",
-}
+// DefaultScopes are requested by auth login unless the operator opts out
+// with an explicit --scopes list. Policy is all documented account views.
+var DefaultScopes = append([]string{}, KnownScopes...)
 
 var knownSet = func() map[string]struct{} {
 	m := make(map[string]struct{}, len(KnownScopes))

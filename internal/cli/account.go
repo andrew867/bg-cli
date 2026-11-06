@@ -78,7 +78,7 @@ func (a *App) resolveProfileToken(requiredScope string) (config.Profile, string,
 	if requiredScope != "" && !containsScope(p.Scopes, requiredScope) {
 		return p, "", secrets, &ExitError{
 			Code: exitcode.AuthRequired,
-			Msg:  fmt.Sprintf("profile %q missing scope %s; re-authorize with auth login --scopes ...", alias, requiredScope),
+			Msg:  fmt.Sprintf("profile %q missing scope %s; run auth login again (defaults to all account scopes)", alias, requiredScope),
 		}
 	}
 	tok, err := a.tokenStore().Get(alias)
