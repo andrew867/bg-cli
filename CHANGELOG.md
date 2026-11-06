@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- (none)
+
+## [0.1.1] - 2026-11-06
+
+### Changed
+
+- Release packaging now uses GoReleaser for Linux/macOS/Windows archives, source tarball, and checksums
+
 ## [0.1.0] - 2026-11-06
 
 ### Added
@@ -16,9 +28,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stable JSON output envelope, table mode, and raw upstream bodies for data commands
 - Public response cache honoring `Cache-Control` max-age
 - Cross-platform CI and tagged release workflow with checksums
-
-## [Unreleased]
-
-### Added
-
-- (none)
