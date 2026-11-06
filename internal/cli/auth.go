@@ -55,10 +55,10 @@ Client secret is never accepted as a flag. Provide it via:
   - environment variable BG_CLI_CLIENT_SECRET (clear after login)
   - stdin when not a TTY
 
-Auth commands do not support --output raw.`,
+Auth commands do not support --output raw or --output csv.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if app.Flags.Output == "raw" {
-				return exitf(exitcode.Usage, "auth commands do not support --output raw")
+			if err := rejectAuthOutput(app.Flags.Output); err != nil {
+				return err
 			}
 			profile := app.Flags.Profile
 			if profile == "" {
@@ -147,8 +147,8 @@ func newAuthStatusCmd(app *App) *cobra.Command {
 --check performs one minimal authenticated API request and may affect refresh
 quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if app.Flags.Output == "raw" {
-				return exitf(exitcode.Usage, "auth commands do not support --output raw")
+			if err := rejectAuthOutput(app.Flags.Output); err != nil {
+				return err
 			}
 			profile := app.Flags.Profile
 			cfg, err := config.Load()
@@ -220,8 +220,8 @@ metadata. This does not revoke the connected app on BIG Games servers.
 
 To revoke server-side: open the BIG Games account dashboard → Connected apps.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if app.Flags.Output == "raw" {
-				return exitf(exitcode.Usage, "auth commands do not support --output raw")
+			if err := rejectAuthOutput(app.Flags.Output); err != nil {
+				return err
 			}
 			profile := app.Flags.Profile
 			if profile == "" {
@@ -256,8 +256,8 @@ func newAuthProfilesCmd(app *App) *cobra.Command {
 		Use:   "profiles",
 		Short: "List local authorization profile aliases",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if app.Flags.Output == "raw" {
-				return exitf(exitcode.Usage, "auth commands do not support --output raw")
+			if err := rejectAuthOutput(app.Flags.Output); err != nil {
+				return err
 			}
 			cfg, err := config.Load()
 			if err != nil {
@@ -289,4 +289,13 @@ func writeAuthError(app *App, command string, code int, errCode, msg string) err
 		Retryable: false,
 	}))
 	return &ExitError{Code: code, Msg: msg}
+}
+
+func rejectAuthOutput(mode string) error {
+	switch mode {
+	case "raw", "csv":
+		return exitf(exitcode.Usage, "auth commands do not support --output %s", mode)
+	default:
+		return nil
+	}
 }

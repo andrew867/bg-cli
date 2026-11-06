@@ -10,14 +10,18 @@ This guide covers routine operation of a private bg-cli installation.
 4. Enable all seven account read scopes on the developer app (login requests them by default).
 5. Confirm the OS credential store is available for the interactive user session.
 6. Run `bg-cli auth login` and verify `bg-cli auth status` shows `tokenPresent: true`.
+7. Run `bg-cli doctor` and confirm `healthy: true`.
 
 ## Daily use
 
 ```bash
 bg-cli account currencies --profile main --pretty
 bg-cli account inventory --profile main --class Pet --pretty
+bg-cli account inventory --profile main --output csv > inventory.csv
 bg-cli leaderboard list --pretty
 ```
+
+Shell completions: `bg-cli completion powershell | Out-String | Invoke-Expression` (Windows) or `source <(bg-cli completion bash)` (Linux/macOS).
 
 Avoid polling. Prefer on-demand reads. Use `--refresh` only when a fresher snapshot is required and quota remains.
 

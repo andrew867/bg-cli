@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +17,7 @@ import (
 )
 
 // Version is set by main / ldflags.
-var Version = "0.1.1"
+var Version = "0.1.2"
 
 // Deps are injectable collaborators for tests.
 type Deps struct {
@@ -74,10 +75,59 @@ func (a *App) writer() output.Writer {
 }
 
 func (a *App) emit(env output.Envelope) error {
-	if a.Flags.Output == "table" {
+	switch a.Flags.Output {
+	case "table":
 		return output.WriteTable(a.stdout(), env)
+	case "csv":
+		return a.emitCSV(env)
+	default:
+		return a.writer().Write(env)
 	}
-	return a.writer().Write(env)
+}
+
+func (a *App) emitCSV(env output.Envelope) error {
+	if !env.OK {
+		// Keep machine-readable errors as JSON even in csv mode.
+		return a.writer().Write(env)
+	}
+	data, _ := env.Data.(map[string]any)
+	switch env.Command {
+	case "account inventory":
+		inv, ok := data["inventory"].(json.RawMessage)
+		if !ok {
+			b, err := json.Marshal(data["inventory"])
+			if err != nil {
+				return err
+			}
+			inv = b
+		}
+		return output.WriteInventoryCSV(a.stdout(), inv)
+	case "account currencies":
+		currencies, err := currencyRawMap(data["currencies"])
+		if err != nil {
+			return err
+		}
+		return output.WriteCurrenciesCSV(a.stdout(), currencies)
+	default:
+		return &ExitError{Code: exitcode.Usage, Msg: "--output csv is supported for account inventory and account currencies"}
+	}
+}
+
+func currencyRawMap(v any) (map[string]json.RawMessage, error) {
+	switch t := v.(type) {
+	case map[string]json.RawMessage:
+		return t, nil
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		var out map[string]json.RawMessage
+		if err := json.Unmarshal(b, &out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
 }
 
 func (a *App) tokenStore() auth.TokenStore {
@@ -104,8 +154,10 @@ Never pass client_secret as a flag. Supply it via masked prompt, stdin, or BG_CL
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if app.Flags.Output != "json" && app.Flags.Output != "table" && app.Flags.Output != "raw" {
-				return fmt.Errorf("invalid --output %q (want json|table|raw)", app.Flags.Output)
+			switch app.Flags.Output {
+			case "json", "table", "raw", "csv":
+			default:
+				return fmt.Errorf("invalid --output %q (want json|table|raw|csv)", app.Flags.Output)
 			}
 			if app.Flags.Timeout < time.Second || app.Flags.Timeout > 60*time.Second {
 				return fmt.Errorf("--timeout must be between 1s and 60s")
@@ -115,13 +167,15 @@ Never pass client_secret as a flag. Supply it via masked prompt, stdin, or BG_CL
 	}
 
 	root.PersistentFlags().StringVar(&app.Flags.Profile, "profile", "", "local authorization profile alias")
-	root.PersistentFlags().StringVar(&app.Flags.Output, "output", "json", "output format: json|table|raw")
+	root.PersistentFlags().StringVar(&app.Flags.Output, "output", "json", "output format: json|table|raw|csv")
 	root.PersistentFlags().BoolVar(&app.Flags.Pretty, "pretty", false, "indent JSON output")
 	root.PersistentFlags().DurationVar(&app.Flags.Timeout, "timeout", 15*time.Second, "HTTP timeout (1s-60s)")
 	root.PersistentFlags().BoolVar(&app.Flags.Quiet, "quiet", false, "suppress non-error stderr notices")
 	root.PersistentFlags().BoolVar(&app.Flags.NoCache, "no-cache", false, "bypass public response cache")
 
 	root.AddCommand(newVersionCmd(app))
+	root.AddCommand(newDoctorCmd(app))
+	root.AddCommand(newCompletionCmd())
 	root.AddCommand(newAuthCmd(app))
 	root.AddCommand(newAccountCmd(app))
 	root.AddCommand(newPlayerCmd(app))

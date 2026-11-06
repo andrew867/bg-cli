@@ -23,7 +23,7 @@ sudo mv bg-cli /usr/local/bin/
 bg-cli version
 
 # Verify checksums
-sha256sum -c bg-cli_0.1.1_checksums.txt
+sha256sum -c bg-cli_0.1.2_checksums.txt
 ```
 
 On Windows, extract the zip and add the folder containing `bg-cli.exe` to your user `PATH`, or run it from the extraction directory.
@@ -39,7 +39,7 @@ go install github.com/andrew867/bg-cli/cmd/bg-cli@latest
 Or pin a release tag:
 
 ```bash
-go install github.com/andrew867/bg-cli/cmd/bg-cli@v0.1.1
+go install github.com/andrew867/bg-cli/cmd/bg-cli@v0.1.2
 ```
 
 The binary is written to `$(go env GOPATH)/bin`. Ensure that directory is on your `PATH`.
@@ -49,7 +49,7 @@ The binary is written to `$(go env GOPATH)/bin`. Ensure that directory is on you
 ```bash
 git clone https://github.com/andrew867/bg-cli.git
 cd bg-cli
-git checkout v0.1.1   # optional pin
+git checkout v0.1.2   # optional pin
 go build -o bg-cli ./cmd/bg-cli
 ./bg-cli version
 ```
@@ -68,8 +68,8 @@ ls dist/
 Maintainers create a semver tag. GitHub Actions runs GoReleaser and attaches archives, the source tarball, and checksums to the GitHub Release:
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 ## Configuration locations

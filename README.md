@@ -10,7 +10,8 @@
 - Access tokens stored in the operating system credential store only
 - Authenticated account reads for inventory, profile, currencies, and related views
 - Public leaderboards, opted-in player views, collections, RAP, and exists
-- Stable JSON output (default), optional table view, and raw upstream bodies for data commands
+- Stable JSON output (default), richer table view, CSV export for inventory/currencies, and raw upstream bodies for data commands
+- `doctor` and shell completions for local setup checks
 - Deterministic exit codes suitable for scripting
 
 ## Requirements
@@ -52,8 +53,10 @@ bg-cli auth login \
 Provide the client secret through the masked prompt, stdin, or the `BG_CLI_CLIENT_SECRET` environment variable for that process only. Never pass the secret as a command-line flag.
 
 ```bash
+bg-cli doctor
 bg-cli account currencies --profile main --pretty
 bg-cli account inventory --profile main --pretty
+bg-cli account inventory --profile main --output csv > inventory.csv
 bg-cli leaderboard list --pretty
 ```
 
@@ -68,6 +71,7 @@ bg-cli leaderboard list --pretty
 | [Output and errors](docs/output-and-errors.md) | JSON schema, exit codes, freshness |
 | [Security](docs/security.md) | Secret handling and threat model |
 | [Operator guide](docs/operator-guide.md) | Day-two operations |
+| [Acceptance checklist](docs/acceptance-checklist.md) | Pre-release verification gates |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 

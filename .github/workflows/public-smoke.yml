@@ -1,0 +1,44 @@
+name: public-smoke
+
+# Opt-in live smoke against public BIG Games endpoints. Does not use secrets
+# or authenticated routes. Failures often mean upstream/doc drift or outage.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 12 * * 1"
+  push:
+    branches: [main, master]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+      - name: Build
+        run: go build -o bg-cli ./cmd/bg-cli
+      - name: Public leaderboard list
+        run: |
+          set -euo pipefail
+          ./bg-cli leaderboard list --pretty > /tmp/lb.json
+          python3 - <<'PY'
+          import json, sys
+          env = json.load(open("/tmp/lb.json"))
+          assert env.get("ok") is True, env
+          assert env.get("command") == "leaderboard list", env
+          data = env.get("data") or {}
+          assert "leaderboards" in data, data
+          print("leaderboard list ok; boards=", len(data["leaderboards"]))
+          PY
+      - name: Public collection list
+        run: |
+          set -euo pipefail
+          ./bg-cli collection list --pretty > /tmp/col.json
+          python3 - <<'PY'
+          import json
+          env = json.load(open("/tmp/col.json"))
+          assert env.get("ok") is True, env
+          print("collection list ok")
+          PY

@@ -11,7 +11,7 @@ bg-cli [global flags] <group> <command> [arguments] [command flags]
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--profile` | configured default | Local authorization profile for account commands |
-| `--output` | `json` | `json`, `table`, or `raw` |
+| `--output` | `json` | `json`, `table`, `raw`, or `csv` |
 | `--pretty` | false | Indent JSON |
 | `--timeout` | `15s` | HTTP timeout between 1s and 60s |
 | `--quiet` | false | Suppress non-error stderr notices |
@@ -22,6 +22,16 @@ bg-cli [global flags] <group> <command> [arguments] [command flags]
 Stdout carries data. Diagnostics go to stderr. Secrets are never printed.
 
 `raw` prints exact upstream response bytes for data endpoints and is unavailable for `auth` commands.
+
+`csv` writes spreadsheet rows for `account inventory` and `account currencies` only. Counts and `_am` values keep exact JSON number text (no float64 rounding). Other commands reject `--output csv`.
+
+## Meta
+
+| Command | Description |
+| --- | --- |
+| `version` | Print version |
+| `doctor` | Check config dir, credential store, and granted scopes vs defaults |
+| `completion bash\|zsh\|fish\|powershell` | Generate shell completion scripts |
 
 ## auth
 
@@ -56,6 +66,14 @@ Common flags:
 
 Inventory filters: `--class`, `--id`, `--equipped-only` (exact, case-insensitive).  
 Currencies filter: `--id`.
+
+Export examples:
+
+```bash
+bg-cli account inventory --profile main --output csv > inventory.csv
+bg-cli account currencies --profile main --output csv > currencies.csv
+bg-cli account inventory --profile main --output table
+```
 
 Account response bodies are never cached to disk.
 
