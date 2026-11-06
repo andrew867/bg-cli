@@ -1,0 +1,290 @@
+{
+  "status": "ok",
+  "data": [
+    {
+      "configName": "Huge Ghost",
+      "category": "Huge",
+      "configData": {
+        "goldenThumbnail": "rbxassetid://14976440787",
+        "indexObtainable": true,
+        "huge": true,
+        "cachedPower": [
+          1
+        ],
+        "name": "Huge Ghost",
+        "indexDesc": "Found in Series 2 Lucky Block 4-Pack Playset or Collector Clips!",
+        "thumbnail": "rbxassetid://14976441222",
+        "rarity": {
+          "RarityNumber": 999,
+          "Lootbag": null,
+          "_id": "Exclusive",
+          "Color": null,
+          "DisplayName": "Exclusive",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        }
+      },
+      "dateModified": "2026-10-03T16:30:23.319Z",
+      "dateCreated": null,
+      "collection": "Pets",
+      "hashShort": "07562aedec469e64"
+    },
+    {
+      "configName": "Huge Hippokin",
+      "category": "Huge",
+      "configData": {
+        "rarity": {
+          "RarityNumber": 999,
+          "Lootbag": null,
+          "_id": "Exclusive",
+          "Color": null,
+          "DisplayName": "Exclusive",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        },
+        "indexObtainable": true,
+        "fromWorldNumber": 3,
+        "fromZoneNumber": 229,
+        "huge": true,
+        "cachedPower": [
+          52671526449685
+        ],
+        "name": "Huge Hippokin",
+        "indexDesc": "\ud83c\udf83 Tier 4 reward from Halloween Hatch Wars quests! Season Pass: Week 1",
+        "thumbnail": "rbxassetid://100633317245412",
+        "goldenThumbnail": "rbxassetid://90663120517710"
+      },
+      "dateCreated": "2026-10-10T16:12:40.037Z",
+      "dateModified": "2026-10-24T18:47:59.211Z",
+      "collection": "Pets",
+      "hashShort": "29fa82b94af1e8ab"
+    },
+    {
+      "configName": "Huge Dalmatian",
+      "category": "Huge",
+      "configData": {
+        "goldenThumbnail": "rbxassetid://80576147827940",
+        "indexObtainable": true,
+        "huge": true,
+        "cachedPower": [
+          1
+        ],
+        "name": "Huge Dalmatian",
+        "indexDesc": "Hatched from any egg in the PSX Classic event!",
+        "thumbnail": "rbxassetid://140654135529929",
+        "rarity": {
+          "RarityNumber": 999,
+          "Lootbag": null,
+          "_id": "Exclusive",
+          "Color": null,
+          "DisplayName": "Exclusive",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        }
+      },
+      "dateCreated": "2026-10-24T18:47:59.211Z",
+      "dateModified": "2026-10-24T18:47:59.211Z",
+      "collection": "Pets",
+      "hashShort": "944bbcfee770da32"
+    },
+    {
+      "configName": "Huge Froggy",
+      "category": "Huge",
+      "configData": {
+        "goldenThumbnail": "rbxassetid://86930434586187",
+        "indexObtainable": true,
+        "huge": true,
+        "cachedPower": [
+          1
+        ],
+        "name": "Huge Froggy",
+        "indexDesc": "\ud83e\udd5a Tier 4 reward from PSX Classic quests! Season Pass: Week 3",
+        "thumbnail": "rbxassetid://90239656793520",
+        "rarity": {
+          "RarityNumber": 999,
+          "Lootbag": null,
+          "_id": "Exclusive",
+          "Color": null,
+          "DisplayName": "Exclusive",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        }
+      },
+      "dateCreated": "2026-10-24T18:47:59.211Z",
+      "dateModified": "2026-10-24T18:47:59.211Z",
+      "collection": "Pets",
+      "hashShort": "92ebd026b3f06f7d"
+    },
+    {
+      "configName": "Huge Guard Rhino",
+      "category": "Huge",
+      "configData": {
+        "goldenThumbnail": "rbxassetid://96136862649632",
+        "indexObtainable": true,
+        "huge": true,
+        "cachedPower": [
+          1
+        ],
+        "name": "Huge Guard Rhino",
+        "indexDesc": "Found in the Halloween Games Eggs!",
+        "thumbnail": "rbxassetid://97985832734320",
+        "rarity": {
+          "RarityNumber": 999,
+          "Lootbag": null,
+          "_id": "Exclusive",
+          "Color": null,
+          "DisplayName": "Exclusive",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        }
+      },
+      "dateCreated": "2026-10-31T16:13:17.338Z",
+      "dateModified": "2026-10-31T16:13:17.338Z",
+      "collection": "Pets",
+      "hashShort": "31c21c3a57a688e8"
+    },
+    {
+      "configName": "Huge Guard Elephant",
+      "category": "Huge",
+      "configData": {
+        "rarity": {
+          "RarityNumber": 999,
+          "Lootbag": null,
+          "_id": "Exclusive",
+          "Color": null,
+          "DisplayName": "Exclusive",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        },
+        "tradable": false,
+        "indexObtainable": true,
+        "huge": true,
+        "cachedPower": [
+          1
+        ],
+        "name": "Huge Guard Elephant",
+        "indexDesc": "Made in the Forge in the Halloween Games event!",
+        "thumbnail": "rbxassetid://108878629884134",
+        "goldenThumbnail": "rbxassetid://133339938486055"
+      },
+      "dateCreated": "2026-10-31T16:13:17.338Z",
+      "dateModified": "2026-10-31T16:13:17.338Z",
+      "collection": "Pets",
+      "hashShort": "6b5ae0afd5eaa8d3"
+    },
+    {
+      "configName": "Butler Penguin",
+      "category": "Uncategorized",
+      "configData": {
+        "goldenThumbnail": "rbxassetid://115550741333477",
+        "tradable": false,
+        "rarityOverride": {
+          "RarityNumber": 8,
+          "Lootbag": null,
+          "_id": "Superior",
+          "Color": null,
+          "DisplayName": "Superior",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        },
+        "fromZoneNumber": 279,
+        "fromWorldNumber": 4,
+        "cachedPower": [
+          610955791762589800
+        ],
+        "name": "Butler Penguin",
+        "indexDesc": "Deals 885,735 extra damage inside the Halloween Games.",
+        "thumbnail": "rbxassetid://101302783312683"
+      },
+      "dateCreated": "2026-10-31T16:13:17.338Z",
+      "dateModified": "2026-10-31T16:13:17.338Z",
+      "collection": "Pets",
+      "hashShort": "23be0acaca578eb8"
+    },
+    {
+      "configName": "Porcelain Doll Cat",
+      "category": "Uncategorized",
+      "configData": {
+        "goldenThumbnail": "rbxassetid://131928777225380",
+        "tradable": false,
+        "rarityOverride": {
+          "RarityNumber": 7,
+          "Lootbag": null,
+          "_id": "Divine",
+          "Color": null,
+          "DisplayName": "Divine",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        },
+        "fromZoneNumber": 279,
+        "fromWorldNumber": 4,
+        "cachedPower": [
+          600940123045170300
+        ],
+        "name": "Porcelain Doll Cat",
+        "indexDesc": "Deals 295,245 extra damage inside the Halloween Games.",
+        "thumbnail": "rbxassetid://140492292397382"
+      },
+      "dateCreated": "2026-10-31T16:13:17.338Z",
+      "dateModified": "2026-10-31T16:13:17.338Z",
+      "collection": "Pets",
+      "hashShort": "705952c7e3456faf"
+    },
+    {
+      "configName": "Neon Skeleton Cat",
+      "category": "Uncategorized",
+      "configData": {
+        "goldenThumbnail": "rbxassetid://81282114501240",
+        "tradable": false,
+        "rarityOverride": {
+          "RarityNumber": 6,
+          "Lootbag": null,
+          "_id": "Exotic",
+          "Color": null,
+          "DisplayName": "Exotic",
+          "Message": null,
+          "ItemSlot": null,
+          "Gradient": null,
+          "Announce": true,
+          "_script": null
+        },
+        "fromZoneNumber": 279,
+        "fromWorldNumber": 4,
+        "cachedPower": [
+          590924454327750800
+        ],
+        "name": "Neon Skeleton Cat",
+        "indexDesc": "Deals 98,415 extra damage inside the Halloween Games.",
+        "thumbnail": "rbxassetid://92731782926009"
+      },
+      "dateCreated": "2026-10-31T16:13:17.338Z",
+      "dateModified": "2026-10-31T16:13:17.338Z",
+      "collection": "Pets",
+      "hashShort": "8cbe4a66d662c2d0"
+    }
+  ]
+}

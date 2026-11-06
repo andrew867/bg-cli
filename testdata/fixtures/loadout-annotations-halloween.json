@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0",
+  "world": "HalloweenGames",
+  "bestEventPetId": "Butler Penguin",
+  "eventTeamLimit": 15,
+  "pets": [
+    {
+      "id": "Huge Ghost",
+      "uid": "pet-ghost-1",
+      "level": 78,
+      "displayedLevelDamageBonusPercent": 59.3,
+      "charms": ["Bonus", "Lightning", "Royalty", "Overload"],
+      "source": "manual-game-tooltip"
+    },
+    {
+      "id": "Huge Hippokin",
+      "uid": "pet-hippo-1",
+      "level": 76,
+      "displayedLevelDamageBonusPercent": 56.9,
+      "charms": ["Bonus", "Agility"],
+      "source": "manual-game-tooltip"
+    },
+    {
+      "id": "Huge Froggy",
+      "uid": "pet-frog-1",
+      "level": 59,
+      "displayedLevelDamageBonusPercent": 42.1,
+      "charms": ["Agility", "TNT"],
+      "source": "manual-game-tooltip"
+    },
+    {
+      "id": "Huge Dalmatian",
+      "uid": "pet-dal-1",
+      "level": 58,
+      "displayedLevelDamageBonusPercent": 41.5,
+      "variant": "Golden",
+      "charms": ["Royalty"],
+      "source": "manual-game-tooltip"
+    }
+  ],
+  "notes": [
+    "Duplicate Huge ids require uid/instanceKey",
+    "Equip Best order optional"
+  ]
+}

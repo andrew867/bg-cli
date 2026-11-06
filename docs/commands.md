@@ -54,9 +54,11 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account currencies` | `/v1/account/profile` | profile:read |
 | `account quota` | `/v1/account/profile` | profile:read |
 | `account snapshot` | inventory + profile + extendedProfile | inventory + profile + extendedProfile |
-| `account loadout analyze\|optimize` | offline `--manifest` or `/v1/account/inventory` | inventory:read when live |
+| `account loadout analyze\|optimize\|recommend` | offline `--manifest`/`--snapshot` or `/v1/account/inventory` | inventory:read when live |
 | `account loadout calibrate` | two offline manifests | none (offline) |
 | `account loadout objectives` | n/a | none |
+| `account power inspect` | offline snapshot + optional public collections/annotations | inventory:read when live |
+| `account experiment compare` | two offline manifests | none (offline) |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -116,6 +118,21 @@ bg-cli account loadout calibrate --from OLD-manifest.json --to NEW-manifest.json
 ```
 
 Optional `--registry path.json` loads a versioned effect registry (schema 1.0). Built-in defaults keep unverified magnitudes as `unknown`.
+
+### account power / experiment
+
+```bash
+bg-cli account power inspect --snapshot ./manifest.json --world halloween-games \
+  --annotations ./annotations.json --pets-collection ./Pets.json --charms-collection ./Charms.json --pretty
+
+bg-cli account loadout recommend --snapshot ./manifest.json --objective currency-rate \
+  --currency HalloweenGamesCoins --world halloween-games --event-team-limit 15 --pretty
+
+bg-cli account experiment compare --from BEFORE-manifest.json --to AFTER-manifest.json \
+  --currency HalloweenGamesCoins --world halloween-games --design A/B --pretty
+```
+
+See `docs/research/pet-power-and-events.md` for verified vs presentation-only fields. Halloween `indexDesc` extras and the 31% Huge rule are **not** treated as proven server formulas.
 
 Account response bodies are never cached to disk.
 
