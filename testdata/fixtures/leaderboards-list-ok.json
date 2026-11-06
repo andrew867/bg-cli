@@ -1,0 +1,37 @@
+{
+  "status": "ok",
+  "data": {
+    "leaderboards": [
+      {
+        "id": "SyntheticLiveBoard",
+        "state": "live",
+        "scoringEndsAt": 1793980800,
+        "listSize": 10000,
+        "codec": "Integer",
+        "live": {
+          "updatedAt": 1793979000
+        },
+        "final": null,
+        "futureAdditiveField": {
+          "enabled": true
+        }
+      },
+      {
+        "id": "SyntheticFinalBoard",
+        "state": "final",
+        "scoringEndsAt": 1793894400,
+        "listSize": 10000,
+        "codec": "Integer",
+        "live": {
+          "updatedAt": 1793894300
+        },
+        "final": {
+          "endedAt": 1793894400,
+          "capturedAt": 1793895000,
+          "entries": 11000,
+          "rewardedThroughRank": 10000
+        }
+      }
+    ]
+  }
+}

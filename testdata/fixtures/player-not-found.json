@@ -1,0 +1,6 @@
+{
+  "status": "error",
+  "error": {
+    "code": "player_not_found"
+  }
+}

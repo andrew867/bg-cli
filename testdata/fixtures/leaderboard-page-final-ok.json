@@ -1,0 +1,44 @@
+{
+  "status": "ok",
+  "data": {
+    "leaderboard": {
+      "id": "SyntheticFinalBoard",
+      "state": "final",
+      "scoringEndsAt": 1793894400,
+      "listSize": 10000,
+      "codec": "Integer",
+      "live": {
+        "updatedAt": 1793894300
+      },
+      "final": {
+        "endedAt": 1793894400,
+        "capturedAt": 1793895000,
+        "entries": 11000,
+        "rewardedThroughRank": 10000
+      }
+    },
+    "source": "final",
+    "updatedAt": 1793895000,
+    "total": 11000,
+    "page": 1,
+    "pageSize": 2,
+    "entries": [
+      {
+        "Rank": 1,
+        "UserID": 123456789,
+        "Name": null,
+        "DisplayName": "Test User",
+        "Value": 1000,
+        "RewardTier": 3
+      },
+      {
+        "Rank": 2,
+        "UserID": 987654321,
+        "Name": null,
+        "DisplayName": "Second User",
+        "Value": 900,
+        "RewardTier": null
+      }
+    ]
+  }
+}

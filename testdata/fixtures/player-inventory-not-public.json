@@ -1,0 +1,19 @@
+{
+  "status": "ok",
+  "data": {
+    "account": {
+      "robloxUserId": "123456789",
+      "username": "test_user",
+      "displayName": "Test User",
+      "publicViews": {
+        "profile": true
+      }
+    },
+    "views": {
+      "inventory": {
+        "available": false,
+        "reason": "not_public"
+      }
+    }
+  }
+}

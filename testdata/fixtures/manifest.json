@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "name": "oauth-token-ok",
+      "file": "oauth-token-ok.json",
+      "method": "POST",
+      "url": "https://db.biggames.io/oauth/token",
+      "status": 200,
+      "sensitiveFixture": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "name": "oauth-token-missing-scope",
+      "file": "oauth-token-missing-scope.json",
+      "method": "POST",
+      "url": "https://db.biggames.io/oauth/token",
+      "status": 200,
+      "sensitiveFixture": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "name": "oauth-invalid-grant",
+      "file": "oauth-invalid-grant.json",
+      "method": "POST",
+      "url": "https://db.biggames.io/oauth/token",
+      "status": 400,
+      "sensitiveFixture": false,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "name": "account-inventory-ok",
+      "file": "account-inventory-ok.json",
+      "method": "GET",
+      "path": "/v1/account/inventory",
+      "status": 200,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache",
+        "X-RateLimit-Limit": "48",
+        "X-RateLimit-Remaining": "45"
+      }
+    },
+    {
+      "name": "account-profile-ok",
+      "file": "account-profile-ok.json",
+      "method": "GET",
+      "path": "/v1/account/profile",
+      "status": 200,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache",
+        "X-RateLimit-Limit": "48",
+        "X-RateLimit-Remaining": "44"
+      }
+    },
+    {
+      "name": "account-extended-profile-ok",
+      "file": "account-extended-profile-ok.json",
+      "method": "GET",
+      "path": "/v1/account/extendedProfile",
+      "status": 200,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache"
+      }
+    },
+    {
+      "name": "account-item-index-ok",
+      "file": "account-item-index-ok.json",
+      "method": "GET",
+      "path": "/v1/account/itemIndex",
+      "status": 200,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache"
+      }
+    },
+    {
+      "name": "account-trades-ok",
+      "file": "account-trades-ok.json",
+      "method": "GET",
+      "path": "/v1/account/trades",
+      "status": 200,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache"
+      }
+    },
+    {
+      "name": "account-booth-ok",
+      "file": "account-booth-ok.json",
+      "method": "GET",
+      "path": "/v1/account/booth",
+      "status": 200,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache"
+      }
+    },
+    {
+      "name": "account-mail-ok",
+      "file": "account-mail-ok.json",
+      "method": "GET",
+      "path": "/v1/account/mail",
+      "status": 200,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache"
+      }
+    },
+    {
+      "name": "account-quota-exhausted",
+      "file": "account-quota-exhausted.json",
+      "method": "GET",
+      "path": "/v1/account/profile",
+      "status": 200,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache",
+        "X-RateLimit-Limit": "48",
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Quota-Exhausted": "true"
+      }
+    },
+    {
+      "name": "account-unauthorized",
+      "file": "account-unauthorized.json",
+      "method": "GET",
+      "path": "/v1/account/profile",
+      "status": 401,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "name": "account-forbidden",
+      "file": "account-forbidden.json",
+      "method": "GET",
+      "path": "/v1/account/inventory",
+      "status": 403,
+      "requiresAuth": true,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "name": "player-inventory-ok",
+      "file": "player-inventory-ok.json",
+      "method": "GET",
+      "path": "/v1/players/test_user?include=inventory",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=1800"
+      }
+    },
+    {
+      "name": "player-profile-currency-ok",
+      "file": "player-profile-currency-ok.json",
+      "method": "GET",
+      "path": "/v1/players/test_user?include=profile",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=1800"
+      }
+    },
+    {
+      "name": "player-inventory-not-public",
+      "file": "player-inventory-not-public.json",
+      "method": "GET",
+      "path": "/v1/players/test_user?include=inventory",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=300"
+      }
+    },
+    {
+      "name": "player-profile-no-currency",
+      "file": "player-profile-no-currency.json",
+      "method": "GET",
+      "path": "/v1/players/test_user?include=profile",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    },
+    {
+      "name": "player-not-found",
+      "file": "player-not-found.json",
+      "method": "GET",
+      "path": "/v1/players/no_such_user",
+      "status": 404,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "name": "leaderboards-list-ok",
+      "file": "leaderboards-list-ok.json",
+      "method": "GET",
+      "path": "/v1/leaderboards",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300"
+      }
+    },
+    {
+      "name": "leaderboard-page-final-ok",
+      "file": "leaderboard-page-final-ok.json",
+      "method": "GET",
+      "path": "/v1/leaderboards/SyntheticFinalBoard?page=1&pageSize=2&source=final",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=60"
+      }
+    },
+    {
+      "name": "leaderboard-player-not-found",
+      "file": "leaderboard-player-not-found.json",
+      "method": "GET",
+      "path": "/v1/leaderboards/SyntheticLiveBoard/players/123456789?source=live",
+      "status": 404,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "name": "collections-ok",
+      "file": "collections-ok.json",
+      "method": "GET",
+      "path": "/api/collections",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=60"
+      }
+    },
+    {
+      "name": "rap-ok",
+      "file": "rap-ok.json",
+      "method": "GET",
+      "path": "/api/rap",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=14400"
+      }
+    },
+    {
+      "name": "exists-ok",
+      "file": "exists-ok.json",
+      "method": "GET",
+      "path": "/api/exists",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=60"
+      }
+    },
+    {
+      "name": "rate-limit",
+      "file": "rate-limit.json",
+      "method": "GET",
+      "path": "/api/rap",
+      "status": 429,
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "42",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "name": "invalid-json",
+      "file": "invalid-json.txt",
+      "method": "GET",
+      "path": "/v1/leaderboards",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    }
+  ]
+}

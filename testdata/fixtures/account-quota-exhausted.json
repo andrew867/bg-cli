@@ -1,0 +1,21 @@
+{
+  "status": "ok",
+  "data": {
+    "Rank": 12,
+    "Currency": {
+      "Diamonds": {
+        "id": "Diamonds",
+        "_am": 123456789
+      }
+    }
+  },
+  "refresh": {
+    "consumedThisCall": false,
+    "used": 48,
+    "limit": 48,
+    "resetsAt": "2026-11-07T00:00:00.000Z",
+    "nextRefreshEligibleAt": "2026-11-06T12:05:00.000Z",
+    "quotaExhausted": true,
+    "skipped": null
+  }
+}

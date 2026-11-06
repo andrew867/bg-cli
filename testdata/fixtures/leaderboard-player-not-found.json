@@ -1,0 +1,7 @@
+{
+  "status": "error",
+  "error": {
+    "message": "Player is not on this leaderboard.",
+    "ignore": true
+  }
+}

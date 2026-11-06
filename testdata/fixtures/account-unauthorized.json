@@ -1,0 +1,7 @@
+{
+  "status": "error",
+  "error": {
+    "message": "API key has expired or been revoked.",
+    "ignore": true
+  }
+}

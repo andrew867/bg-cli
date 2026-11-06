@@ -1,0 +1,12 @@
+{
+  "status": "ok",
+  "data": [
+    {
+      "category": "Pet",
+      "configData": {
+        "id": "Test Cat"
+      },
+      "value": 5000
+    }
+  ]
+}

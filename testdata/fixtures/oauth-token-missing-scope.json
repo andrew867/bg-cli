@@ -1,0 +1,6 @@
+{
+  "access_token": "synthetic_test_access_token_missing_scope",
+  "token_type": "Bearer",
+  "expires_in": 2592000,
+  "scope": "player-data:pet-simulator-99:profile:read"
+}
