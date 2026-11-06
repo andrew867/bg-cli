@@ -55,6 +55,12 @@ CSV currencies columns: `key`, `id`, `_am`, `amount` (`amount` mirrors exact `_a
 
 Timing rates prefer inventory `snapshotAt` values and are labeled as a proxy when profile counters may have been saved at different times. Missing timestamps yield null rates rather than invented values.
 
+## Loadout analysis
+
+`account loadout analyze|optimize` JSON includes current equipped pets/enchants, owned pools, per-channel estimates with `scoreFullyResolved`, unresolved factor IDs, confidence, and candidate substitutions with reasons. Equipped enchant `level: 0` is reported as unresolved tier (not tier I). Numeric marginal gains are omitted unless a fully verified multiplier chain exists.
+
+`account loadout calibrate` reports observed currency deltas, optional per-minute rates, changed variables, data freshness, confidence, and possible confounders. It does not auto-write registry magnitudes.
+
 ## Exit codes
 
 | Code | Meaning |
