@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- (none)
+
+## [0.1.2] - 2026-11-06
+
+### Added
+
 - `--output csv` for `account inventory` and `account currencies` with exact integer text (no float64 rounding)
 - Richer `--output table` layouts for inventory, currencies, and leaderboard list
 - `bg-cli doctor` for local config, credential store, and scope checks
