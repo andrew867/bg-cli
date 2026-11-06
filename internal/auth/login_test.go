@@ -60,9 +60,9 @@ func TestLoginSuccessDeterministic(t *testing.T) {
 	defer cancel()
 
 	res, secrets, err := Login(ctx, LoginOptions{
-		Profile:      "main",
-		ClientID:     "test-client-id",
-		RedirectURI:  redirectURI,
+		Profile:     "main",
+		ClientID:    "test-client-id",
+		RedirectURI: redirectURI,
 		Scopes: []string{
 			"player-data:pet-simulator-99:inventory:read",
 			"player-data:pet-simulator-99:profile:read",
