@@ -102,6 +102,17 @@ func DiffBundles(from, to *Bundle, opt DiffOptions) (DiffResult, error) {
 	res.PurchasedEggs = diffNamedMaps(fromPV.PurchasedEggs, toPV.PurchasedEggs, "")
 	res.PetHatchCounts = diffNamedMaps(fromPV.PetHatchCount, toPV.PetHatchCount, opt.PetID)
 	res.Currencies = diffNamedMaps(fromPV.Currencies, toPV.Currencies, "")
+	for _, cd := range res.Currencies {
+		start := ParseExactIntString(cd.Previous)
+		end := ParseExactIntString(cd.Current)
+		delta := ParseExactIntString(cd.Delta)
+		if CurrencyAtKnownCap(cd.ID, start, end, delta) {
+			res.Warnings = append(res.Warnings, cd.ID+": "+CapFindingCapped)
+			res.Assumptions = append(res.Assumptions,
+				cd.ID+" balance equals a known observational ceiling; a zero currency delta must not be interpreted as zero gross income",
+			)
+		}
+	}
 
 	var fromPets, toPets []PetStack
 	if from.Inventory != nil {

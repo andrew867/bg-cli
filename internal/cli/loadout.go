@@ -220,12 +220,16 @@ func newAccountLoadoutOptimizeCmd(app *App) *cobra.Command {
 }
 
 func newAccountLoadoutCalibrateCmd(app *App) *cobra.Command {
-	var fromPath, toPath, registry, world, objective, currency, note string
+	var fromPath, toPath, registry, world, objective, currency, note, currencyCap string
 	cmd := &cobra.Command{
 		Use:   "calibrate",
 		Short: "Measure currency rates from two offline snapshots (no invented multipliers)",
 		Long: `Fully offline. Records observed per-minute rates, changed variables, freshness,
-confidence, and confounders. Does not auto-write registry magnitudes.`,
+confidence, and confounders. Does not auto-write registry magnitudes.
+
+When a currency sits at a known ceiling (e.g. FantasyCoins = 300000000000000000000)
+with a zero balance delta, observedPerMinute is omitted and the report flags
+CAPPED: income rate cannot be identified from balance differences.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			obj, err := loadout.ParseObjective(objective)
 			if err != nil {
@@ -247,6 +251,7 @@ confidence, and confounders. Does not auto-write registry magnitudes.`,
 			}
 			rep, err := loadout.CalibrateFromSnapshots(loadout.CalibrationInput{
 				From: fromB, To: toB, CurrencyID: currency, Objective: obj, WorldID: world, Note: note,
+				CurrencyCap: currencyCap,
 			})
 			if err != nil {
 				return &ExitError{Code: exitcode.Upstream, Msg: err.Error()}
@@ -261,6 +266,7 @@ confidence, and confounders. Does not auto-write registry magnitudes.`,
 	cmd.Flags().StringVar(&world, "world", "halloween-games", "world/event id")
 	cmd.Flags().StringVar(&objective, "objective", "halloween-coins-per-min", "objective id")
 	cmd.Flags().StringVar(&currency, "currency", "", "currency id override")
+	cmd.Flags().StringVar(&currencyCap, "currency-cap", "", "optional exact ceiling override for cap detection")
 	cmd.Flags().StringVar(&note, "note", "", "experiment note recorded in the calibration report")
 	return cmd
 }

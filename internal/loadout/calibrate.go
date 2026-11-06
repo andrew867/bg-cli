@@ -10,32 +10,36 @@ import (
 
 // CalibrationInput is a measured interval between two offline snapshots.
 type CalibrationInput struct {
-	From       *snapshot.Bundle
-	To         *snapshot.Bundle
-	CurrencyID string
-	Objective  Objective
-	WorldID    string
-	Note       string
+	From        *snapshot.Bundle
+	To          *snapshot.Bundle
+	CurrencyID  string
+	Objective   Objective
+	WorldID     string
+	Note        string
+	CurrencyCap string // optional exact override of known ceiling for this currency
 }
 
 // CalibrationReport records measured rates without inventing multipliers.
 type CalibrationReport struct {
-	OK                      bool        `json:"ok"`
-	CurrencyID              string      `json:"currencyId,omitempty"`
-	Objective               ObjectiveID `json:"objective"`
-	WorldID                 string      `json:"worldId"`
-	ElapsedSeconds          *float64    `json:"elapsedSeconds,omitempty"`
-	ElapsedBasis            string      `json:"elapsedBasis,omitempty"`
-	CurrencyDelta           string      `json:"currencyDelta,omitempty"`
-	ObservedPerMinute       *float64    `json:"observedPerMinute,omitempty"`
-	SampleSizeNote          string      `json:"sampleSizeNote"`
-	ChangedVariables        []string    `json:"changedVariables"`
-	DataFreshness           []string    `json:"dataFreshness"`
-	Confidence              Confidence  `json:"confidence"`
-	PossibleConfounders     []string    `json:"possibleConfounders"`
-	Warnings                []string    `json:"warnings"`
-	SuggestedRegistryUpdate string      `json:"suggestedRegistryUpdate,omitempty"`
-	MethodID                string      `json:"methodId"`
+	OK                      bool           `json:"ok"`
+	CurrencyID              string         `json:"currencyId,omitempty"`
+	Objective               ObjectiveID    `json:"objective"`
+	WorldID                 string         `json:"worldId"`
+	ElapsedSeconds          *float64       `json:"elapsedSeconds,omitempty"`
+	ElapsedBasis            string         `json:"elapsedBasis,omitempty"`
+	CurrencyDelta           string         `json:"currencyDelta,omitempty"`
+	StartingBalance         string         `json:"startingBalance,omitempty"`
+	EndingBalance           string         `json:"endingBalance,omitempty"`
+	ObservedPerMinute       *float64       `json:"observedPerMinute,omitempty"`
+	CurrencyCap             *CapAssessment `json:"currencyCap,omitempty"`
+	SampleSizeNote          string         `json:"sampleSizeNote"`
+	ChangedVariables        []string       `json:"changedVariables"`
+	DataFreshness           []string       `json:"dataFreshness"`
+	Confidence              Confidence     `json:"confidence"`
+	PossibleConfounders     []string       `json:"possibleConfounders"`
+	Warnings                []string       `json:"warnings"`
+	SuggestedRegistryUpdate string         `json:"suggestedRegistryUpdate,omitempty"`
+	MethodID                string         `json:"methodId"`
 }
 
 // CalibrateFromSnapshots measures an observed currency rate from two bundles.
@@ -96,6 +100,24 @@ func CalibrateFromSnapshots(in CalibrationInput) (CalibrationReport, error) {
 		return rep, err
 	}
 	rep.CurrencyDelta = delta.Text
+	rep.StartingBalance = start.Text
+	rep.EndingBalance = end.Text
+
+	spendConfirmed := ConcurrentSpendSignals(in.From, in.To)
+	cap := AssessCurrencyCap(in.CurrencyID, start, end, delta, in.CurrencyCap, spendConfirmed)
+	if cap.Capped || cap.Finding != "" {
+		rep.CurrencyCap = &cap
+	}
+	if cap.Capped {
+		rep.Confidence = ConfidenceUnknown
+		rep.Warnings = append(rep.Warnings, cap.Finding)
+		rep.PossibleConfounders = append(rep.PossibleConfounders,
+			"currency balance may be at a hard ceiling; excess production is discarded and Δbalance/Δt is not gross income",
+		)
+		if cap.ProductionMayOffsetSpending {
+			rep.Warnings = append(rep.Warnings, cap.ProductionOffsetNote)
+		}
+	}
 
 	var fromAt, toAt *string
 	for _, f := range in.From.Manifest.Files {
@@ -128,10 +150,12 @@ func CalibrateFromSnapshots(in CalibrationInput) (CalibrationReport, error) {
 			if sec > 0 {
 				rep.ElapsedSeconds = &sec
 				rep.ElapsedBasis = "inventory snapshotAt proxy"
-				// per-minute rate as float for reporting only
-				df, _ := delta.Int.Float64()
-				rate := df / (sec / 60.0)
-				rep.ObservedPerMinute = &rate
+				if !cap.Capped {
+					// per-minute rate as float for reporting only — never emit 0 from a capped flat balance
+					df, _ := delta.Int.Float64()
+					rate := df / (sec / 60.0)
+					rep.ObservedPerMinute = &rate
+				}
 			} else {
 				rep.Warnings = append(rep.Warnings, "non-positive elapsed interval; per-minute rate omitted")
 				rep.Confidence = ConfidenceUnknown

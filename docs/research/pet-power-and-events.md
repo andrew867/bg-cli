@@ -115,6 +115,10 @@ Charms (public `Charms` collection) are classified by effect family from Desc + 
 
 `/api/collection/Currency` exposes distinct IDs including `Coins`, `TechCoins`, `VoidCoins`, `FantasyCoins`, `Diamonds`, `HalloweenGamesCoins`, `HalloweenGamesTreats`, `TrailCoins`, `HatchWarCoins`, `LuckyCoins`, `SpaceCoins`, …  
 
+### Currency ceilings (calibration)
+
+`FantasyCoins` has been repeatedly observed at exactly `300000000000000000000` across distinct snapshots (e.g. 2026-11-06 12:48 and 13:59 America/St_Johns) while play continued. Excess production appears discarded at this ceiling. Calibration and snapshot diff therefore treat a flat balance at that value as **CAPPED**: `ΔFantasyCoins/Δt = 0` must not be reported as zero income. Optional `--currency-cap` overrides the ceiling for other currencies when experimentally confirmed. 
+
 World 1–4 bind `WorldCurrency` to Coins/Tech/Void/Fantasy only. Event currencies are separate economies. A Coins enchant Desc references **Coins**, not HalloweenGamesCoins.
 
 ## Known unknowns

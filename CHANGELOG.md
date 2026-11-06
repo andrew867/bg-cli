@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Research notes: `docs/research/pet-power-and-events.md`
 - `account forge observe|analyze|optimize|ledger`: offline Halloween Forge probability fitting and recipe optimization from UI observations (capped-linear Butler-only model, mixed-recipe uncertainty, local attempt ledger)
 - Research notes: `docs/research/halloween-forge.md`; operator flow: `docs/operator-guide-analysis.md`
+- Calibration / snapshot diff: detect known currency ceilings (FantasyCoins `300000000000000000000`); suppress false zero income rates with `CAPPED: income rate cannot be identified from balance differences`, optional spend-offset note, `--currency-cap` override
 
 ## [0.1.2] - 2026-11-06
 

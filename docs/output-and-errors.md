@@ -61,6 +61,8 @@ Timing rates prefer inventory `snapshotAt` values and are labeled as a proxy whe
 
 `account loadout calibrate` reports observed currency deltas, optional per-minute rates, changed variables, data freshness, confidence, and possible confounders. It does not auto-write registry magnitudes.
 
+When both snapshots show a currency at a known ceiling (currently `FantasyCoins = 300000000000000000000`) with a zero delta, `observedPerMinute` is omitted and the report includes `currencyCap` with finding `CAPPED: income rate cannot be identified from balance differences`. Concurrent egg/purchase activity while still at the ceiling may add a note that production appears sufficient to offset spending, still without inventing a rate.
+
 ## Exit codes
 
 | Code | Meaning |
