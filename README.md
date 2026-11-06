@@ -21,6 +21,8 @@
 
 ## Install
 
+**Prebuilt archives** (Linux, macOS, Windows) ship with every tagged release, plus a source tarball and SHA-256 checksums. Download from [Releases](https://github.com/andrew867/bg-cli/releases), extract, and put `bg-cli` on your `PATH`. Details: [Installation](docs/installation.md).
+
 ```bash
 go install github.com/andrew867/bg-cli/cmd/bg-cli@latest
 ```
@@ -32,8 +34,6 @@ git clone https://github.com/andrew867/bg-cli.git
 cd bg-cli
 go build -o bg-cli ./cmd/bg-cli
 ```
-
-Prebuilt binaries for Windows, Linux, and macOS are published with tagged releases.
 
 ## Quick start
 
@@ -61,7 +61,8 @@ bg-cli leaderboard list --pretty
 
 | Document | Description |
 | --- | --- |
-| [Installation](docs/installation.md) | Build, install, and verify |
+| [Installation](docs/installation.md) | Build, install, prebuilt archives, releases |
+| [GitHub repo settings](docs/github-repo-settings.md) | Description, topics, release triggers |
 | [Authentication](docs/authentication.md) | Developer apps, OAuth, profiles, rotation |
 | [Command reference](docs/commands.md) | Flags and subcommands |
 | [Output and errors](docs/output-and-errors.md) | JSON schema, exit codes, freshness |
