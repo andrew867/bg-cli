@@ -15,11 +15,16 @@ This guide covers routine operation of a private bg-cli installation.
 ## Daily use
 
 ```bash
+bg-cli account quota --profile main --pretty
+bg-cli account snapshot --profile main --dir . --prefix ps99 --note "baseline"
+bg-cli account snapshot diff --from .\OLD-ps99-manifest.json --to .\NEW-ps99-manifest.json --egg "Masquerade Egg" --pet "Butler Penguin" --pretty
 bg-cli account currencies --profile main --pretty
 bg-cli account inventory --profile main --class Pet --pretty
-bg-cli account inventory --profile main --output csv > inventory.csv
+bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv
 bg-cli leaderboard list --pretty
 ```
+
+Snapshot diff never contacts the network. Keep both manifests and their sibling JSON payloads together.
 
 Shell completions: `bg-cli completion powershell | Out-String | Invoke-Expression` (Windows) or `source <(bg-cli completion bash)` (Linux/macOS).
 

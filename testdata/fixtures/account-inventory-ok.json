@@ -4,6 +4,125 @@
     "items": [
       {
         "class": "Pet",
+        "id": "Butler Penguin",
+        "count": 10,
+        "stackKey": "{\"id\":\"Butler Penguin\",\"_am\":10}",
+        "rawData": {
+          "id": "Butler Penguin",
+          "_am": 10
+        },
+        "displayName": "Butler Penguin",
+        "icon": "rbxassetid://100000001",
+        "goldenIcon": "",
+        "rap": 100,
+        "rapApproximate": false,
+        "exists": 5000,
+        "rarity": "Basic",
+        "rarityNumber": 1,
+        "collection": "Pets"
+      },
+      {
+        "class": "Pet",
+        "id": "Butler Penguin",
+        "count": 4,
+        "stackKey": "{\"id\":\"Butler Penguin\",\"pt\":1,\"_am\":4}",
+        "rawData": {
+          "id": "Butler Penguin",
+          "pt": 1,
+          "_am": 4
+        },
+        "displayName": "Butler Penguin",
+        "icon": "rbxassetid://100000001",
+        "goldenIcon": "",
+        "rap": 400,
+        "rapApproximate": false,
+        "exists": 500,
+        "rarity": "Basic",
+        "rarityNumber": 1,
+        "collection": "Pets"
+      },
+      {
+        "class": "Pet",
+        "id": "Butler Penguin",
+        "count": 2,
+        "stackKey": "{\"id\":\"Butler Penguin\",\"pt\":2,\"_am\":2}",
+        "rawData": {
+          "id": "Butler Penguin",
+          "pt": 2,
+          "_am": 2
+        },
+        "displayName": "Butler Penguin",
+        "icon": "rbxassetid://100000001",
+        "goldenIcon": "",
+        "rap": 2000,
+        "rapApproximate": false,
+        "exists": 50,
+        "rarity": "Basic",
+        "rarityNumber": 1,
+        "collection": "Pets"
+      },
+      {
+        "class": "Pet",
+        "id": "Butler Penguin",
+        "count": 1,
+        "stackKey": "{\"id\":\"Butler Penguin\",\"sh\":true,\"_am\":1}",
+        "rawData": {
+          "id": "Butler Penguin",
+          "sh": true,
+          "_am": 1
+        },
+        "displayName": "Butler Penguin",
+        "icon": "rbxassetid://100000001",
+        "goldenIcon": "",
+        "rap": 800,
+        "rapApproximate": false,
+        "exists": 100,
+        "rarity": "Basic",
+        "rarityNumber": 1,
+        "collection": "Pets"
+      },
+      {
+        "class": "Pet",
+        "id": "Butler Penguin",
+        "count": 1,
+        "stackKey": "{\"id\":\"Butler Penguin\",\"pt\":2,\"sh\":true,\"_am\":1}",
+        "rawData": {
+          "id": "Butler Penguin",
+          "pt": 2,
+          "sh": true,
+          "_am": 1
+        },
+        "displayName": "Butler Penguin",
+        "icon": "rbxassetid://100000001",
+        "goldenIcon": "",
+        "rap": 5000,
+        "rapApproximate": false,
+        "exists": 10,
+        "rarity": "Basic",
+        "rarityNumber": 1,
+        "collection": "Pets"
+      },
+      {
+        "class": "Currency",
+        "id": "Diamonds",
+        "count": 9007199254740993,
+        "stackKey": "{\"id\":\"Diamonds\",\"_am\":9007199254740993}",
+        "rawData": {
+          "id": "Diamonds",
+          "_am": 9007199254740993
+        },
+        "displayName": "Diamonds",
+        "icon": "",
+        "goldenIcon": "",
+        "rap": 0,
+        "rapApproximate": false,
+        "exists": 0,
+        "rarity": "",
+        "rarityNumber": 0,
+        "collection": ""
+      },
+      {
+        "class": "Pet",
         "id": "Test Cat",
         "count": 3,
         "stackKey": "{\"id\":\"Test Cat\",\"_am\":3}",

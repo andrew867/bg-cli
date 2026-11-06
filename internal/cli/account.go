@@ -33,6 +33,8 @@ This client is unofficial and not endorsed by BIG Games.`,
 	cmd.AddCommand(newAccountInventoryCmd(app))
 	cmd.AddCommand(newAccountProfileCmd(app))
 	cmd.AddCommand(newAccountCurrenciesCmd(app))
+	cmd.AddCommand(newAccountQuotaCmd(app))
+	cmd.AddCommand(newAccountSnapshotCmd(app))
 	cmd.AddCommand(newAccountPassthroughCmd(app, "extended-profile", "extendedProfile", api.ScopeExtendedProfile, "Fetch authorizing account extended profile"))
 	cmd.AddCommand(newAccountPassthroughCmd(app, "item-index", "itemIndex", api.ScopeItemIndex, "Fetch authorizing account item index"))
 	cmd.AddCommand(newAccountPassthroughCmd(app, "trades", "trades", api.ScopeTrades, "Fetch authorizing account trade history"))
@@ -131,10 +133,14 @@ func isStdinTTY() bool {
 func newAccountInventoryCmd(app *App) *cobra.Command {
 	var af accountFlags
 	var class, id string
-	var equippedOnly bool
+	var equippedOnly, joinRAP bool
 	cmd := &cobra.Command{
 		Use:   "inventory",
 		Short: "Fetch authorizing account inventory snapshot",
+		Long: `Fetch the authorizing account inventory snapshot.
+
+Use --join-rap to look up public market RAP (/api/rap) by class+id and add
+marketRap columns when exporting CSV (also reported in JSON as rapJoin).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return app.runAccountView(cmd.Context(), accountViewRequest{
 				Command:       "account inventory",
@@ -144,6 +150,7 @@ func newAccountInventoryCmd(app *App) *cobra.Command {
 				Class:         class,
 				ID:            id,
 				EquippedOnly:  equippedOnly,
+				JoinRAP:       joinRAP,
 			})
 		},
 	}
@@ -152,6 +159,7 @@ func newAccountInventoryCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&class, "class", "", "exact case-insensitive item class filter")
 	cmd.Flags().StringVar(&id, "id", "", "exact case-insensitive item id filter")
 	cmd.Flags().BoolVar(&equippedOnly, "equipped-only", false, "keep items referenced in equipped payload only")
+	cmd.Flags().BoolVar(&joinRAP, "join-rap", false, "join public market RAP by class+id (adds marketRap for CSV)")
 	return cmd
 }
 
@@ -225,6 +233,7 @@ type accountViewRequest struct {
 	Class         string
 	ID            string
 	EquippedOnly  bool
+	JoinRAP       bool
 }
 
 func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error {
@@ -375,20 +384,39 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 
 	switch req.View {
 	case "inventory":
-		filtered, rowCount, qtySum, ferr := api.FilterInventory(res.Data, req.Class, req.ID, req.EquippedOnly)
+		invRes, ferr := api.FilterInventory(res.Data, req.Class, req.ID, req.EquippedOnly)
 		if ferr != nil {
 			return &ExitError{Code: exitcode.Upstream, Msg: ferr.Error()}
 		}
 		snap, cached := api.SnapshotFromInventory(res.Data)
 		fresh := freshnessFromResult(res, snap)
 		data := map[string]any{
-			"inventory":      jsonutil.CloneRaw(filtered),
-			"rowCount":       rowCount,
-			"quantitySum":    qtySum,
-			"rowCountNote":   "rowCount is filtered item rows, not total item quantity",
-			"cached":         cached,
-			"rateLimit":      res.RateLimit(),
-			"quotaExhausted": refreshQuotaExhausted(res.Refresh),
+			"inventory":       jsonutil.CloneRaw(invRes.Filtered),
+			"rowCount":        invRes.RowCount,
+			"quantitySum":     invRes.QuantitySum,
+			"quantitySumNote": "sum of count across all filtered rows (may include non-pet stacks such as currencies); not an object/row total",
+			"petRowCount":     invRes.PetRowCount,
+			"petQuantitySum":  invRes.PetQuantitySum,
+			"rowCountNote":    "rowCount is filtered item rows, not total item quantity",
+			"cached":          cached,
+			"rateLimit":       res.RateLimit(),
+			"quotaExhausted":  refreshQuotaExhausted(res.Refresh),
+		}
+		if req.JoinRAP {
+			idx, matched, jerr := a.loadRAPJoin(ctx, invRes.Filtered)
+			if jerr != nil {
+				a.notice("rap join warning: %v", jerr)
+				data["rapJoin"] = map[string]any{"ok": false, "error": jerr.Error()}
+			} else {
+				data["rapJoin"] = map[string]any{
+					"ok":          true,
+					"indexSize":   len(idx),
+					"matchedRows": matched,
+					"source":      "/api/rap",
+				}
+				// Stash index for CSV emit without re-fetch.
+				a.pendingRAPIndex = idx
+			}
 		}
 		return a.emit(output.NewSuccess(req.Command, source, fresh, data))
 	case "profile":
@@ -426,6 +454,54 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 		}
 		return a.emit(output.NewSuccess(req.Command, source, freshnessFromResult(res, nil), data))
 	}
+}
+
+func (a *App) loadRAPJoin(ctx context.Context, inventory json.RawMessage) (output.RAPIndex, int, error) {
+	pr, err := a.getPublicCached(ctx, "/api/rap", nil, api.BodyLimitRAP)
+	if err != nil {
+		return nil, 0, err
+	}
+	if pr.Res.HTTPStatus < 200 || pr.Res.HTTPStatus >= 300 {
+		return nil, 0, fmt.Errorf("market rap HTTP %d", pr.Res.HTTPStatus)
+	}
+	idx, err := output.BuildRAPIndex(pr.Res.Data)
+	if err != nil {
+		return nil, 0, err
+	}
+	items, err := inventoryItemMaps(inventory)
+	if err != nil {
+		return idx, 0, nil
+	}
+	matched := 0
+	for _, item := range items {
+		var classStr, idStr string
+		_ = json.Unmarshal(item["class"], &classStr)
+		_ = json.Unmarshal(item["id"], &idStr)
+		if _, ok := idx.Lookup(classStr, idStr); ok {
+			matched++
+		}
+	}
+	return idx, matched, nil
+}
+
+func inventoryItemMaps(inventory json.RawMessage) ([]map[string]json.RawMessage, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(inventory, &root); err != nil {
+		return nil, err
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(root["items"], &items); err != nil {
+		return nil, err
+	}
+	out := make([]map[string]json.RawMessage, 0, len(items))
+	for _, it := range items {
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(it, &m); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, nil
 }
 
 func freshnessFromResult(res api.Result, snapshotAt *time.Time) *output.Freshness {

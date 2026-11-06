@@ -88,6 +88,17 @@ type inventoryItemMeta struct {
 	Count json.RawMessage `json:"count"`
 }
 
+// InventoryFilterResult is the filtered inventory payload plus quantity stats.
+// quantitySum sums count across every kept row (including non-pet stacks such as
+// currencies). petQuantitySum / petRowCount only include class == "Pet".
+type InventoryFilterResult struct {
+	Filtered       json.RawMessage
+	RowCount       int
+	QuantitySum    json.Number
+	PetRowCount    int
+	PetQuantitySum json.Number
+}
+
 func addCount(sum *big.Int, raw json.RawMessage) {
 	if sum == nil || len(raw) == 0 || string(raw) == "null" {
 		return
@@ -100,15 +111,29 @@ func addCount(sum *big.Int, raw json.RawMessage) {
 	sum.Add(sum, n)
 }
 
+func accumulateInventoryStats(items []json.RawMessage) (rowCount int, quantitySum, petQuantitySum json.Number, petRowCount int) {
+	sum := new(big.Int)
+	petSum := new(big.Int)
+	for _, raw := range items {
+		var meta inventoryItemMeta
+		_ = json.Unmarshal(raw, &meta)
+		addCount(sum, meta.Count)
+		if strings.EqualFold(meta.Class, "Pet") {
+			petRowCount++
+			addCount(petSum, meta.Count)
+		}
+	}
+	return len(items), json.Number(sum.String()), json.Number(petSum.String()), petRowCount
+}
+
 // FilterInventory applies exact case-insensitive class/id filters.
 // quantitySum is distinct from rowCount and preserves exact integer text via json.Number.
-func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) (filtered json.RawMessage, rowCount int, quantitySum json.Number, err error) {
+func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) (InventoryFilterResult, error) {
 	var inv InventoryData
 	if err := json.Unmarshal(data, &inv); err != nil {
-		return nil, 0, "0", err
+		return InventoryFilterResult{QuantitySum: "0", PetQuantitySum: "0"}, err
 	}
 	out := make([]json.RawMessage, 0, len(inv.Items))
-	sum := new(big.Int)
 	for _, raw := range inv.Items {
 		var meta inventoryItemMeta
 		_ = json.Unmarshal(raw, &meta)
@@ -119,18 +144,15 @@ func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) 
 			continue
 		}
 		out = append(out, raw)
-		addCount(sum, meta.Count)
 	}
 	if equippedOnly {
 		eq := string(inv.Equipped)
 		kept := out[:0]
-		sum = new(big.Int)
 		for _, raw := range out {
 			var meta inventoryItemMeta
 			_ = json.Unmarshal(raw, &meta)
 			if meta.ID != "" && strings.Contains(strings.ToLower(eq), `"`+strings.ToLower(meta.ID)+`"`) {
 				kept = append(kept, raw)
-				addCount(sum, meta.Count)
 			}
 		}
 		out = kept
@@ -138,9 +160,16 @@ func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) 
 	inv.Items = out
 	b, err := json.Marshal(inv)
 	if err != nil {
-		return nil, 0, "0", err
+		return InventoryFilterResult{QuantitySum: "0", PetQuantitySum: "0"}, err
 	}
-	return b, len(out), json.Number(sum.String()), nil
+	rows, qty, petQty, petRows := accumulateInventoryStats(out)
+	return InventoryFilterResult{
+		Filtered:       b,
+		RowCount:       rows,
+		QuantitySum:    qty,
+		PetRowCount:    petRows,
+		PetQuantitySum: petQty,
+	}, nil
 }
 
 // SnapshotFromInventory returns fetchedAt/cached without inventing values.

@@ -119,17 +119,16 @@ func TestFilterInventory(t *testing.T) {
 		Data json.RawMessage `json:"data"`
 	}
 	_ = json.Unmarshal(body, &env)
-	filtered, rows, qty, err := FilterInventory(env.Data, "pet", "test cat", false)
+	res, err := FilterInventory(env.Data, "pet", "test cat", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rows != 1 || qty != "3" {
-		t.Fatalf("rows=%d qty=%v", rows, qty)
+	if res.RowCount != 1 || res.QuantitySum != "3" || res.PetQuantitySum != "3" || res.PetRowCount != 1 {
+		t.Fatalf("%+v", res)
 	}
-	_ = filtered
-	_, rows, _, err = FilterInventory(env.Data, "Weapon", "", false)
-	if err != nil || rows != 0 {
-		t.Fatalf("rows=%d err=%v", rows, err)
+	empty, err := FilterInventory(env.Data, "Weapon", "", false)
+	if err != nil || empty.RowCount != 0 {
+		t.Fatalf("rows=%d err=%v", empty.RowCount, err)
 	}
 }
 

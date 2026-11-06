@@ -41,12 +41,16 @@ type GlobalFlags struct {
 	Timeout time.Duration
 	Quiet   bool
 	NoCache bool
+	Excel   bool // UTF-8 BOM (+ currency amount polish already always on)
 }
 
 // App holds root state.
 type App struct {
 	Deps  Deps
 	Flags GlobalFlags
+
+	// pendingRAPIndex is set by account inventory --join-rap for CSV emit.
+	pendingRAPIndex output.RAPIndex
 }
 
 func (a *App) stdout() io.Writer {
@@ -101,15 +105,19 @@ func (a *App) emitCSV(env output.Envelope) error {
 			}
 			inv = b
 		}
-		return output.WriteInventoryCSV(a.stdout(), inv)
+		opts := output.InventoryCSVOptions{Excel: a.Flags.Excel, RAPIndex: a.pendingRAPIndex}
+		a.pendingRAPIndex = nil
+		return output.WriteInventoryCSV(a.stdout(), inv, opts)
 	case "account currencies":
 		currencies, err := currencyRawMap(data["currencies"])
 		if err != nil {
 			return err
 		}
-		return output.WriteCurrenciesCSV(a.stdout(), currencies)
+		return output.WriteCurrenciesCSV(a.stdout(), currencies, output.CurrencyCSVOptions{Excel: a.Flags.Excel})
+	case "account quota":
+		return output.WriteQuotaCSV(a.stdout(), data, a.Flags.Excel)
 	default:
-		return &ExitError{Code: exitcode.Usage, Msg: "--output csv is supported for account inventory and account currencies"}
+		return &ExitError{Code: exitcode.Usage, Msg: "--output csv is supported for account inventory, account currencies, and account quota"}
 	}
 }
 
@@ -172,6 +180,7 @@ Never pass client_secret as a flag. Supply it via masked prompt, stdin, or BG_CL
 	root.PersistentFlags().DurationVar(&app.Flags.Timeout, "timeout", 15*time.Second, "HTTP timeout (1s-60s)")
 	root.PersistentFlags().BoolVar(&app.Flags.Quiet, "quiet", false, "suppress non-error stderr notices")
 	root.PersistentFlags().BoolVar(&app.Flags.NoCache, "no-cache", false, "bypass public response cache")
+	root.PersistentFlags().BoolVar(&app.Flags.Excel, "excel", false, "CSV: write UTF-8 BOM for Excel")
 
 	root.AddCommand(newVersionCmd(app))
 	root.AddCommand(newDoctorCmd(app))

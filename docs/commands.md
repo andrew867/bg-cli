@@ -16,6 +16,7 @@ bg-cli [global flags] <group> <command> [arguments] [command flags]
 | `--timeout` | `15s` | HTTP timeout between 1s and 60s |
 | `--quiet` | false | Suppress non-error stderr notices |
 | `--no-cache` | false | Bypass the public response cache |
+| `--excel` | false | CSV only: write a UTF-8 BOM so Excel detects encoding |
 | `--version` / `version` | n/a | Print version |
 | `--help` | n/a | Print help |
 
@@ -23,7 +24,7 @@ Stdout carries data. Diagnostics go to stderr. Secrets are never printed.
 
 `raw` prints exact upstream response bytes for data endpoints and is unavailable for `auth` commands.
 
-`csv` writes spreadsheet rows for `account inventory` and `account currencies` only. Counts and `_am` values keep exact JSON number text (no float64 rounding). Other commands reject `--output csv`.
+`csv` writes spreadsheet rows for `account inventory`, `account currencies`, and `account quota`. Counts and `_am` / `amount` values keep exact JSON number text (no float64 rounding). Inventory CSV includes pet variant columns (`variant`, `golden`, `rainbow`, `shiny`, `pt`, `sh`, `stackKey`). Other commands reject `--output csv`.
 
 ## Meta
 
@@ -51,6 +52,8 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account inventory` | `/v1/account/inventory` | inventory:read |
 | `account profile` | `/v1/account/profile` | profile:read |
 | `account currencies` | `/v1/account/profile` | profile:read |
+| `account quota` | `/v1/account/profile` | profile:read |
+| `account snapshot` | inventory + profile + extendedProfile | inventory + profile + extendedProfile |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -65,15 +68,38 @@ Common flags:
 | `--yes` | Confirm `--refresh` when stdin is not a TTY |
 
 Inventory filters: `--class`, `--id`, `--equipped-only` (exact, case-insensitive).  
+Inventory RAP join: `--join-rap` (public `/api/rap` by class+id; adds CSV columns `marketRap`, `marketRapMatched`).  
 Currencies filter: `--id`.
+
+`account quota` returns refresh used/limit/`resetsAt` plus rate-limit remaining and `Retry-After` without printing the profile body.
+
+`account snapshot` writes a dated five-file dump (plus manifest) into `--dir` (default `.`):
+
+```text
+{yyyy-MM-dd-HHmmss}-{prefix}-inv.json
+{yyyy-MM-dd-HHmmss}-{prefix}-prof.json
+{yyyy-MM-dd-HHmmss}-{prefix}-extprof.json
+{yyyy-MM-dd-HHmmss}-{prefix}-inventory.csv
+{yyyy-MM-dd-HHmmss}-{prefix}-currencies.csv
+{yyyy-MM-dd-HHmmss}-{prefix}-manifest.json
+```
+
+Same-second runs get a `-0001` collision suffix. The manifest lists payload files with exact byte sizes and SHA-256 digests (it does not self-reference its own digest). Optional `--note` stores experiment context. Stdout gets a small summary only.
+
+`account snapshot diff --from OLD_MANIFEST --to NEW_MANIFEST` is fully offline: no auth, no network, no quota. It diffs Statistics, PurchasedEggs, PetHatchCount, Pet inventory variants, and currencies; optional `--egg` / `--pet` / `--egg-price` / `--currency` / `--future-eggs` / `--batch-size` enable observed hatch-rate, reconciliation, and cost/timing analysis. Observed rates are not official game odds.
 
 Export examples:
 
 ```bash
-bg-cli account inventory --profile main --output csv > inventory.csv
-bg-cli account currencies --profile main --output csv > currencies.csv
-bg-cli account inventory --profile main --output table
+bg-cli account quota --profile main --pretty
+bg-cli account snapshot --profile main --dir . --prefix ps99 --note "Lucky Eggs VII"
+bg-cli account snapshot --profile main --dir D:\snaps --join-rap --excel
+bg-cli account snapshot diff --from old-manifest.json --to new-manifest.json --egg "Masquerade Egg" --pet "Butler Penguin" --egg-price 50000 --currency HalloweenGamesCoins --future-eggs 10000 --pretty
+bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv
+bg-cli account currencies --profile main --output csv --excel > currencies.csv
 ```
+
+Excel note: `--excel` writes a UTF-8 BOM so Excel detects encoding, but Excel may still round integers beyond its numeric precision. Prefer CSV text columns or Power Query for exact large integers.
 
 Account response bodies are never cached to disk.
 

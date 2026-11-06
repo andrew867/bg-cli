@@ -29,11 +29,31 @@ Rules:
 | `json` | One schema-shaped object (default) |
 | `table` | Richer terminal tables for inventory, currencies, and leaderboard list; otherwise a compact key dump |
 | `raw` | Exact upstream bytes for data endpoints; rejected for `auth` |
-| `csv` | Spreadsheet rows for `account inventory` / `account currencies` with exact numeric text; rejected elsewhere and for `auth` |
+| `csv` | Spreadsheet rows for `account inventory` / `account currencies` / `account quota` with exact numeric text; rejected elsewhere and for `auth` |
 
-CSV inventory columns (stable order): `class`, `id`, `count`, `displayName`, `rap`, `rapApproximate`, `exists`, `rarity`, `rarityNumber`, `collection`.
+CSV inventory columns (stable order): `class`, `id`, `count`, `displayName`, `variant`, `golden`, `rainbow`, `shiny`, `pt`, `sh`, `stackKey`, `rap`, `rapApproximate`, `exists`, `rarity`, `rarityNumber`, `collection`. With `--join-rap`: also `marketRap`, `marketRapMatched`.
 
-CSV currencies columns: `key`, `id`, `_am`.
+Variant derivation (pets): `rawData.pt=1` → Golden, `pt=2` → Rainbow, `rawData.sh=true` → Shiny; absent fields → Regular. Non-pet rows leave `variant` blank.
+
+Inventory JSON also reports `petRowCount` / `petQuantitySum` (class `Pet` only). `quantitySum` still sums every filtered row and may include non-pet stacks such as currencies — it is not a total object count.
+
+CSV currencies columns: `key`, `id`, `_am`, `amount` (`amount` mirrors exact `_am` for Excel).
+
+`--excel` prefixes CSV with a UTF-8 BOM.
+
+## Quota summary
+
+`account quota` surfaces refresh quota (`used`, `limit`, `resetsAt`, `nextRefreshEligibleAt`, `quotaExhausted`) and HTTP rate-limit headers (`remaining`, `Retry-After`) without dumping account payloads.
+
+## Snapshot export
+
+`account snapshot` writes dated JSON/CSV files into `--dir` and a `*-manifest.json` that includes API `snapshotAt` (from inventory `fetchedAt` when present), per-file SHA-256 digests, `petQuantitySum`, exact currency amounts, and profile Statistics. The manifest does not claim a self-referential size/digest. Stdout is only a compact summary envelope — not the payload files.
+
+## Offline snapshot diff
+
+`account snapshot diff` loads two manifests and their payload JSON offline. JSON output includes raw compared values, deltas, assumptions, Wilson 95% bounds (when hatch-rate analysis is requested), reconciliation status (`RECONCILED` / `PARTIAL` / `MISMATCH` / `INSUFFICIENT_DATA`), and data-quality warnings. Negative deltas are flagged but not treated as automatic errors.
+
+Timing rates prefer inventory `snapshotAt` values and are labeled as a proxy when profile counters may have been saved at different times. Missing timestamps yield null rates rather than invented values.
 
 ## Exit codes
 

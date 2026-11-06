@@ -112,7 +112,9 @@ and does not call the network.`,
 				"hints": []string{
 					"Enable all seven account scopes on the developer app; auth login requests them by default.",
 					"Re-run auth login after upgrading if account commands report missing scopes.",
+					"Use account quota to see refresh used/limit and Retry-After without dumping profile bodies.",
 					"Use --output csv with account inventory or account currencies for spreadsheet export.",
+					"Add --join-rap on inventory CSV to attach public market RAP; --excel writes a UTF-8 BOM.",
 				},
 			}
 			env := output.NewSuccess("doctor", nil, output.DefaultFreshnessNull(), data)

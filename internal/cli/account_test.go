@@ -91,20 +91,20 @@ func TestAccountInventoryOK(t *testing.T) {
 		t.Fatalf("%+v", env)
 	}
 	data := env.Data.(map[string]any)
-	if data["rowCount"].(float64) != 1 {
-		t.Fatalf("%v", data["rowCount"])
+	if data["rowCount"].(float64) != 7 {
+		t.Fatalf("rowCount=%v", data["rowCount"])
 	}
-	switch q := data["quantitySum"].(type) {
-	case float64:
-		if q != 3 {
-			t.Fatalf("quantitySum=%v", q)
-		}
-	case json.Number:
-		if q != "3" {
-			t.Fatalf("quantitySum=%v", q)
-		}
-	default:
-		t.Fatalf("quantitySum type %T", data["quantitySum"])
+	// quantitySum includes the huge currency stack; petQuantitySum does not.
+	// Assert on raw stdout so large integers are not float64-rounded by json.Unmarshal.
+	out := stdout.String()
+	if !strings.Contains(out, `"quantitySum":9007199254741014`) && !strings.Contains(out, `"quantitySum": 9007199254741014`) {
+		t.Fatalf("quantitySum missing exact all-rows total:\n%s", out)
+	}
+	if !strings.Contains(out, `"petQuantitySum":21`) && !strings.Contains(out, `"petQuantitySum": 21`) {
+		t.Fatalf("petQuantitySum missing:\n%s", out)
+	}
+	if data["petRowCount"].(float64) != 6 {
+		t.Fatalf("petRowCount=%v", data["petRowCount"])
 	}
 }
 

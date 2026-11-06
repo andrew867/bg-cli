@@ -47,10 +47,33 @@ func WriteTable(w io.Writer, env Envelope) error {
 		if writeLeaderboardListTable(w, env.Data) == nil {
 			return nil
 		}
+	case "account quota":
+		if writeQuotaTable(w, env.Data) == nil {
+			return nil
+		}
 	case "auth status", "auth profiles", "auth login", "auth logout":
 		return writeDataTable(w, "data", env.Data, 0)
 	}
 	return writeDataTable(w, "data", env.Data, 0)
+}
+
+func writeQuotaTable(w io.Writer, data any) error {
+	m, ok := asMap(data)
+	if !ok {
+		return fmt.Errorf("not map")
+	}
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	keys := []string{
+		"used", "limit", "remaining", "retryAfter",
+		"quotaExhausted", "resetsAt", "nextRefreshEligibleAt",
+		"consumedThisCall", "refreshPresent", "httpStatus",
+	}
+	for _, k := range keys {
+		if v, ok := m[k]; ok && v != nil {
+			_, _ = fmt.Fprintf(tw, "%s\t%s\n", k, sanitizeTableCell(stringifyCell(v)))
+		}
+	}
+	return tw.Flush()
 }
 
 func writeInventoryTable(w io.Writer, data any) error {
@@ -77,13 +100,30 @@ func writeInventoryTable(w io.Writer, data any) error {
 	if qs, ok := m["quantitySum"]; ok {
 		_, _ = fmt.Fprintf(w, "quantitySum\t%s\n", stringifyCell(qs))
 	}
+	if prc, ok := m["petRowCount"]; ok {
+		_, _ = fmt.Fprintf(w, "petRowCount\t%v\n", stringifyCell(prc))
+	}
+	if pqs, ok := m["petQuantitySum"]; ok {
+		_, _ = fmt.Fprintf(w, "petQuantitySum\t%s\n", stringifyCell(pqs))
+	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	cols := []string{"class", "id", "count", "displayName", "rap", "exists", "rarity", "collection"}
+	cols := []string{"class", "id", "count", "displayName", "variant", "golden", "rainbow", "shiny", "rap", "exists", "rarity", "collection"}
 	_, _ = fmt.Fprintln(tw, strings.Join(cols, "\t"))
 	for _, item := range items {
-		cells := make([]string, len(cols))
-		for i, c := range cols {
-			cells[i] = scalarCSV(item[c])
+		v := DeriveItemVariant(item)
+		cells := []string{
+			scalarCSV(item["class"]),
+			scalarCSV(item["id"]),
+			scalarCSV(item["count"]),
+			scalarCSV(item["displayName"]),
+			v.Label,
+			boolCSV(v.Golden),
+			boolCSV(v.Rainbow),
+			boolCSV(v.Shiny),
+			scalarCSV(item["rap"]),
+			scalarCSV(item["exists"]),
+			scalarCSV(item["rarity"]),
+			scalarCSV(item["collection"]),
 		}
 		_, _ = fmt.Fprintln(tw, strings.Join(cells, "\t"))
 	}
