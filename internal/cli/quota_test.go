@@ -112,4 +112,7 @@ func TestAccountInventoryCSVJoinRAP(t *testing.T) {
 	if !strings.Contains(out, ",1250,true") {
 		t.Fatalf("expected joined market RAP:\n%s", out)
 	}
+	if !strings.Contains(out, "variant,golden,rainbow,shiny,pt,sh,stackKey") {
+		t.Fatalf("missing variant columns:\n%s", out)
+	}
 }

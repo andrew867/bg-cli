@@ -15,6 +15,13 @@ var InventoryCSVColumns = []string{
 	"id",
 	"count",
 	"displayName",
+	"variant",
+	"golden",
+	"rainbow",
+	"shiny",
+	"pt",
+	"sh",
+	"stackKey",
 	"rap",
 	"rapApproximate",
 	"exists",
@@ -37,6 +44,7 @@ type CurrencyCSVOptions struct {
 // WriteInventoryCSV writes inventory item rows as CSV with exact numeric text.
 // Counts, RAP, exists, and similar fields are copied from JSON number literals
 // (or stringified scalars) without float64 conversion.
+// Variant columns are derived from top-level / rawData pt+sh fields.
 func WriteInventoryCSV(w io.Writer, inventory json.RawMessage, opts InventoryCSVOptions) error {
 	items, err := inventoryItems(inventory)
 	if err != nil {
@@ -57,15 +65,31 @@ func WriteInventoryCSV(w io.Writer, inventory json.RawMessage, opts InventoryCSV
 		return err
 	}
 	for _, item := range items {
+		v := DeriveItemVariant(item)
 		row := make([]string, len(cols))
 		for i, col := range InventoryCSVColumns {
-			row[i] = scalarCSV(item[col])
+			switch col {
+			case "variant":
+				row[i] = v.Label
+			case "golden":
+				row[i] = boolCSV(v.Golden)
+			case "rainbow":
+				row[i] = boolCSV(v.Rainbow)
+			case "shiny":
+				row[i] = boolCSV(v.Shiny)
+			case "pt":
+				row[i] = v.PT
+			case "sh":
+				row[i] = v.SH
+			default:
+				row[i] = scalarCSV(item[col])
+			}
 		}
 		if joinRAP {
 			class := scalarCSV(item["class"])
 			id := scalarCSV(item["id"])
-			if v, ok := opts.RAPIndex.Lookup(class, id); ok {
-				row[len(InventoryCSVColumns)] = scalarCSV(v)
+			if val, ok := opts.RAPIndex.Lookup(class, id); ok {
+				row[len(InventoryCSVColumns)] = scalarCSV(val)
 				row[len(InventoryCSVColumns)+1] = "true"
 			} else {
 				row[len(InventoryCSVColumns)] = ""
@@ -78,6 +102,13 @@ func WriteInventoryCSV(w io.Writer, inventory json.RawMessage, opts InventoryCSV
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+func boolCSV(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
 }
 
 // WriteCurrenciesCSV writes currency map entries with exact _am text.

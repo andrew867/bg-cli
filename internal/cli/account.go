@@ -383,23 +383,26 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 
 	switch req.View {
 	case "inventory":
-		filtered, rowCount, qtySum, ferr := api.FilterInventory(res.Data, req.Class, req.ID, req.EquippedOnly)
+		invRes, ferr := api.FilterInventory(res.Data, req.Class, req.ID, req.EquippedOnly)
 		if ferr != nil {
 			return &ExitError{Code: exitcode.Upstream, Msg: ferr.Error()}
 		}
 		snap, cached := api.SnapshotFromInventory(res.Data)
 		fresh := freshnessFromResult(res, snap)
 		data := map[string]any{
-			"inventory":      jsonutil.CloneRaw(filtered),
-			"rowCount":       rowCount,
-			"quantitySum":    qtySum,
-			"rowCountNote":   "rowCount is filtered item rows, not total item quantity",
-			"cached":         cached,
-			"rateLimit":      res.RateLimit(),
-			"quotaExhausted": refreshQuotaExhausted(res.Refresh),
+			"inventory":       jsonutil.CloneRaw(invRes.Filtered),
+			"rowCount":        invRes.RowCount,
+			"quantitySum":     invRes.QuantitySum,
+			"quantitySumNote": "sum of count across all filtered rows (may include non-pet stacks such as currencies); not an object/row total",
+			"petRowCount":     invRes.PetRowCount,
+			"petQuantitySum":  invRes.PetQuantitySum,
+			"rowCountNote":    "rowCount is filtered item rows, not total item quantity",
+			"cached":          cached,
+			"rateLimit":       res.RateLimit(),
+			"quotaExhausted":  refreshQuotaExhausted(res.Refresh),
 		}
 		if req.JoinRAP {
-			idx, matched, jerr := a.loadRAPJoin(ctx, filtered)
+			idx, matched, jerr := a.loadRAPJoin(ctx, invRes.Filtered)
 			if jerr != nil {
 				a.notice("rap join warning: %v", jerr)
 				data["rapJoin"] = map[string]any{"ok": false, "error": jerr.Error()}

@@ -92,7 +92,7 @@ func TestAccountInventoryTableIncludesColumns(t *testing.T) {
 		t.Fatalf("%d %s", code, stderr.String())
 	}
 	out := stdout.String()
-	for _, want := range []string{"command\taccount inventory", "displayName", "Test Cat", "1250", "Pets"} {
+	for _, want := range []string{"command\taccount inventory", "displayName", "variant", "Butler Penguin", "Golden", "Rainbow", "petQuantitySum"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}

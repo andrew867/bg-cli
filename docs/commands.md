@@ -24,7 +24,7 @@ Stdout carries data. Diagnostics go to stderr. Secrets are never printed.
 
 `raw` prints exact upstream response bytes for data endpoints and is unavailable for `auth` commands.
 
-`csv` writes spreadsheet rows for `account inventory`, `account currencies`, and `account quota`. Counts and `_am` / `amount` values keep exact JSON number text (no float64 rounding). Other commands reject `--output csv`.
+`csv` writes spreadsheet rows for `account inventory`, `account currencies`, and `account quota`. Counts and `_am` / `amount` values keep exact JSON number text (no float64 rounding). Inventory CSV includes pet variant columns (`variant`, `golden`, `rainbow`, `shiny`, `pt`, `sh`, `stackKey`). Other commands reject `--output csv`.
 
 ## Meta
 

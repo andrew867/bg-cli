@@ -31,7 +31,11 @@ Rules:
 | `raw` | Exact upstream bytes for data endpoints; rejected for `auth` |
 | `csv` | Spreadsheet rows for `account inventory` / `account currencies` / `account quota` with exact numeric text; rejected elsewhere and for `auth` |
 
-CSV inventory columns (stable order): `class`, `id`, `count`, `displayName`, `rap`, `rapApproximate`, `exists`, `rarity`, `rarityNumber`, `collection`. With `--join-rap`: also `marketRap`, `marketRapMatched`.
+CSV inventory columns (stable order): `class`, `id`, `count`, `displayName`, `variant`, `golden`, `rainbow`, `shiny`, `pt`, `sh`, `stackKey`, `rap`, `rapApproximate`, `exists`, `rarity`, `rarityNumber`, `collection`. With `--join-rap`: also `marketRap`, `marketRapMatched`.
+
+Variant derivation (pets): `rawData.pt=1` → Golden, `pt=2` → Rainbow, `rawData.sh=true` → Shiny; absent fields → Regular. Non-pet rows leave `variant` blank.
+
+Inventory JSON also reports `petRowCount` / `petQuantitySum` (class `Pet` only). `quantitySum` still sums every filtered row and may include non-pet stacks such as currencies — it is not a total object count.
 
 CSV currencies columns: `key`, `id`, `_am`, `amount` (`amount` mirrors exact `_am` for Excel).
 

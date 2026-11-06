@@ -100,13 +100,30 @@ func writeInventoryTable(w io.Writer, data any) error {
 	if qs, ok := m["quantitySum"]; ok {
 		_, _ = fmt.Fprintf(w, "quantitySum\t%s\n", stringifyCell(qs))
 	}
+	if prc, ok := m["petRowCount"]; ok {
+		_, _ = fmt.Fprintf(w, "petRowCount\t%v\n", stringifyCell(prc))
+	}
+	if pqs, ok := m["petQuantitySum"]; ok {
+		_, _ = fmt.Fprintf(w, "petQuantitySum\t%s\n", stringifyCell(pqs))
+	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	cols := []string{"class", "id", "count", "displayName", "rap", "exists", "rarity", "collection"}
+	cols := []string{"class", "id", "count", "displayName", "variant", "golden", "rainbow", "shiny", "rap", "exists", "rarity", "collection"}
 	_, _ = fmt.Fprintln(tw, strings.Join(cols, "\t"))
 	for _, item := range items {
-		cells := make([]string, len(cols))
-		for i, c := range cols {
-			cells[i] = scalarCSV(item[c])
+		v := DeriveItemVariant(item)
+		cells := []string{
+			scalarCSV(item["class"]),
+			scalarCSV(item["id"]),
+			scalarCSV(item["count"]),
+			scalarCSV(item["displayName"]),
+			v.Label,
+			boolCSV(v.Golden),
+			boolCSV(v.Rainbow),
+			boolCSV(v.Shiny),
+			scalarCSV(item["rap"]),
+			scalarCSV(item["exists"]),
+			scalarCSV(item["rarity"]),
+			scalarCSV(item["collection"]),
 		}
 		_, _ = fmt.Fprintln(tw, strings.Join(cells, "\t"))
 	}
