@@ -13,6 +13,7 @@ import (
 
 	"github.com/andrew867/bg-cli/internal/auth"
 	"github.com/andrew867/bg-cli/internal/output"
+	"github.com/andrew867/bg-cli/internal/snapshot"
 )
 
 func TestAccountSnapshotWritesFilesAndManifest(t *testing.T) {
@@ -38,81 +39,104 @@ func TestAccountSnapshotWritesFilesAndManifest(t *testing.T) {
 	defer srv.Close()
 
 	outDir := t.TempDir()
-	fixed := time.Date(2026, 11, 6, 15, 45, 30, 0, time.FixedZone("NST", -3*3600-1800))
+	fixed := time.Date(2026, 11, 6, 15, 45, 30, 0, time.UTC)
 	var stdout, stderr bytes.Buffer
 	code := Execute(Deps{
 		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
 		BaseURL: srv.URL, HTTPClient: srv.Client(),
-		Clock: output.FixedClock{T: fixed.UTC()},
+		Clock: output.FixedClock{T: fixed},
 		IsTTY: func() bool { return true },
-	}, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99"})
+	}, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99", "--note", "test run"})
 	if code != 0 {
 		t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
 
 	stamp := fixed.In(time.Local).Format("2006-01-02-150405")
-	// FixedClock returns UTC; nowLocal converts to Local for stamp.
-	stamp = fixed.UTC().In(time.Local).Format("2006-01-02-150405")
-
-	wantFiles := []string{
-		stamp + "-ps99-inv.json",
-		stamp + "-ps99-prof.json",
-		stamp + "-ps99-extprof.json",
-		stamp + "-ps99-inventory.csv",
-		stamp + "-ps99-currencies.csv",
-		stamp + "-ps99-manifest.json",
-	}
-	for _, name := range wantFiles {
-		path := filepath.Join(outDir, name)
-		fi, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("missing %s: %v (dir=%v)", name, err, listNames(t, outDir))
-		}
-		if fi.Size() == 0 {
-			t.Fatalf("empty %s", name)
-		}
-	}
-
-	manBytes, err := os.ReadFile(filepath.Join(outDir, stamp+"-ps99-manifest.json"))
+	manPath := filepath.Join(outDir, stamp+"-ps99-manifest.json")
+	manBytes, err := os.ReadFile(manPath)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("manifest missing: %v files=%v", err, listNames(t, outDir))
 	}
-	var man map[string]any
+	var man snapshot.Manifest
 	if err := json.Unmarshal(manBytes, &man); err != nil {
 		t.Fatal(err)
 	}
-	if man["ok"] != true {
+	if man.SchemaVersion != snapshot.ManifestSchemaVersion {
+		t.Fatalf("schema=%s", man.SchemaVersion)
+	}
+	if man.Note != "test run" {
+		t.Fatalf("note=%q", man.Note)
+	}
+	if man.ManifestFile == "" {
+		t.Fatal("missing ManifestFile pointer")
+	}
+	for _, f := range man.Files {
+		if f.Kind == "manifest" {
+			t.Fatal("manifest must not list itself as a sized payload entry")
+		}
+		if f.OK && f.SHA256 == "" {
+			t.Fatalf("missing sha256 for %s", f.Name)
+		}
+	}
+	if !man.OK {
 		t.Fatalf("manifest not ok: %s", manBytes)
 	}
-	summary := man["summary"].(map[string]any)
-	inv := summary["inventory"].(map[string]any)
-	if inv["petQuantitySum"] == nil {
-		t.Fatalf("missing petQuantitySum in manifest: %v", summary)
-	}
-	if inv["snapshotAt"] == nil {
-		t.Fatalf("missing inventory snapshotAt: %v", inv)
-	}
-	prof := summary["profile"].(map[string]any)
-	currencies := prof["currencies"].(map[string]any)
-	if currencies["Diamonds"] != "123456789" {
-		t.Fatalf("currency exact amount: %v", currencies)
-	}
-	stats := prof["statistics"].(map[string]any)
-	if stats["Eggs Opened"] != "42" {
-		t.Fatalf("statistics: %v", stats)
-	}
+}
 
-	csvBytes, _ := os.ReadFile(filepath.Join(outDir, stamp+"-ps99-inventory.csv"))
-	if !strings.Contains(string(csvBytes), "variant,golden,rainbow,shiny") {
-		t.Fatalf("inventory csv missing variants:\n%s", csvBytes)
+func TestAccountSnapshotRejectsBadPrefix(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{Stdout: &stdout, Stderr: &stderr, TokenStore: store},
+		[]string{"account", "snapshot", "--profile", "main", "--prefix", "../x"})
+	if code == 0 {
+		t.Fatal("expected failure")
 	}
+	if !strings.Contains(stderr.String()+stdout.String(), "prefix") {
+		t.Fatalf("%s %s", stdout.String(), stderr.String())
+	}
+}
 
-	var env output.Envelope
-	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+func TestAccountSnapshotCollisionSuffix(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	invBody, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-inventory-ok.json"))
+	profBody, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-profile-ok.json"))
+	extBody, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-extended-profile-ok.json"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/inventory":
+			_, _ = w.Write(invBody)
+		case "/v1/account/profile":
+			_, _ = w.Write(profBody)
+		case "/v1/account/extendedProfile":
+			_, _ = w.Write(extBody)
+		}
+	}))
+	defer srv.Close()
+	outDir := t.TempDir()
+	fixed := time.Date(2026, 11, 6, 15, 45, 30, 0, time.UTC)
+	deps := Deps{
+		TokenStore: store, BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Clock: output.FixedClock{T: fixed}, IsTTY: func() bool { return true },
+	}
+	run := func() int {
+		var stdout, stderr bytes.Buffer
+		deps.Stdout, deps.Stderr = &stdout, &stderr
+		return Execute(deps, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99"})
+	}
+	if code := run(); code != 0 {
+		t.Fatalf("first snapshot failed: %d", code)
+	}
+	if code := run(); code != 0 {
+		t.Fatalf("second snapshot failed: %d", code)
+	}
+	stamp := fixed.In(time.Local).Format("2006-01-02-150405")
+	if _, err := os.Stat(filepath.Join(outDir, stamp+"-ps99-manifest.json")); err != nil {
 		t.Fatal(err)
 	}
-	if env.Command != "account snapshot" || !env.OK {
-		t.Fatalf("%+v", env)
+	if _, err := os.Stat(filepath.Join(outDir, stamp+"-0001-ps99-manifest.json")); err != nil {
+		t.Fatalf("expected collision suffix file: %v names=%v", err, listNames(t, outDir))
 	}
 }
 

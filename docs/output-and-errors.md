@@ -47,7 +47,13 @@ CSV currencies columns: `key`, `id`, `_am`, `amount` (`amount` mirrors exact `_a
 
 ## Snapshot export
 
-`account snapshot` writes dated JSON/CSV files into `--dir` and a `*-manifest.json` that includes API `snapshotAt` (from inventory `fetchedAt` when present), `petQuantitySum`, exact currency amounts, and profile Statistics. Stdout is only a compact summary envelope — not the payload files.
+`account snapshot` writes dated JSON/CSV files into `--dir` and a `*-manifest.json` that includes API `snapshotAt` (from inventory `fetchedAt` when present), per-file SHA-256 digests, `petQuantitySum`, exact currency amounts, and profile Statistics. The manifest does not claim a self-referential size/digest. Stdout is only a compact summary envelope — not the payload files.
+
+## Offline snapshot diff
+
+`account snapshot diff` loads two manifests and their payload JSON offline. JSON output includes raw compared values, deltas, assumptions, Wilson 95% bounds (when hatch-rate analysis is requested), reconciliation status (`RECONCILED` / `PARTIAL` / `MISMATCH` / `INSUFFICIENT_DATA`), and data-quality warnings. Negative deltas are flagged but not treated as automatic errors.
+
+Timing rates prefer inventory `snapshotAt` values and are labeled as a proxy when profile counters may have been saved at different times. Missing timestamps yield null rates rather than invented values.
 
 ## Exit codes
 

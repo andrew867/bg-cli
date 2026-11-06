@@ -84,18 +84,22 @@ Currencies filter: `--id`.
 {yyyy-MM-dd-HHmmss}-{prefix}-manifest.json
 ```
 
-The manifest records API `fetchedAt` when present, file sizes, `petQuantitySum`, currency amounts, and profile Statistics for comparing two runs. Stdout gets a small summary only.
+Same-second runs get a `-0001` collision suffix. The manifest lists payload files with exact byte sizes and SHA-256 digests (it does not self-reference its own digest). Optional `--note` stores experiment context. Stdout gets a small summary only.
+
+`account snapshot diff --from OLD_MANIFEST --to NEW_MANIFEST` is fully offline: no auth, no network, no quota. It diffs Statistics, PurchasedEggs, PetHatchCount, Pet inventory variants, and currencies; optional `--egg` / `--pet` / `--egg-price` / `--currency` / `--future-eggs` / `--batch-size` enable observed hatch-rate, reconciliation, and cost/timing analysis. Observed rates are not official game odds.
 
 Export examples:
 
 ```bash
 bg-cli account quota --profile main --pretty
-bg-cli account snapshot --profile main --dir . --prefix ps99
+bg-cli account snapshot --profile main --dir . --prefix ps99 --note "Lucky Eggs VII"
 bg-cli account snapshot --profile main --dir D:\snaps --join-rap --excel
+bg-cli account snapshot diff --from old-manifest.json --to new-manifest.json --egg "Masquerade Egg" --pet "Butler Penguin" --egg-price 50000 --currency HalloweenGamesCoins --future-eggs 10000 --pretty
 bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv
 bg-cli account currencies --profile main --output csv --excel > currencies.csv
-bg-cli account inventory --profile main --output table
 ```
+
+Excel note: `--excel` writes a UTF-8 BOM so Excel detects encoding, but Excel may still round integers beyond its numeric precision. Prefer CSV text columns or Power Query for exact large integers.
 
 Account response bodies are never cached to disk.
 

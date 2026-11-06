@@ -16,44 +16,57 @@ import (
 	"github.com/andrew867/bg-cli/internal/exitcode"
 	"github.com/andrew867/bg-cli/internal/jsonutil"
 	"github.com/andrew867/bg-cli/internal/output"
+	"github.com/andrew867/bg-cli/internal/snapshot"
 )
 
 func newAccountSnapshotCmd(app *App) *cobra.Command {
-	var af accountFlags
-	var outDir, prefix string
-	var joinRAP bool
 	cmd := &cobra.Command{
 		Use:   "snapshot",
 		Short: "Write dated inventory/profile/currency snapshot files plus a manifest",
-		Long: `Fetches account inventory, profile, and extended-profile once each, then writes:
+		Long: `Fetches account inventory, profile, and extended-profile once each, then writes
+payload files and a non-recursive manifest (payload sizes + SHA-256 only).
 
-  {stamp}-{prefix}-inv.json
-  {stamp}-{prefix}-prof.json
-  {stamp}-{prefix}-extprof.json
-  {stamp}-{prefix}-inventory.csv
-  {stamp}-{prefix}-currencies.csv
-  {stamp}-{prefix}-manifest.json
-
-The local stamp uses the host timezone as yyyy-MM-dd-HHmmss (including seconds).
-Default --dir is the current working directory. The manifest records API snapshot
-timestamps (fetchedAt when present), file sizes, and summary totals useful for
-comparing two runs (petQuantitySum, currencies, profile Statistics).
-
-Stdout receives a small JSON summary only — payloads go to the files.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return app.runAccountSnapshot(cmd.Context(), snapshotOptions{
-				Flags:   af,
-				Dir:     outDir,
-				Prefix:  prefix,
-				JoinRAP: joinRAP,
-			})
-		},
+Same-second collisions get a -0002 style suffix. Use snapshot diff offline to compare runs.`,
+	}
+	cmd.AddCommand(newAccountSnapshotExportCmd(app))
+	cmd.AddCommand(newAccountSnapshotDiffCmd(app))
+	// Default RunE when invoked as `account snapshot` (no subcommand) → export.
+	var af accountFlags
+	var outDir, prefix, note string
+	var joinRAP bool
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return app.runAccountSnapshot(c.Context(), snapshotOptions{
+			Flags: af, Dir: outDir, Prefix: prefix, JoinRAP: joinRAP, Note: note,
+		})
 	}
 	cmd.Flags().BoolVar(&af.refresh, "refresh", false, "request refresh=true on each fetch (consumes quota; needs --yes if non-interactive)")
 	cmd.Flags().BoolVar(&af.yes, "yes", false, "confirm quota-affecting --refresh when non-interactive")
 	cmd.Flags().StringVar(&outDir, "dir", ".", "output directory (created if missing)")
 	cmd.Flags().StringVar(&prefix, "prefix", "ps99", "filename prefix after the timestamp")
 	cmd.Flags().BoolVar(&joinRAP, "join-rap", false, "join public market RAP into inventory CSV")
+	cmd.Flags().StringVar(&note, "note", "", "optional user-supplied experiment context stored in the manifest")
+	return cmd
+}
+
+func newAccountSnapshotExportCmd(app *App) *cobra.Command {
+	var af accountFlags
+	var outDir, prefix, note string
+	var joinRAP bool
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "Write a dated snapshot (same as account snapshot)",
+		RunE: func(c *cobra.Command, args []string) error {
+			return app.runAccountSnapshot(c.Context(), snapshotOptions{
+				Flags: af, Dir: outDir, Prefix: prefix, JoinRAP: joinRAP, Note: note,
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&af.refresh, "refresh", false, "request refresh=true on each fetch")
+	cmd.Flags().BoolVar(&af.yes, "yes", false, "confirm --refresh when non-interactive")
+	cmd.Flags().StringVar(&outDir, "dir", ".", "output directory")
+	cmd.Flags().StringVar(&prefix, "prefix", "ps99", "filename prefix")
+	cmd.Flags().BoolVar(&joinRAP, "join-rap", false, "join public market RAP into inventory CSV")
+	cmd.Flags().StringVar(&note, "note", "", "optional experiment note")
 	return cmd
 }
 
@@ -62,44 +75,15 @@ type snapshotOptions struct {
 	Dir     string
 	Prefix  string
 	JoinRAP bool
-}
-
-type snapshotFileResult struct {
-	Name        string  `json:"name"`
-	Path        string  `json:"path"`
-	Bytes       int64   `json:"bytes"`
-	OK          bool    `json:"ok"`
-	Error       string  `json:"error,omitempty"`
-	Kind        string  `json:"kind"`
-	Endpoint    string  `json:"endpoint,omitempty"`
-	HTTPStatus  int     `json:"httpStatus,omitempty"`
-	SnapshotAt  *string `json:"snapshotAt,omitempty"`
-	RetrievedAt string  `json:"retrievedAt,omitempty"`
-}
-
-type snapshotManifest struct {
-	SchemaVersion string               `json:"schemaVersion"`
-	Command       string               `json:"command"`
-	OK            bool                 `json:"ok"`
-	LocalStamp    string               `json:"localStamp"`
-	LocalTimezone string               `json:"localTimezone"`
-	ExportedAt    string               `json:"exportedAt"`
-	Profile       string               `json:"profile"`
-	OutputDir     string               `json:"outputDir"`
-	Prefix        string               `json:"prefix"`
-	Refresh       bool                 `json:"refresh"`
-	JoinRAP       bool                 `json:"joinRap"`
-	Excel         bool                 `json:"excel"`
-	Files         []snapshotFileResult `json:"files"`
-	Summary       map[string]any       `json:"summary"`
+	Note    string
 }
 
 func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error {
 	if err := a.confirmRefresh(opt.Flags, "account snapshot"); err != nil {
 		return err
 	}
-	if strings.TrimSpace(opt.Prefix) == "" {
-		return &ExitError{Code: exitcode.Usage, Msg: "--prefix must not be empty"}
+	if err := snapshot.ValidatePrefix(opt.Prefix); err != nil {
+		return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
 	}
 	dir := opt.Dir
 	if dir == "" {
@@ -114,7 +98,11 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	}
 
 	now := a.nowLocal()
-	stamp := now.Format("2006-01-02-150405")
+	baseStamp := now.Format("2006-01-02-150405")
+	stamp, collision, err := snapshot.AllocateStamp(absDir, baseStamp, opt.Prefix)
+	if err != nil {
+		return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
+	}
 
 	profileAlias := a.Flags.Profile
 	if profileAlias == "" {
@@ -123,205 +111,205 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		}
 	}
 
-	manifest := snapshotManifest{
-		SchemaVersion: output.SchemaVersion,
-		Command:       "account snapshot",
-		OK:            true,
-		LocalStamp:    stamp,
-		LocalTimezone: now.Location().String(),
-		ExportedAt:    now.Format(time.RFC3339),
-		Profile:       profileAlias,
-		OutputDir:     absDir,
-		Prefix:        opt.Prefix,
-		Refresh:       opt.Flags.refresh,
-		JoinRAP:       opt.JoinRAP,
-		Excel:         a.Flags.Excel,
-		Files:         []snapshotFileResult{},
-		Summary:       map[string]any{},
+	man := snapshot.Manifest{
+		SchemaVersion:   snapshot.ManifestSchemaVersion,
+		Command:         "account snapshot",
+		OK:              true,
+		LocalStamp:      stamp,
+		CollisionSuffix: collision,
+		LocalTimezone:   now.Location().String(),
+		ExportedAt:      now.Format(time.RFC3339),
+		Profile:         profileAlias,
+		OutputDir:       absDir,
+		Prefix:          opt.Prefix,
+		Refresh:         opt.Flags.refresh,
+		JoinRAP:         opt.JoinRAP,
+		Excel:           a.Flags.Excel,
+		Note:            opt.Note,
+		Files:           []snapshot.FileRecord{},
+		Summary:         map[string]any{},
 	}
 
-	a.notice("snapshot %s → %s", stamp, absDir)
+	displayStamp := stamp
+	if collision != "" {
+		displayStamp = stamp + "-" + collision
+	}
+	a.notice("snapshot %s → %s", displayStamp, absDir)
 
-	// --- inventory (JSON + CSV from one fetch) ---
-	invEnv, invRes, invErr := a.snapshotInventory(ctx, opt)
+	// Inventory
+	invEnv, invBuilt, invErr := a.snapshotInventory(ctx, opt)
+	invJSONName := snapshot.FileName(stamp, collision, opt.Prefix, "inv.json")
+	invCSVName := snapshot.FileName(stamp, collision, opt.Prefix, "inventory.csv")
 	if invErr != nil {
-		manifest.OK = false
+		man.OK = false
 		a.notice("inventory fetch failed: %v", invErr)
-		manifest.Files = append(manifest.Files, snapshotFileResult{
-			Name: stamp + "-" + opt.Prefix + "-inv.json", OK: false, Error: invErr.Error(), Kind: "inventory-json",
-		})
-		manifest.Files = append(manifest.Files, snapshotFileResult{
-			Name: stamp + "-" + opt.Prefix + "-inventory.csv", OK: false, Error: invErr.Error(), Kind: "inventory-csv",
-		})
+		man.Files = append(man.Files,
+			failRec(invJSONName, "inventory-json", invErr),
+			failRec(invCSVName, "inventory-csv", invErr),
+		)
 	} else {
-		invName := stamp + "-" + opt.Prefix + "-inv.json"
-		fr := a.writeSnapshotJSON(absDir, invName, invEnv)
-		fr.Kind = "inventory-json"
-		fr.Endpoint = invEnv.Source.Endpoint
-		fr.HTTPStatus = invEnv.Source.HTTPStatus
-		fr.RetrievedAt = invEnv.Source.RetrievedAt.UTC().Format(time.RFC3339)
-		fr.SnapshotAt = formatSnapshotAt(invEnv.Freshness)
-		manifest.Files = append(manifest.Files, fr)
-		if !fr.OK {
-			manifest.OK = false
+		rec := a.writePayload(absDir, invJSONName, "inventory-json", invEnv, invEnv)
+		man.Files = append(man.Files, rec)
+		if !rec.OK {
+			man.OK = false
 		}
-
-		csvName := stamp + "-" + opt.Prefix + "-inventory.csv"
-		cfr := a.writeSnapshotFile(absDir, csvName, func(w io.Writer) error {
-			invRaw, _ := invRes.data["inventory"].(json.RawMessage)
+		csvRec := a.writePayloadRaw(absDir, invCSVName, "inventory-csv", func(w io.Writer) error {
+			invRaw, _ := invBuilt.data["inventory"].(json.RawMessage)
 			return output.WriteInventoryCSV(w, invRaw, output.InventoryCSVOptions{
-				Excel:    a.Flags.Excel,
-				RAPIndex: a.pendingRAPIndex,
+				Excel: a.Flags.Excel, RAPIndex: a.pendingRAPIndex,
 			})
-		})
+		}, invEnv)
 		a.pendingRAPIndex = nil
-		cfr.Kind = "inventory-csv"
-		cfr.Endpoint = invEnv.Source.Endpoint
-		cfr.HTTPStatus = invEnv.Source.HTTPStatus
-		cfr.RetrievedAt = invEnv.Source.RetrievedAt.UTC().Format(time.RFC3339)
-		cfr.SnapshotAt = formatSnapshotAt(invEnv.Freshness)
-		manifest.Files = append(manifest.Files, cfr)
-		if !cfr.OK {
-			manifest.OK = false
+		man.Files = append(man.Files, csvRec)
+		if !csvRec.OK {
+			man.OK = false
 		}
-
-		manifest.Summary["inventory"] = map[string]any{
-			"rowCount":       invRes.data["rowCount"],
-			"quantitySum":    invRes.data["quantitySum"],
-			"petRowCount":    invRes.data["petRowCount"],
-			"petQuantitySum": invRes.data["petQuantitySum"],
-			"quotaExhausted": invRes.data["quotaExhausted"],
+		man.Summary["inventory"] = map[string]any{
+			"rowCount":       invBuilt.data["rowCount"],
+			"quantitySum":    invBuilt.data["quantitySum"],
+			"petRowCount":    invBuilt.data["petRowCount"],
+			"petQuantitySum": invBuilt.data["petQuantitySum"],
+			"quotaExhausted": invBuilt.data["quotaExhausted"],
 			"snapshotAt":     formatSnapshotAt(invEnv.Freshness),
 		}
 	}
 
-	// --- profile (JSON) + currencies CSV from one fetch ---
+	// Profile + currencies
 	profEnv, profData, curMap, profErr := a.snapshotProfile(ctx, opt)
+	profName := snapshot.FileName(stamp, collision, opt.Prefix, "prof.json")
+	curName := snapshot.FileName(stamp, collision, opt.Prefix, "currencies.csv")
 	if profErr != nil {
-		manifest.OK = false
+		man.OK = false
 		a.notice("profile fetch failed: %v", profErr)
-		manifest.Files = append(manifest.Files, snapshotFileResult{
-			Name: stamp + "-" + opt.Prefix + "-prof.json", OK: false, Error: profErr.Error(), Kind: "profile-json",
-		})
-		manifest.Files = append(manifest.Files, snapshotFileResult{
-			Name: stamp + "-" + opt.Prefix + "-currencies.csv", OK: false, Error: profErr.Error(), Kind: "currencies-csv",
-		})
+		man.Files = append(man.Files,
+			failRec(profName, "profile-json", profErr),
+			failRec(curName, "currencies-csv", profErr),
+		)
 	} else {
-		profName := stamp + "-" + opt.Prefix + "-prof.json"
-		fr := a.writeSnapshotJSON(absDir, profName, profEnv)
-		fr.Kind = "profile-json"
-		fr.Endpoint = profEnv.Source.Endpoint
-		fr.HTTPStatus = profEnv.Source.HTTPStatus
-		fr.RetrievedAt = profEnv.Source.RetrievedAt.UTC().Format(time.RFC3339)
-		manifest.Files = append(manifest.Files, fr)
-		if !fr.OK {
-			manifest.OK = false
+		rec := a.writePayload(absDir, profName, "profile-json", profEnv, profEnv)
+		man.Files = append(man.Files, rec)
+		if !rec.OK {
+			man.OK = false
 		}
-
-		curName := stamp + "-" + opt.Prefix + "-currencies.csv"
-		cfr := a.writeSnapshotFile(absDir, curName, func(w io.Writer) error {
+		csvRec := a.writePayloadRaw(absDir, curName, "currencies-csv", func(w io.Writer) error {
 			return output.WriteCurrenciesCSV(w, curMap, output.CurrencyCSVOptions{Excel: a.Flags.Excel})
-		})
-		cfr.Kind = "currencies-csv"
-		cfr.Endpoint = profEnv.Source.Endpoint
-		cfr.HTTPStatus = profEnv.Source.HTTPStatus
-		cfr.RetrievedAt = profEnv.Source.RetrievedAt.UTC().Format(time.RFC3339)
-		manifest.Files = append(manifest.Files, cfr)
-		if !cfr.OK {
-			manifest.OK = false
+		}, profEnv)
+		man.Files = append(man.Files, csvRec)
+		if !csvRec.OK {
+			man.OK = false
 		}
-
-		manifest.Summary["profile"] = map[string]any{
+		man.Summary["profile"] = map[string]any{
 			"quotaExhausted": profData["quotaExhausted"],
 			"statistics":     extractProfileStatistics(profData),
 			"currencies":     exactCurrencyAmounts(curMap),
 		}
 	}
 
-	// --- extended profile ---
+	// Extended
 	extEnv, extErr := a.snapshotExtended(ctx, opt)
+	extName := snapshot.FileName(stamp, collision, opt.Prefix, "extprof.json")
 	if extErr != nil {
-		manifest.OK = false
+		man.OK = false
 		a.notice("extended-profile fetch failed: %v", extErr)
-		manifest.Files = append(manifest.Files, snapshotFileResult{
-			Name: stamp + "-" + opt.Prefix + "-extprof.json", OK: false, Error: extErr.Error(), Kind: "extended-profile-json",
-		})
+		man.Files = append(man.Files, failRec(extName, "extended-profile-json", extErr))
 	} else {
-		extName := stamp + "-" + opt.Prefix + "-extprof.json"
-		fr := a.writeSnapshotJSON(absDir, extName, extEnv)
-		fr.Kind = "extended-profile-json"
-		fr.Endpoint = extEnv.Source.Endpoint
-		fr.HTTPStatus = extEnv.Source.HTTPStatus
-		fr.RetrievedAt = extEnv.Source.RetrievedAt.UTC().Format(time.RFC3339)
-		manifest.Files = append(manifest.Files, fr)
-		if !fr.OK {
-			manifest.OK = false
+		rec := a.writePayload(absDir, extName, "extended-profile-json", extEnv, extEnv)
+		man.Files = append(man.Files, rec)
+		if !rec.OK {
+			man.OK = false
 		}
 	}
 
-	manName := stamp + "-" + opt.Prefix + "-manifest.json"
+	manName := snapshot.FileName(stamp, collision, opt.Prefix, "manifest.json")
+	man.ManifestFile = manName
+	// Write manifest once — no self size/digest entry.
 	manPath := filepath.Join(absDir, manName)
-	manFR := a.writeSnapshotFile(absDir, manName, func(w io.Writer) error {
+	if _, err := snapshot.AtomicWrite(manPath, func(w io.Writer) error {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		enc.SetEscapeHTML(false)
-		return enc.Encode(manifest)
-	})
-	manFR.Kind = "manifest"
-	// Re-append after writing so manifest file lists itself? Better include in files before write.
-	// Rewrite manifest to include the manifest entry itself.
-	manifest.Files = append(manifest.Files, snapshotFileResult{
-		Name:  manName,
-		Path:  manPath,
-		Bytes: manFR.Bytes,
-		OK:    manFR.OK,
-		Error: manFR.Error,
-		Kind:  "manifest",
-	})
-	if !manFR.OK {
-		manifest.OK = false
-	} else {
-		// Update on-disk manifest with self entry and final ok flag.
-		_ = a.writeSnapshotFile(absDir, manName, func(w io.Writer) error {
-			enc := json.NewEncoder(w)
-			enc.SetIndent("", "  ")
-			enc.SetEscapeHTML(false)
-			return enc.Encode(manifest)
-		})
-		if fi, err := os.Stat(manPath); err == nil {
-			manifest.Files[len(manifest.Files)-1].Bytes = fi.Size()
-		}
+		return enc.Encode(man)
+	}); err != nil {
+		man.OK = false
+		a.notice("manifest write failed: %v", err)
 	}
 
-	for _, f := range manifest.Files {
-		if f.Kind == "manifest" {
-			continue
-		}
+	for _, f := range man.Files {
 		if f.OK {
-			a.notice("[OK] %s (%d bytes)", f.Name, f.Bytes)
+			a.notice("[OK] %s (%d bytes sha256=%s)", f.Name, f.Bytes, shortSHA(f.SHA256))
 		} else {
 			a.notice("[FAIL] %s: %s", f.Name, f.Error)
 		}
 	}
-	a.notice("snapshot export complete")
+	a.notice("snapshot export complete (%s)", manName)
 
 	summaryOut := map[string]any{
-		"localStamp": stamp,
-		"outputDir":  absDir,
-		"manifest":   manName,
-		"ok":         manifest.OK,
-		"files":      manifest.Files,
-		"summary":    manifest.Summary,
+		"localStamp":      stamp,
+		"collisionSuffix": collision,
+		"outputDir":       absDir,
+		"manifest":        manName,
+		"ok":              man.OK,
+		"files":           man.Files,
+		"summary":         man.Summary,
+		"note":            opt.Note,
 	}
-	// Always emit a compact JSON summary on stdout (ignore --output csv/table/raw).
 	w := output.Writer{Out: a.stdout(), Pretty: a.Flags.Pretty, Clock: a.Deps.Clock}
 	if err := w.Write(output.NewSuccess("account snapshot", nil, output.DefaultFreshnessNull(), summaryOut)); err != nil {
 		return err
 	}
-	if !manifest.OK {
+	if !man.OK {
 		return &ExitError{Code: exitcode.Upstream, Msg: "snapshot completed with errors; see manifest"}
 	}
 	return nil
+}
+
+func failRec(name, kind string, err error) snapshot.FileRecord {
+	return snapshot.FileRecord{Name: name, RelPath: name, Kind: kind, OK: false, Error: err.Error()}
+}
+
+func shortSHA(s string) string {
+	if len(s) < 12 {
+		return s
+	}
+	return s[:12]
+}
+
+func (a *App) writePayload(dir, name, kind string, env output.Envelope, meta output.Envelope) snapshot.FileRecord {
+	return a.writePayloadRaw(dir, name, kind, func(w io.Writer) error {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		enc.SetEscapeHTML(false)
+		return enc.Encode(env)
+	}, meta)
+}
+
+func (a *App) writePayloadRaw(dir, name, kind string, write func(io.Writer) error, meta output.Envelope) snapshot.FileRecord {
+	path := filepath.Join(dir, name)
+	rec := snapshot.FileRecord{Name: name, RelPath: name, Kind: kind, OK: true}
+	if meta.Source != nil {
+		rec.Endpoint = meta.Source.Endpoint
+		rec.HTTPStatus = meta.Source.HTTPStatus
+		rec.RetrievedAt = meta.Source.RetrievedAt.UTC().Format(time.RFC3339)
+		fc := meta.Source.FromLocalCache
+		rec.FromLocalCache = &fc
+	}
+	rec.SnapshotAt = formatSnapshotAt(meta.Freshness)
+	if meta.Freshness != nil && meta.Freshness.Refresh != nil {
+		if raw, ok := meta.Freshness.Refresh.(json.RawMessage); ok {
+			rec.Refresh = append(json.RawMessage(nil), raw...)
+			qe := refreshQuotaExhausted(raw)
+			rec.QuotaExhausted = &qe
+		}
+	}
+	wr, err := snapshot.AtomicWrite(path, write)
+	if err != nil {
+		rec.OK = false
+		rec.Error = err.Error()
+		return rec
+	}
+	rec.Bytes = wr.Bytes
+	rec.SHA256 = wr.SHA256
+	return rec
 }
 
 type snapshotBuilt struct {
@@ -436,51 +424,6 @@ func mapAccountHTTP(res api.Result) error {
 	default:
 		return nil
 	}
-}
-
-func (a *App) writeSnapshotJSON(dir, name string, env output.Envelope) snapshotFileResult {
-	return a.writeSnapshotFile(dir, name, func(w io.Writer) error {
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		enc.SetEscapeHTML(false)
-		return enc.Encode(env)
-	})
-}
-
-func (a *App) writeSnapshotFile(dir, name string, write func(io.Writer) error) snapshotFileResult {
-	path := filepath.Join(dir, name)
-	fr := snapshotFileResult{Name: name, Path: path, OK: true}
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-	if err != nil {
-		fr.OK = false
-		fr.Error = err.Error()
-		return fr
-	}
-	if err := write(f); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		fr.OK = false
-		fr.Error = err.Error()
-		return fr
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		fr.OK = false
-		fr.Error = err.Error()
-		return fr
-	}
-	_ = os.Remove(path) // Windows-friendly replace
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		fr.OK = false
-		fr.Error = err.Error()
-		return fr
-	}
-	if fi, err := os.Stat(path); err == nil {
-		fr.Bytes = fi.Size()
-	}
-	return fr
 }
 
 func (a *App) nowLocal() time.Time {
