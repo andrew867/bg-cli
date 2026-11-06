@@ -21,7 +21,14 @@ jobs:
       - name: Format check
         if: runner.os == 'Linux'
         run: |
-          test -z "$(gofmt -l .)"
+          set -euo pipefail
+          bad="$(gofmt -l .)"
+          if [ -n "$bad" ]; then
+            echo "gofmt needed on:"
+            echo "$bad"
+            gofmt -d .
+            exit 1
+          fi
       - name: Vet
         run: go vet ./...
       - name: Test
