@@ -54,6 +54,9 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account currencies` | `/v1/account/profile` | profile:read |
 | `account quota` | `/v1/account/profile` | profile:read |
 | `account snapshot` | inventory + profile + extendedProfile | inventory + profile + extendedProfile |
+| `account loadout analyze\|optimize` | offline `--manifest` or `/v1/account/inventory` | inventory:read when live |
+| `account loadout calibrate` | two offline manifests | none (offline) |
+| `account loadout objectives` | n/a | none |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -100,6 +103,19 @@ bg-cli account currencies --profile main --output csv --excel > currencies.csv
 ```
 
 Excel note: `--excel` writes a UTF-8 BOM so Excel detects encoding, but Excel may still round integers beyond its numeric precision. Prefer CSV text columns or Power Query for exact large integers.
+
+### account loadout
+
+Read-only loadout analysis. Prefers `--manifest` (offline). Never treats displayed pet power as post-boost damage. Currency objectives are per currency ID (Coins, Diamonds, HalloweenGamesCoins, …) and never merged into one score. Unknown enchant/world multipliers stay unresolved; candidates include uncertainty and a suggested controlled snapshot test.
+
+```bash
+bg-cli account loadout objectives --pretty
+bg-cli account loadout analyze --manifest ./snap-manifest.json --world halloween-games --objective max-pet-damage --pretty
+bg-cli account loadout optimize --manifest ./snap-manifest.json --world halloween-games --objective halloween-coins-per-min --pretty
+bg-cli account loadout calibrate --from OLD-manifest.json --to NEW-manifest.json --world halloween-games --currency HalloweenGamesCoins --pretty
+```
+
+Optional `--registry path.json` loads a versioned effect registry (schema 1.0). Built-in defaults keep unverified magnitudes as `unknown`.
 
 Account response bodies are never cached to disk.
 

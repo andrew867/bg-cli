@@ -1,0 +1,84 @@
+{
+  "status": "ok",
+  "data": {
+    "items": [
+      {
+        "class": "Pet",
+        "id": "Butler Penguin",
+        "count": 10,
+        "displayName": "Butler Penguin",
+        "rawData": { "id": "Butler Penguin", "_am": 10 },
+        "rap": 1,
+        "rapApproximate": false,
+        "exists": 1,
+        "rarity": "Basic",
+        "rarityNumber": 1,
+        "collection": "Pets"
+      },
+      {
+        "class": "Pet",
+        "id": "Huge Cat",
+        "count": 1,
+        "displayName": "Huge Cat",
+        "power": 50000,
+        "rawData": { "id": "Huge Cat", "_am": 1 },
+        "rap": 1,
+        "rapApproximate": false,
+        "exists": 1,
+        "rarity": "Exclusive",
+        "rarityNumber": 99,
+        "collection": "Pets"
+      },
+      {
+        "class": "Enchant",
+        "id": "Lucky Eggs",
+        "count": 3,
+        "displayName": "Lucky Eggs",
+        "rawData": { "id": "Lucky Eggs", "_am": 3 }
+      },
+      {
+        "class": "Enchant",
+        "id": "Strong Pets",
+        "count": 2,
+        "displayName": "Strong Pets",
+        "rawData": { "id": "Strong Pets", "_am": 2 }
+      },
+      {
+        "class": "Enchant",
+        "id": "Treasure Hunter",
+        "count": 1,
+        "displayName": "Treasure Hunter",
+        "rawData": { "id": "Treasure Hunter", "_am": 1 }
+      },
+      {
+        "class": "Currency",
+        "id": "HalloweenGamesCoins",
+        "count": 1000,
+        "displayName": "HalloweenGamesCoins",
+        "rawData": { "id": "HalloweenGamesCoins", "_am": 1000 }
+      }
+    ],
+    "equipped": {
+      "pets": {
+        "list": [
+          { "id": "Huge Cat", "class": "Pet", "power": 50000, "uid": "pet-1" }
+        ],
+        "equippedCount": 1,
+        "maxEquipped": 8
+      },
+      "enchants": {
+        "list": [
+          { "id": "Lucky Eggs", "class": "Enchant", "level": 0, "uid": "enc-1" }
+        ],
+        "equippedCount": 1,
+        "maxEquipped": 5
+      },
+      "ultimate": null,
+      "hoverboard": null,
+      "booth": null
+    },
+    "fetchedAt": "2026-11-06T15:00:00.000Z",
+    "cached": false
+  },
+  "refresh": null
+}

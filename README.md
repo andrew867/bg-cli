@@ -57,6 +57,7 @@ bg-cli doctor
 bg-cli account quota --profile main --pretty
 bg-cli account snapshot --profile main --dir . --prefix ps99 --note "baseline"
 bg-cli account snapshot diff --from OLD-manifest.json --to NEW-manifest.json --pretty
+bg-cli account loadout optimize --manifest NEW-manifest.json --world halloween-games --objective halloween-coins-per-min --pretty
 bg-cli account currencies --profile main --pretty
 bg-cli account inventory --profile main --pretty
 bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv

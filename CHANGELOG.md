@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inventory responses add `petRowCount` / `petQuantitySum`; `quantitySum` is documented as an all-rows count sum (may include currency stacks)
 - `account snapshot` writes dated inventory/profile/extended-profile JSON + inventory/currencies CSV plus a compare-friendly manifest (SHA-256, collision suffixes, `--note`)
 - `account snapshot diff` compares two manifests completely offline (statistics, purchases, hatches, inventory variants, currencies, hatch-rate / reconciliation / cost analysis)
+- `account loadout` analyze/optimize/calibrate: versioned effect registry, per-currency channels, world-specific pet slot handling, owned-only recommendations, and measured snapshot calibration without inventing DPS or unverified multipliers
 
 ## [0.1.2] - 2026-11-06
 
