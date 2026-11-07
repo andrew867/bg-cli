@@ -17,7 +17,7 @@ import (
 )
 
 // Version is set by main / ldflags.
-var Version = "0.1.3"
+var Version = "0.1.4"
 
 // Deps are injectable collaborators for tests.
 type Deps struct {
