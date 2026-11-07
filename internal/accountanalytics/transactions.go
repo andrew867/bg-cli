@@ -33,29 +33,29 @@ const (
 
 // Movement is one normalized item transfer from trades, booth, or mail views.
 type Movement struct {
-	Source            string            `json:"source"`
-	Timestamp         int64             `json:"timestamp,omitempty"`
-	Category          MovementCategory  `json:"category"`
-	Class             string            `json:"class,omitempty"`
-	ItemID            string            `json:"itemId,omitempty"`
-	Variant           string            `json:"variant,omitempty"`
-	Qty               string            `json:"qty"`
-	Direction         MovementDirection `json:"direction"`
-	CounterpartyUID   string            `json:"counterpartyUid,omitempty"`
-	CounterpartyName  string            `json:"counterpartyName,omitempty"`
-	CounterpartyRedacted bool           `json:"counterpartyRedacted,omitempty"`
-	MethodID          string            `json:"methodId"`
+	Source               string            `json:"source"`
+	Timestamp            int64             `json:"timestamp,omitempty"`
+	Category             MovementCategory  `json:"category"`
+	Class                string            `json:"class,omitempty"`
+	ItemID               string            `json:"itemId,omitempty"`
+	Variant              string            `json:"variant,omitempty"`
+	Qty                  string            `json:"qty"`
+	Direction            MovementDirection `json:"direction"`
+	CounterpartyUID      string            `json:"counterpartyUid,omitempty"`
+	CounterpartyName     string            `json:"counterpartyName,omitempty"`
+	CounterpartyRedacted bool              `json:"counterpartyRedacted,omitempty"`
+	MethodID             string            `json:"methodId"`
 }
 
 // TransactionSummary aggregates movements.
 type TransactionSummary struct {
-	MethodID          string         `json:"methodId"`
-	MovementCount     int            `json:"movementCount"`
-	BySource          map[string]int `json:"bySource"`
-	ByCategory        map[string]int `json:"byCategory"`
-	NetByItem         []NetItemRow   `json:"netByItem,omitempty"`
-	LargestTransfers  []Movement     `json:"largestTransfers,omitempty"`
-	Movements         []Movement     `json:"movements"`
+	MethodID         string         `json:"methodId"`
+	MovementCount    int            `json:"movementCount"`
+	BySource         map[string]int `json:"bySource"`
+	ByCategory       map[string]int `json:"byCategory"`
+	NetByItem        []NetItemRow   `json:"netByItem,omitempty"`
+	LargestTransfers []Movement     `json:"largestTransfers,omitempty"`
+	Movements        []Movement     `json:"movements"`
 }
 
 // NetItemRow is signed net quantity for one item identity.

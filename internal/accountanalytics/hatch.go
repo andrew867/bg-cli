@@ -12,25 +12,25 @@ const hatchMethodID = "accountanalytics.hatch-distribution.v1"
 
 // HatchSpeciesRow is hatch delta and observed rate for one pet species in an egg interval.
 type HatchSpeciesRow struct {
-	PetID             string   `json:"petId"`
-	HatchDelta        string   `json:"hatchDelta"`
-	ObservedRate      *float64 `json:"observedRate,omitempty"`
-	ObservedPercent   *float64 `json:"observedPercent,omitempty"`
-	WilsonLow95       *float64 `json:"wilsonLow95,omitempty"`
-	WilsonHigh95      *float64 `json:"wilsonHigh95,omitempty"`
-	MethodID          string   `json:"methodId"`
+	PetID           string   `json:"petId"`
+	HatchDelta      string   `json:"hatchDelta"`
+	ObservedRate    *float64 `json:"observedRate,omitempty"`
+	ObservedPercent *float64 `json:"observedPercent,omitempty"`
+	WilsonLow95     *float64 `json:"wilsonLow95,omitempty"`
+	WilsonHigh95    *float64 `json:"wilsonHigh95,omitempty"`
+	MethodID        string   `json:"methodId"`
 }
 
 // HatchReportResult is the full hatch distribution between two profile snapshots for one egg.
 type HatchReportResult struct {
-	MethodID           string            `json:"methodId"`
-	EggID              string            `json:"eggId"`
-	EggPurchaseDelta   string            `json:"eggPurchaseDelta"`
-	SpeciesDeltaSum    string            `json:"speciesDeltaSum"`
-	FullyReconciled    bool              `json:"fullyReconciled"`
-	Residual           string            `json:"residual,omitempty"`
-	Species            []HatchSpeciesRow `json:"species"`
-	Warnings           []string          `json:"warnings,omitempty"`
+	MethodID         string            `json:"methodId"`
+	EggID            string            `json:"eggId"`
+	EggPurchaseDelta string            `json:"eggPurchaseDelta"`
+	SpeciesDeltaSum  string            `json:"speciesDeltaSum"`
+	FullyReconciled  bool              `json:"fullyReconciled"`
+	Residual         string            `json:"residual,omitempty"`
+	Species          []HatchSpeciesRow `json:"species"`
+	Warnings         []string          `json:"warnings,omitempty"`
 }
 
 // HatchReport compares two bundles' profile counters for egg purchases and pet hatch distribution.

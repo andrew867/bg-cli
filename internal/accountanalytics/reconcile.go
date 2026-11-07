@@ -43,13 +43,13 @@ func RunReconciliation(from, to *snapshot.Bundle, opt ReconcileOptions) []analys
 		} else if rep.OK {
 			out = append(out, analysis.CheckResult{
 				ID: "manifest.integrity", Status: analysis.CheckPass,
-				Detail: fmt.Sprintf("checked %d files", rep.Checked),
+				Detail:   fmt.Sprintf("checked %d files", rep.Checked),
 				Evidence: rep.Warnings,
 			})
 		} else {
 			out = append(out, analysis.CheckResult{
 				ID: "manifest.integrity", Status: analysis.CheckFail,
-				Detail: "digest/size mismatch",
+				Detail:   "digest/size mismatch",
 				Evidence: rep.Failures,
 			})
 		}
@@ -70,13 +70,13 @@ func RunReconciliation(from, to *snapshot.Bundle, opt ReconcileOptions) []analys
 		} else if hr.FullyReconciled {
 			out = append(out, analysis.CheckResult{
 				ID: "egg.hatch.species_sum", Status: analysis.CheckPass,
-				Detail: fmt.Sprintf("species deltas %s match egg delta %s", hr.SpeciesDeltaSum, hr.EggPurchaseDelta),
+				Detail:   fmt.Sprintf("species deltas %s match egg delta %s", hr.SpeciesDeltaSum, hr.EggPurchaseDelta),
 				Evidence: []string{hr.MethodID},
 			})
 		} else {
 			out = append(out, analysis.CheckResult{
 				ID: "egg.hatch.species_sum", Status: analysis.CheckFail,
-				Detail: fmt.Sprintf("residual %s (egg %s, species %s)", hr.Residual, hr.EggPurchaseDelta, hr.SpeciesDeltaSum),
+				Detail:   fmt.Sprintf("residual %s (egg %s, species %s)", hr.Residual, hr.EggPurchaseDelta, hr.SpeciesDeltaSum),
 				Evidence: hr.Warnings,
 			})
 		}
@@ -120,7 +120,7 @@ func RunReconciliation(from, to *snapshot.Bundle, opt ReconcileOptions) []analys
 			_ = invDelta
 			out = append(out, analysis.CheckResult{
 				ID: "inventory.vs.transactions", Status: analysis.CheckInconclusive,
-				Detail: "transaction views may be paginated; net movement sum is informational only",
+				Detail:   "transaction views may be paginated; net movement sum is informational only",
 				Evidence: []string{fmt.Sprintf("movements=%d netQty=%s", len(mov), sum.Text)},
 			})
 		}
@@ -194,7 +194,7 @@ func RunReconciliation(from, to *snapshot.Bundle, opt ReconcileOptions) []analys
 			if snapshot.CurrencyAtKnownCap(id, start, end, d) {
 				out = append(out, analysis.CheckResult{
 					ID: "currency.cap." + id, Status: analysis.CheckInconclusive,
-					Detail: snapshot.CapFindingCapped,
+					Detail:   snapshot.CapFindingCapped,
 					Evidence: []string{id},
 				})
 			}

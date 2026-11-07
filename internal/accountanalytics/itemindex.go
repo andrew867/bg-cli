@@ -13,12 +13,12 @@ const itemIndexMethodID = "accountanalytics.itemindex.v1"
 
 // VariantRecord is one parsed index key for a countable bucket (e.g. Pet).
 type VariantRecord struct {
-	KeyJSON   string `json:"keyJson"`
-	BaseID    string `json:"baseId"`
-	PT        string `json:"pt,omitempty"`
-	SH        string `json:"sh,omitempty"`
-	Variant   string `json:"variant"`
-	Count     string `json:"count"`
+	KeyJSON    string            `json:"keyJson"`
+	BaseID     string            `json:"baseId"`
+	PT         string            `json:"pt,omitempty"`
+	SH         string            `json:"sh,omitempty"`
+	Variant    string            `json:"variant"`
+	Count      string            `json:"count"`
 	CountExact snapshot.ExactInt `json:"-"`
 }
 
@@ -40,19 +40,20 @@ type ClassBucket struct {
 
 // ParsedItemIndex is a decoded account ItemIndex.
 type ParsedItemIndex struct {
-	Classes map[string]*ClassBucket `json:"classes"`
-	MethodID string                 `json:"methodId"`
+	Classes  map[string]*ClassBucket `json:"classes"`
+	MethodID string                  `json:"methodId"`
 }
 
 // IndexAnalysis summarizes one index.
 type IndexAnalysis struct {
-	MethodID       string        `json:"methodId"`
-	Classes        []string      `json:"classes"`
-	DiscoveredBase []string      `json:"discoveredBaseIds"`
-	VariantCount   int           `json:"variantEntries"`
-	BoolCount      int           `json:"boolEntries"`
+	MethodID       string            `json:"methodId"`
+	Classes        []string          `json:"classes"`
+	DiscoveredBase []string          `json:"discoveredBaseIds"`
+	VariantCount   int               `json:"variantEntries"`
+	BoolCount      int               `json:"boolEntries"`
 	TotalsByClass  map[string]string `json:"totalsByClass,omitempty"`
-	Buckets        []ClassBucket `json:"buckets"`
+	Buckets        []ClassBucket     `json:"buckets"`
+	Index          ParsedItemIndex   `json:"-"` // full parse for diffs; omitted from JSON envelope noise
 }
 
 // IndexDiffRow is one key-level delta between two indexes.
@@ -81,6 +82,7 @@ type CatalogPet struct {
 // CompletionReportResult measures index coverage vs an explicit catalog list.
 type CompletionReportResult struct {
 	MethodID      string   `json:"methodId"`
+	Collection    string   `json:"collection,omitempty"`
 	Denominator   int      `json:"denominator"`
 	Discovered    int      `json:"discovered"`
 	Missing       []string `json:"missing,omitempty"`
@@ -342,6 +344,7 @@ func AnalyzeIndex(bundle *snapshot.Bundle) (IndexAnalysis, error) {
 		BoolCount:      boolCount,
 		TotalsByClass:  totals,
 		Buckets:        buckets,
+		Index:          parsed,
 	}, nil
 }
 

@@ -23,59 +23,100 @@ func newAccountSnapshotCmd(app *App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "snapshot",
 		Short: "Write dated inventory/profile/currency snapshot files plus a manifest",
-		Long: `Fetches account inventory, profile, and extended-profile once each, then writes
-payload files and a non-recursive manifest (payload sizes + SHA-256 only).
+		Long: `Fetches selected authenticated account views, then writes payload files and a
+non-recursive manifest (payload sizes + SHA-256 only).
 
-Same-second collisions get a -0002 style suffix. Use snapshot diff offline to compare runs.`,
+Default views remain inventory, profile, and extendedProfile (backward compatible).
+Use --all-views or --include to capture sensitive transaction views (itemIndex,
+trades, booth, mail). --refresh applies to at most the first requested view;
+remaining views read the server-side cache.
+
+Same-second collisions get a -0002 style suffix. Use snapshot diff / validate offline.`,
 	}
 	cmd.AddCommand(newAccountSnapshotExportCmd(app))
 	cmd.AddCommand(newAccountSnapshotDiffCmd(app))
+	cmd.AddCommand(newAccountSnapshotValidateCmd(app))
 	// Default RunE when invoked as `account snapshot` (no subcommand) → export.
 	var af accountFlags
-	var outDir, prefix, note string
-	var joinRAP bool
+	var outDir, prefix, note, include string
+	var joinRAP, allViews bool
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		return app.runAccountSnapshot(c.Context(), snapshotOptions{
 			Flags: af, Dir: outDir, Prefix: prefix, JoinRAP: joinRAP, Note: note,
+			AllViews: allViews, Include: include,
 		})
 	}
-	cmd.Flags().BoolVar(&af.refresh, "refresh", false, "request refresh=true on each fetch (consumes quota; needs --yes if non-interactive)")
+	cmd.Flags().BoolVar(&af.refresh, "refresh", false, "request refresh=true on the first requested view only (consumes quota; needs --yes if non-interactive)")
 	cmd.Flags().BoolVar(&af.yes, "yes", false, "confirm quota-affecting --refresh when non-interactive")
 	cmd.Flags().StringVar(&outDir, "dir", ".", "output directory (created if missing)")
 	cmd.Flags().StringVar(&prefix, "prefix", "ps99", "filename prefix after the timestamp")
 	cmd.Flags().BoolVar(&joinRAP, "join-rap", false, "join public market RAP into inventory CSV")
 	cmd.Flags().StringVar(&note, "note", "", "optional user-supplied experiment context stored in the manifest")
+	cmd.Flags().BoolVar(&allViews, "all-views", false, "capture all seven authenticated account views (includes trades/booth/mail)")
+	cmd.Flags().StringVar(&include, "include", "", "comma-separated views (inventory,profile,extendedProfile,itemIndex,trades,booth,mail) or all")
 	return cmd
 }
 
 func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	var af accountFlags
-	var outDir, prefix, note string
-	var joinRAP bool
+	var outDir, prefix, note, include string
+	var joinRAP, allViews bool
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "Write a dated snapshot (same as account snapshot)",
 		RunE: func(c *cobra.Command, args []string) error {
 			return app.runAccountSnapshot(c.Context(), snapshotOptions{
 				Flags: af, Dir: outDir, Prefix: prefix, JoinRAP: joinRAP, Note: note,
+				AllViews: allViews, Include: include,
 			})
 		},
 	}
-	cmd.Flags().BoolVar(&af.refresh, "refresh", false, "request refresh=true on each fetch")
+	cmd.Flags().BoolVar(&af.refresh, "refresh", false, "request refresh=true on the first requested view only")
 	cmd.Flags().BoolVar(&af.yes, "yes", false, "confirm --refresh when non-interactive")
 	cmd.Flags().StringVar(&outDir, "dir", ".", "output directory")
 	cmd.Flags().StringVar(&prefix, "prefix", "ps99", "filename prefix")
 	cmd.Flags().BoolVar(&joinRAP, "join-rap", false, "join public market RAP into inventory CSV")
 	cmd.Flags().StringVar(&note, "note", "", "optional experiment note")
+	cmd.Flags().BoolVar(&allViews, "all-views", false, "capture all seven authenticated account views")
+	cmd.Flags().StringVar(&include, "include", "", "comma-separated views or all")
+	return cmd
+}
+
+func newAccountSnapshotValidateCmd(app *App) *cobra.Command {
+	var requireAll bool
+	cmd := &cobra.Command{
+		Use:   "validate",
+		Short: "Verify snapshot manifest file sizes and SHA-256 digests offline",
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return &ExitError{Code: exitcode.Usage, Msg: "usage: account snapshot validate MANIFEST.json"}
+			}
+			rep, err := snapshot.ValidateIntegrity(args[0], requireAll)
+			if err != nil {
+				return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
+			}
+			w := output.Writer{Out: app.stdout(), Pretty: app.Flags.Pretty, Clock: app.Deps.Clock}
+			if err := w.Write(output.NewSuccess("account snapshot validate", nil, output.DefaultFreshnessNull(), rep)); err != nil {
+				return err
+			}
+			if !rep.OK {
+				return &ExitError{Code: exitcode.Upstream, Msg: "snapshot integrity validation failed"}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&requireAll, "require-all-requested", false, "fail if any requested view is marked failed")
 	return cmd
 }
 
 type snapshotOptions struct {
-	Flags   accountFlags
-	Dir     string
-	Prefix  string
-	JoinRAP bool
-	Note    string
+	Flags    accountFlags
+	Dir      string
+	Prefix   string
+	JoinRAP  bool
+	Note     string
+	AllViews bool
+	Include  string
 }
 
 func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error {
@@ -111,6 +152,11 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		}
 	}
 
+	views, err := snapshot.ParseIncludeViews(opt.Include, opt.AllViews)
+	if err != nil {
+		return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
+	}
+
 	man := snapshot.Manifest{
 		SchemaVersion:   snapshot.ManifestSchemaVersion,
 		Command:         "account snapshot",
@@ -126,6 +172,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		JoinRAP:         opt.JoinRAP,
 		Excel:           a.Flags.Excel,
 		Note:            opt.Note,
+		RequestedViews:  views,
 		Files:           []snapshot.FileRecord{},
 		Summary:         map[string]any{},
 	}
@@ -134,89 +181,133 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	if collision != "" {
 		displayStamp = stamp + "-" + collision
 	}
-	a.notice("snapshot %s → %s", displayStamp, absDir)
+	a.notice("snapshot %s → %s (views=%s)", displayStamp, absDir, strings.Join(views, ","))
+	a.notice("note: independently retrieved views may not share an atomic point-in-time database transaction")
 
-	// Inventory
-	invEnv, invBuilt, invErr := a.snapshotInventory(ctx, opt)
-	invJSONName := snapshot.FileName(stamp, collision, opt.Prefix, "inv.json")
-	invCSVName := snapshot.FileName(stamp, collision, opt.Prefix, "inventory.csv")
-	if invErr != nil {
-		man.OK = false
-		a.notice("inventory fetch failed: %v", invErr)
-		man.Files = append(man.Files,
-			failRec(invJSONName, "inventory-json", invErr),
-			failRec(invCSVName, "inventory-csv", invErr),
-		)
-	} else {
-		rec := a.writePayload(absDir, invJSONName, "inventory-json", invEnv, invEnv)
-		man.Files = append(man.Files, rec)
-		if !rec.OK {
-			man.OK = false
+	refreshUsed := false
+	for _, view := range views {
+		useRefresh := opt.Flags.refresh && !refreshUsed
+		viewOpt := opt
+		viewOpt.Flags.refresh = useRefresh
+		if useRefresh {
+			refreshUsed = true
 		}
-		csvRec := a.writePayloadRaw(absDir, invCSVName, "inventory-csv", func(w io.Writer) error {
-			invRaw, _ := invBuilt.data["inventory"].(json.RawMessage)
-			return output.WriteInventoryCSV(w, invRaw, output.InventoryCSVOptions{
-				Excel: a.Flags.Excel, RAPIndex: a.pendingRAPIndex,
-			})
-		}, invEnv)
-		a.pendingRAPIndex = nil
-		man.Files = append(man.Files, csvRec)
-		if !csvRec.OK {
-			man.OK = false
-		}
-		man.Summary["inventory"] = map[string]any{
-			"rowCount":       invBuilt.data["rowCount"],
-			"quantitySum":    invBuilt.data["quantitySum"],
-			"petRowCount":    invBuilt.data["petRowCount"],
-			"petQuantitySum": invBuilt.data["petQuantitySum"],
-			"quotaExhausted": invBuilt.data["quotaExhausted"],
-			"snapshotAt":     formatSnapshotAt(invEnv.Freshness),
-		}
-	}
 
-	// Profile + currencies
-	profEnv, profData, curMap, profErr := a.snapshotProfile(ctx, opt)
-	profName := snapshot.FileName(stamp, collision, opt.Prefix, "prof.json")
-	curName := snapshot.FileName(stamp, collision, opt.Prefix, "currencies.csv")
-	if profErr != nil {
-		man.OK = false
-		a.notice("profile fetch failed: %v", profErr)
-		man.Files = append(man.Files,
-			failRec(profName, "profile-json", profErr),
-			failRec(curName, "currencies-csv", profErr),
-		)
-	} else {
-		rec := a.writePayload(absDir, profName, "profile-json", profEnv, profEnv)
-		man.Files = append(man.Files, rec)
-		if !rec.OK {
-			man.OK = false
-		}
-		csvRec := a.writePayloadRaw(absDir, curName, "currencies-csv", func(w io.Writer) error {
-			return output.WriteCurrenciesCSV(w, curMap, output.CurrencyCSVOptions{Excel: a.Flags.Excel})
-		}, profEnv)
-		man.Files = append(man.Files, csvRec)
-		if !csvRec.OK {
-			man.OK = false
-		}
-		man.Summary["profile"] = map[string]any{
-			"quotaExhausted": profData["quotaExhausted"],
-			"statistics":     extractProfileStatistics(profData),
-			"currencies":     exactCurrencyAmounts(curMap),
-		}
-	}
-
-	// Extended
-	extEnv, extErr := a.snapshotExtended(ctx, opt)
-	extName := snapshot.FileName(stamp, collision, opt.Prefix, "extprof.json")
-	if extErr != nil {
-		man.OK = false
-		a.notice("extended-profile fetch failed: %v", extErr)
-		man.Files = append(man.Files, failRec(extName, "extended-profile-json", extErr))
-	} else {
-		rec := a.writePayload(absDir, extName, "extended-profile-json", extEnv, extEnv)
-		man.Files = append(man.Files, rec)
-		if !rec.OK {
-			man.OK = false
+		switch view {
+		case "inventory":
+			invEnv, invBuilt, invErr := a.snapshotInventory(ctx, viewOpt)
+			invJSONName := snapshot.FileName(stamp, collision, opt.Prefix, "inv.json")
+			invCSVName := snapshot.FileName(stamp, collision, opt.Prefix, "inventory.csv")
+			if invErr != nil {
+				man.OK = false
+				a.notice("inventory fetch failed: %v", invErr)
+				man.Files = append(man.Files,
+					failViewRec(invJSONName, "inventory-json", "inventory", invErr, contentStatusForErr(invErr)),
+					failViewRec(invCSVName, "inventory-csv", "inventory", invErr, contentStatusForErr(invErr)),
+				)
+			} else {
+				rec := a.writePayload(absDir, invJSONName, "inventory-json", invEnv, invEnv)
+				rec.View = "inventory"
+				rec.RequestStatus = snapshot.RequestRequested
+				rec.ContentStatus = snapshot.ContentOK
+				man.Files = append(man.Files, rec)
+				if !rec.OK {
+					man.OK = false
+				}
+				csvRec := a.writePayloadRaw(absDir, invCSVName, "inventory-csv", func(w io.Writer) error {
+					invRaw, _ := invBuilt.data["inventory"].(json.RawMessage)
+					return output.WriteInventoryCSV(w, invRaw, output.InventoryCSVOptions{
+						Excel: a.Flags.Excel, RAPIndex: a.pendingRAPIndex,
+					})
+				}, invEnv)
+				a.pendingRAPIndex = nil
+				csvRec.View = "inventory"
+				csvRec.RequestStatus = snapshot.RequestRequested
+				csvRec.ContentStatus = snapshot.ContentOK
+				man.Files = append(man.Files, csvRec)
+				if !csvRec.OK {
+					man.OK = false
+				}
+				man.Summary["inventory"] = map[string]any{
+					"rowCount":       invBuilt.data["rowCount"],
+					"quantitySum":    invBuilt.data["quantitySum"],
+					"petRowCount":    invBuilt.data["petRowCount"],
+					"petQuantitySum": invBuilt.data["petQuantitySum"],
+					"quotaExhausted": invBuilt.data["quotaExhausted"],
+					"snapshotAt":     formatSnapshotAt(invEnv.Freshness),
+				}
+			}
+		case "profile":
+			profEnv, profData, curMap, profErr := a.snapshotProfile(ctx, viewOpt)
+			profName := snapshot.FileName(stamp, collision, opt.Prefix, "prof.json")
+			curName := snapshot.FileName(stamp, collision, opt.Prefix, "currencies.csv")
+			if profErr != nil {
+				man.OK = false
+				a.notice("profile fetch failed: %v", profErr)
+				man.Files = append(man.Files,
+					failViewRec(profName, "profile-json", "profile", profErr, contentStatusForErr(profErr)),
+					failViewRec(curName, "currencies-csv", "profile", profErr, contentStatusForErr(profErr)),
+				)
+			} else {
+				rec := a.writePayload(absDir, profName, "profile-json", profEnv, profEnv)
+				rec.View = "profile"
+				rec.RequestStatus = snapshot.RequestRequested
+				rec.ContentStatus = snapshot.ContentOK
+				man.Files = append(man.Files, rec)
+				if !rec.OK {
+					man.OK = false
+				}
+				csvRec := a.writePayloadRaw(absDir, curName, "currencies-csv", func(w io.Writer) error {
+					return output.WriteCurrenciesCSV(w, curMap, output.CurrencyCSVOptions{Excel: a.Flags.Excel})
+				}, profEnv)
+				csvRec.View = "profile"
+				csvRec.RequestStatus = snapshot.RequestRequested
+				csvRec.ContentStatus = snapshot.ContentOK
+				man.Files = append(man.Files, csvRec)
+				if !csvRec.OK {
+					man.OK = false
+				}
+				man.Summary["profile"] = map[string]any{
+					"quotaExhausted": profData["quotaExhausted"],
+					"statistics":     extractProfileStatistics(profData),
+					"currencies":     exactCurrencyAmounts(curMap),
+				}
+			}
+		case "extendedProfile":
+			extEnv, extErr := a.snapshotExtended(ctx, viewOpt)
+			extName := snapshot.FileName(stamp, collision, opt.Prefix, snapshot.SuffixForView(view))
+			if extErr != nil {
+				man.OK = false
+				a.notice("extended-profile fetch failed: %v", extErr)
+				man.Files = append(man.Files, failViewRec(extName, snapshot.KindForView(view), view, extErr, contentStatusForErr(extErr)))
+			} else {
+				rec := a.writePayload(absDir, extName, snapshot.KindForView(view), extEnv, extEnv)
+				rec.View = view
+				rec.RequestStatus = snapshot.RequestRequested
+				rec.ContentStatus = snapshot.ContentOK
+				man.Files = append(man.Files, rec)
+				if !rec.OK {
+					man.OK = false
+				}
+			}
+		default:
+			env, ferr := a.snapshotGenericView(ctx, view, viewOpt)
+			name := snapshot.FileName(stamp, collision, opt.Prefix, snapshot.SuffixForView(view))
+			kind := snapshot.KindForView(view)
+			if ferr != nil {
+				man.OK = false
+				a.notice("%s fetch failed: %v", view, ferr)
+				man.Files = append(man.Files, failViewRec(name, kind, view, ferr, contentStatusForErr(ferr)))
+			} else {
+				rec := a.writePayload(absDir, name, kind, env, env)
+				rec.View = view
+				rec.RequestStatus = snapshot.RequestRequested
+				rec.ContentStatus = classifyPayloadContent(env)
+				man.Files = append(man.Files, rec)
+				if !rec.OK {
+					man.OK = false
+				}
+			}
 		}
 	}
 
@@ -265,6 +356,60 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 
 func failRec(name, kind string, err error) snapshot.FileRecord {
 	return snapshot.FileRecord{Name: name, RelPath: name, Kind: kind, OK: false, Error: err.Error()}
+}
+
+func failViewRec(name, kind, view string, err error, cs snapshot.ContentStatus) snapshot.FileRecord {
+	return snapshot.FileRecord{
+		Name: name, RelPath: name, Kind: kind, View: view,
+		RequestStatus: snapshot.RequestRequested, ContentStatus: cs,
+		OK: false, Error: err.Error(),
+	}
+}
+
+func contentStatusForErr(err error) snapshot.ContentStatus {
+	if ee, ok := err.(*ExitError); ok {
+		switch ee.Code {
+		case exitcode.AuthRequired:
+			return snapshot.ContentScopeDenied
+		case exitcode.RateLimit:
+			return snapshot.ContentRateLimited
+		}
+	}
+	return snapshot.ContentRequestFailed
+}
+
+func classifyPayloadContent(env output.Envelope) snapshot.ContentStatus {
+	if env.Data == nil {
+		return snapshot.ContentUpstreamNull
+	}
+	return snapshot.ContentOK
+}
+
+func (a *App) snapshotGenericView(ctx context.Context, view string, opt snapshotOptions) (output.Envelope, error) {
+	path, scope, ok := api.PathForView(view)
+	if !ok {
+		return output.Envelope{}, fmt.Errorf("unknown view %q", view)
+	}
+	_, tok, secrets, err := a.resolveProfileToken(scope)
+	if err != nil {
+		return output.Envelope{}, err
+	}
+	defer func() { tok = "" }()
+	res, err := a.apiClient().GetAccountView(ctx, path, tok, api.AccountGetOptions{Refresh: opt.Flags.refresh})
+	if err != nil {
+		return output.Envelope{}, fmt.Errorf("%s", secrets.Redact(err.Error()))
+	}
+	if err := mapAccountHTTP(res); err != nil {
+		return output.Envelope{}, err
+	}
+	source := a.accountSource(res)
+	source.Endpoint = path
+	data := map[string]any{
+		view:             jsonutil.CloneRaw(res.Data),
+		"rateLimit":      res.RateLimit(),
+		"quotaExhausted": refreshQuotaExhausted(res.Refresh),
+	}
+	return output.NewSuccess("account "+view, source, freshnessFromResult(res, nil), data), nil
 }
 
 func shortSHA(s string) string {

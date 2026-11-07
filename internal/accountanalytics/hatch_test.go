@@ -35,10 +35,10 @@ func TestHollowEggHatchDistribution(t *testing.T) {
 		t.Fatalf("deltas: egg=%s species=%s", rep.EggPurchaseDelta, rep.SpeciesDeltaSum)
 	}
 	want := map[string]float64{
-		"Wisp Griffin":     81.43,
-		"Ruinous Angelus":  18.57,
-		"Knight Golem":     0.0048,
-		"Veil Horse":       0.00024,
+		"Wisp Griffin":    81.43,
+		"Ruinous Angelus": 18.57,
+		"Knight Golem":    0.0048,
+		"Veil Horse":      0.00024,
 	}
 	for pet, pct := range want {
 		var row HatchSpeciesRow

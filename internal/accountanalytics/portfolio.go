@@ -15,16 +15,16 @@ const portfolioMethodID = "accountanalytics.portfolio.v1"
 
 // PortfolioLine is one inventory stack with optional variant-matched RAP.
 type PortfolioLine struct {
-	Class         string `json:"class"`
-	ID            string `json:"id"`
-	Variant       string `json:"variant"`
-	PT            string `json:"pt,omitempty"`
-	SH            string `json:"sh,omitempty"`
-	Qty           string `json:"qty"`
-	RAPMatched    bool   `json:"rapMatched"`
-	RAPValue      string `json:"rapValue,omitempty"`
-	RAPLineTotal  string `json:"rapLineTotal,omitempty"`
-	MethodID      string `json:"methodId"`
+	Class        string `json:"class"`
+	ID           string `json:"id"`
+	Variant      string `json:"variant"`
+	PT           string `json:"pt,omitempty"`
+	SH           string `json:"sh,omitempty"`
+	Qty          string `json:"qty"`
+	RAPMatched   bool   `json:"rapMatched"`
+	RAPValue     string `json:"rapValue,omitempty"`
+	RAPLineTotal string `json:"rapLineTotal,omitempty"`
+	MethodID     string `json:"methodId"`
 }
 
 // PortfolioReport aggregates exact quantities and variant-matched RAP (never imputing missing RAP as zero).

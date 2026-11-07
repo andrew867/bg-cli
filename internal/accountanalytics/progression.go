@@ -30,21 +30,21 @@ type AchievementStageChange struct {
 
 // MapChange captures keyed map field deltas (Goals, Mastery, slots, upgrades).
 type MapChange struct {
-	Field string        `json:"field"`
-	Key   string        `json:"key"`
-	Kind  string        `json:"kind"` // exact_int|bool|json
-	Before string       `json:"before,omitempty"`
-	After  string       `json:"after,omitempty"`
-	Delta  string       `json:"delta,omitempty"`
+	Field  string `json:"field"`
+	Key    string `json:"key"`
+	Kind   string `json:"kind"` // exact_int|bool|json
+	Before string `json:"before,omitempty"`
+	After  string `json:"after,omitempty"`
+	Delta  string `json:"delta,omitempty"`
 }
 
 // ProgressionDiff compares progression-related profile fields.
 type ProgressionDiff struct {
-	MethodID        string                   `json:"methodId"`
-	Scalars         []ScalarChange           `json:"scalars,omitempty"`
-	Achievements    []AchievementStageChange `json:"achievements,omitempty"`
-	MapChanges      []MapChange              `json:"mapChanges,omitempty"`
-	Warnings        []string                 `json:"warnings,omitempty"`
+	MethodID     string                   `json:"methodId"`
+	Scalars      []ScalarChange           `json:"scalars,omitempty"`
+	Achievements []AchievementStageChange `json:"achievements,omitempty"`
+	MapChanges   []MapChange              `json:"mapChanges,omitempty"`
+	Warnings     []string                 `json:"warnings,omitempty"`
 }
 
 var progressionScalarFields = []string{
