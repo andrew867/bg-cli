@@ -158,6 +158,34 @@ func classifyRecipeKind(pets []PetInput) string {
 	return "mixed"
 }
 
+// MixedDominanceContextKey groups mixed recipes for Pareto dominance without treating
+// spirit shard count as a hard context boundary (shard totals are part of the trade-off).
+func (o Observation) MixedDominanceContextKey() string {
+	luck := "luck=?"
+	if o.DisplayedLuckMultiplier != nil {
+		luck = fmt.Sprintf("luck=%g", *o.DisplayedLuckMultiplier)
+	}
+	pets := make([]string, 0, len(o.SelectedPets))
+	for _, p := range o.SelectedPets {
+		v := p.Variant
+		if v == "" {
+			v = "Regular"
+		}
+		if p.Quantity > 0 || strings.EqualFold(p.ID, "Butler Penguin") {
+			pets = append(pets, fmt.Sprintf("%s|%s", p.ID, v))
+		}
+	}
+	sort.Strings(pets)
+	return strings.Join([]string{
+		o.EventID,
+		o.GameUpdateOrBuild,
+		o.RecipeKind,
+		"shards=trade-space",
+		luck,
+		"pets=" + strings.Join(pets, "+"),
+	}, "|")
+}
+
 // ComparableKey groups observations that may be fit together.
 func (o Observation) ComparableKey() string {
 	shards := "shards=?"
