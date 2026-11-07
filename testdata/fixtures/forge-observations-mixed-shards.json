@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0",
+  "notes": [
+    "Mixed Halloween Forge previews with varying Spirit Shards and Porcelain Doll Cats",
+    "Same 22 Butlers, 75.0% displayed success; luck multiplier differs per observation"
+  ],
+  "observations": [
+    {
+      "observationId": "mixed-22-30400-100",
+      "observedAt": "2026-11-06T14:00:00-03:30",
+      "timezone": "America/St_Johns",
+      "eventId": "HalloweenGames",
+      "selectedPets": [
+        { "id": "Butler Penguin", "variant": "Regular", "quantity": 22 },
+        { "id": "Porcelain Doll Cat", "variant": "Regular", "quantity": 30400 }
+      ],
+      "spiritShards": 100,
+      "displayedLuckMultiplier": 130,
+      "displayedWinProbability": { "raw": "75.0%" },
+      "displayedSuccessCapPercentPoints": 75,
+      "attemptExecuted": false,
+      "recipeKind": "mixed",
+      "provenance": "manual-ui-screenshot",
+      "confidence": "measured"
+    },
+    {
+      "observationId": "mixed-22-29300-60",
+      "observedAt": "2026-11-06T14:05:00-03:30",
+      "timezone": "America/St_Johns",
+      "eventId": "HalloweenGames",
+      "selectedPets": [
+        { "id": "Butler Penguin", "variant": "Regular", "quantity": 22 },
+        { "id": "Porcelain Doll Cat", "variant": "Regular", "quantity": 29300 }
+      ],
+      "spiritShards": 60,
+      "displayedLuckMultiplier": 125,
+      "displayedWinProbability": { "raw": "75.0%" },
+      "displayedSuccessCapPercentPoints": 75,
+      "attemptExecuted": false,
+      "recipeKind": "mixed",
+      "provenance": "manual-ui-screenshot",
+      "confidence": "measured"
+    },
+    {
+      "observationId": "mixed-22-28575-63",
+      "observedAt": "2026-11-06T14:10:00-03:30",
+      "timezone": "America/St_Johns",
+      "eventId": "HalloweenGames",
+      "selectedPets": [
+        { "id": "Butler Penguin", "variant": "Regular", "quantity": 22 },
+        { "id": "Porcelain Doll Cat", "variant": "Regular", "quantity": 28575 }
+      ],
+      "spiritShards": 63,
+      "displayedLuckMultiplier": 128,
+      "displayedLuckMultiplierNote": "distinct UI luck from 60/100 shard rows",
+      "displayedWinProbability": { "raw": "75.0%" },
+      "displayedSuccessCapPercentPoints": 75,
+      "attemptExecuted": false,
+      "recipeKind": "mixed",
+      "provenance": "manual-ui-screenshot",
+      "confidence": "measured"
+    }
+  ]
+}

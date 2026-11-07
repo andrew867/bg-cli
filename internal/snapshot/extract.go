@@ -18,7 +18,11 @@ type Bundle struct {
 	ExtEnv       map[string]json.RawMessage
 	Inventory    json.RawMessage // data.inventory object
 	ProfileData  json.RawMessage // data.profile object
-	Warnings     []string
+	// ViewData holds decoded envelope data maps keyed by view id (itemIndex, trades, …).
+	ViewData map[string]map[string]json.RawMessage
+	// ViewRaw holds raw view payload objects when present under data.<view>.
+	ViewRaw  map[string]json.RawMessage
+	Warnings []string
 }
 
 // ProfileView is extracted profile analytics fields.

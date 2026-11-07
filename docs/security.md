@@ -10,7 +10,7 @@ bg-cli is designed for a private, owner-operated deployment. The operator owns t
 | Client secret | Operator password manager; supplied only at login |
 | Access token | OS credential store |
 | PKCE verifier / OAuth state | Process memory for the duration of login |
-| Account API bodies | stdout only; never written to disk cache |
+| Account API bodies | stdout by default; deliberate `account snapshot` exports are user-authorized local files |
 
 ## Hard requirements
 
@@ -46,3 +46,7 @@ Shipping one shared client secret inside a distributable client is unsupported b
 ## Reporting vulnerabilities
 
 See [SECURITY.md](../SECURITY.md).
+
+## Snapshot privacy
+
+Deliberate local snapshot exports (`account snapshot`) write account payloads to a user-chosen directory. The default three-view export does **not** include trades, booth, or mail. Capturing those histories requires explicit `--all-views` or `--include`. Do not commit private snapshot directories, upload them to CI, or attach them to issues.

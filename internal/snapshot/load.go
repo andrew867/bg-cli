@@ -1,10 +1,26 @@
 package snapshot
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 )
+
+func kindToView(kind string) string {
+	switch kind {
+	case "item-index-json":
+		return "itemIndex"
+	case "trades-json":
+		return "trades"
+	case "booth-json":
+		return "booth"
+	case "mail-json":
+		return "mail"
+	default:
+		return kind
+	}
+}
 
 // LoadBundle loads a manifest and its associated payload JSON files offline.
 func LoadBundle(manifestPath string) (*Bundle, error) {
@@ -20,6 +36,8 @@ func LoadBundle(manifestPath string) (*Bundle, error) {
 	b := &Bundle{
 		Manifest: m,
 		BaseDir:  baseDir,
+		ViewData: map[string]map[string]json.RawMessage{},
+		ViewRaw:  map[string]json.RawMessage{},
 		Warnings: []string{},
 	}
 
@@ -65,6 +83,22 @@ func LoadBundle(manifestPath string) (*Bundle, error) {
 				continue
 			}
 			b.ExtEnv = data
+		case "item-index-json", "trades-json", "booth-json", "mail-json":
+			data, _, err := EnvelopeData(raw)
+			if err != nil {
+				b.Warnings = append(b.Warnings, rec.Kind+": "+err.Error())
+				continue
+			}
+			view := rec.View
+			if view == "" {
+				view = kindToView(rec.Kind)
+			}
+			b.ViewData[view] = data
+			if v, ok := data[view]; ok {
+				b.ViewRaw[view] = v
+			} else if v, ok := data["data"]; ok {
+				b.ViewRaw[view] = v
+			}
 		}
 	}
 	if b.Inventory == nil {

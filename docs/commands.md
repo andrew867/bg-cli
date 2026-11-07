@@ -60,6 +60,10 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account power inspect` | offline snapshot + optional public collections/annotations | inventory:read when live |
 | `account experiment compare` | two offline manifests | none (offline) |
 | `account forge observe\|analyze\|optimize\|ledger` | local observation/ledger JSON (+ optional snapshot) | none (offline) |
+| `account snapshot --all-views` / `--include` | selected authenticated views | matching scopes |
+| `account snapshot validate` | local manifest | none (offline) |
+| `account index\|transactions\|hatch\|progression\|portfolio\|reconcile\|audit` | offline manifests / RAP / catalogs | none (offline) |
+| `releases\|leagues\|clans` | public API | none |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |

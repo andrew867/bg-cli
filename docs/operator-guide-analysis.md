@@ -38,7 +38,23 @@ bg-cli account experiment compare --from BEFORE-manifest.json --to AFTER-manifes
 bg-cli account forge observe --file .\forge-observations.json --pretty
 bg-cli account forge analyze --observations .\forge-observations.json --pretty
 bg-cli account forge optimize --observations .\forge-observations.json --snapshot .\*-manifest.json --objective min-butlers --pretty
+bg-cli account forge optimize --observations .\forge-observations-mixed.json --mode observed-mixed --shard-budget 63 --objective min-shards --pretty
 bg-cli account forge ledger --file .\forge-attempts.json --pretty
 ```
 
 Displayed Forge probabilities are UI measurements. Recommendations never execute a Forge.
+
+## 6. Expanded analytics (offline)
+
+```powershell
+bg-cli account snapshot --profile main --dir . --prefix ps99 --all-views
+bg-cli account snapshot validate .\*-manifest.json --pretty
+bg-cli account hatch report --from OLD-manifest.json --to NEW-manifest.json --egg "Hollow Egg" --pretty
+bg-cli account index analyze --snapshot FULL-manifest.json --pretty
+bg-cli account transactions report --snapshot FULL-manifest.json --redact-counterparties --pretty
+bg-cli account progression diff --from OLD-manifest.json --to NEW-manifest.json --pretty
+bg-cli account portfolio report --snapshot FULL-manifest.json --rap .\rap.json --pretty
+bg-cli account reconcile --from OLD-manifest.json --to NEW-manifest.json --pretty
+bg-cli releases list --page-size 100 --pretty
+bg-cli leagues players --season SEASON_ID --pretty
+```

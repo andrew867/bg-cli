@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const ManifestSchemaVersion = "1.1"
+const ManifestSchemaVersion = "1.2"
 
 // FileRecord describes one payload file written by a snapshot export.
 // The manifest file itself is referenced by ManifestFile and is NOT listed here
@@ -18,6 +18,9 @@ type FileRecord struct {
 	Name           string          `json:"name"`
 	RelPath        string          `json:"relPath"`
 	Kind           string          `json:"kind"`
+	View           string          `json:"view,omitempty"`          // account view id when applicable
+	RequestStatus  RequestStatus   `json:"requestStatus,omitempty"` // requested | not_requested
+	ContentStatus  ContentStatus   `json:"contentStatus,omitempty"`
 	OK             bool            `json:"ok"`
 	Error          string          `json:"error,omitempty"`
 	Bytes          int64           `json:"bytes,omitempty"`
@@ -31,7 +34,7 @@ type FileRecord struct {
 	Refresh        json.RawMessage `json:"refresh,omitempty"`
 }
 
-// Manifest is the on-disk snapshot index (schema 1.1).
+// Manifest is the on-disk snapshot index (schema 1.2; 1.0/1.1 still load).
 type Manifest struct {
 	SchemaVersion   string         `json:"schemaVersion"`
 	Command         string         `json:"command"`
@@ -47,6 +50,7 @@ type Manifest struct {
 	JoinRAP         bool           `json:"joinRap"`
 	Excel           bool           `json:"excel"`
 	Note            string         `json:"note,omitempty"`
+	RequestedViews  []string       `json:"requestedViews,omitempty"`
 	Files           []FileRecord   `json:"files"`
 	ManifestFile    string         `json:"manifestFile"`
 	Summary         map[string]any `json:"summary,omitempty"`
@@ -65,7 +69,10 @@ func LoadManifest(path string) (*Manifest, error) {
 	if m.SchemaVersion == "" {
 		return nil, fmt.Errorf("manifest missing schemaVersion")
 	}
-	if m.SchemaVersion != ManifestSchemaVersion && m.SchemaVersion != "1.0" {
+	switch m.SchemaVersion {
+	case ManifestSchemaVersion, "1.1", "1.0":
+		// ok — loaders remain backward compatible
+	default:
 		return nil, fmt.Errorf("unsupported manifest schemaVersion %q", m.SchemaVersion)
 	}
 	if len(m.Files) == 0 {
