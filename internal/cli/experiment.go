@@ -21,7 +21,7 @@ Fully offline. Never labels net currency change as pure farming income.`,
 }
 
 func newAccountExperimentCompareCmd(app *App) *cobra.Command {
-	var fromPath, toPath, currency, world, experimentID, activity, design string
+	var fromPath, toPath, currency, world, experimentID, activity, design, currencyCap string
 	var pets, enchants, potions, confounders []string
 	cmd := &cobra.Command{
 		Use:   "compare",
@@ -58,6 +58,7 @@ func newAccountExperimentCompareCmd(app *App) *cobra.Command {
 				ExperimentID: experimentID, World: world, CurrencyID: currency,
 				PetLoadout: pets, EnchantLoadout: enchants, PotionsBuffs: potions,
 				Activity: activity, KnownConfounders: confounders, Design: design,
+				CurrencyCap: currencyCap,
 			}, fromL, toL)
 			if err != nil {
 				return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
@@ -69,6 +70,7 @@ func newAccountExperimentCompareCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&fromPath, "from", "", "before snapshot manifest")
 	cmd.Flags().StringVar(&toPath, "to", "", "after snapshot manifest")
 	cmd.Flags().StringVar(&currency, "currency", "", "currency ID (required; never combined)")
+	cmd.Flags().StringVar(&currencyCap, "currency-cap", "", "optional exact ceiling override for cap detection")
 	cmd.Flags().StringVar(&world, "world", "halloween-games", "world/event id")
 	cmd.Flags().StringVar(&experimentID, "id", "", "experiment id")
 	cmd.Flags().StringVar(&activity, "activity", "", "activity performed")

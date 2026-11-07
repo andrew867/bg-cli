@@ -59,6 +59,7 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account loadout objectives` | n/a | none |
 | `account power inspect` | offline snapshot + optional public collections/annotations | inventory:read when live |
 | `account experiment compare` | two offline manifests | none (offline) |
+| `account forge observe\|analyze\|optimize\|ledger` | local observation/ledger JSON (+ optional snapshot) | none (offline) |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -133,6 +134,19 @@ bg-cli account experiment compare --from BEFORE-manifest.json --to AFTER-manifes
 ```
 
 See `docs/research/pet-power-and-events.md` for verified vs presentation-only fields. Halloween `indexDesc` extras and the 31% Huge rule are **not** treated as proven server formulas.
+
+### account forge
+
+Offline Forge tooling. Observations preserve exact UI percentage strings (including `<0.001%` censored bounds). Butler-only curves may be fit as capped-linear models of **displayed** probabilities. Mixed recipes stay separate. Optimize never forges pets.
+
+```bash
+bg-cli account forge observe --file ./forge-observations.json --pretty
+bg-cli account forge analyze --observations ./forge-observations.json --pretty
+bg-cli account forge optimize --observations ./forge-observations.json --snapshot ./manifest.json --objective min-butlers --pretty
+bg-cli account forge ledger --file ./forge-attempts.json --pretty
+```
+
+See `docs/research/halloween-forge.md` and `docs/operator-guide-analysis.md`.
 
 Account response bodies are never cached to disk.
 

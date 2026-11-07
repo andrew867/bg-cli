@@ -12,6 +12,7 @@ type ExperimentMeta struct {
 	ExperimentID     string   `json:"experimentId"`
 	World            string   `json:"world"`
 	CurrencyID       string   `json:"currencyId"`
+	CurrencyCap      string   `json:"currencyCap,omitempty"` // optional exact ceiling override
 	PetLoadout       []string `json:"petLoadout,omitempty"`
 	EnchantLoadout   []string `json:"enchantLoadout,omitempty"`
 	PotionsBuffs     []string `json:"potionsAndBuffsKnownActive,omitempty"`
@@ -46,7 +47,7 @@ func CompareExperiment(from, to *snapshot.Bundle, meta ExperimentMeta, fromLoado
 	cal, err := CalibrateFromSnapshots(CalibrationInput{
 		From: from, To: to, CurrencyID: meta.CurrencyID,
 		Objective: Objective{ID: ObjectiveID("currency-rate"), CurrencyID: meta.CurrencyID},
-		WorldID:   meta.World, Note: meta.ExperimentID,
+		WorldID:   meta.World, Note: meta.ExperimentID, CurrencyCap: meta.CurrencyCap,
 	})
 	if err != nil {
 		return rep, err
@@ -65,8 +66,14 @@ func CompareExperiment(from, to *snapshot.Bundle, meta ExperimentMeta, fromLoado
 	} else {
 		pass("positive elapsed duration from inventory snapshotAt")
 	}
-	if cal.ObservedPerMinute != nil && *cal.ObservedPerMinute == 0 {
-		rep.Warnings = append(rep.Warnings, "zero observed earnings for "+meta.CurrencyID)
+	if cal.CurrencyCap != nil && cal.CurrencyCap.Capped {
+		rep.Warnings = append(rep.Warnings, CapFindingCapped)
+		if cal.CurrencyCap.ProductionMayOffsetSpending {
+			rep.Warnings = append(rep.Warnings, cal.CurrencyCap.ProductionOffsetNote)
+		}
+		pass("currency ceiling detected; observedPerMinute suppressed (not labeled as zero income)")
+	} else if cal.ObservedPerMinute != nil && *cal.ObservedPerMinute == 0 {
+		rep.Warnings = append(rep.Warnings, "zero observed earnings for "+meta.CurrencyID+" (balance not at a known currency ceiling)")
 	}
 	if strings.HasPrefix(cal.CurrencyDelta, "-") {
 		rep.Warnings = append(rep.Warnings, "negative currency delta — may include expenditures; not labeled pure farming income")
