@@ -223,6 +223,36 @@ func newAccountTransactionsLedgerCmd(app *App) *cobra.Command {
 func newAccountHatchCmd(app *App) *cobra.Command {
 	cmd := &cobra.Command{Use: "hatch", Short: "Offline complete hatch distribution analysis"}
 	cmd.AddCommand(newAccountHatchReportCmd(app))
+	cmd.AddCommand(newAccountHatchCompareCmd(app))
+	return cmd
+}
+
+func newAccountHatchCompareCmd(app *App) *cobra.Command {
+	var file string
+	cmd := &cobra.Command{
+		Use:   "compare",
+		Short: "Compare versioned hatch experiment checkpoints (Cocktail vs rates with confounding notes)",
+		RunE: func(c *cobra.Command, args []string) error {
+			if file == "" {
+				return &ExitError{Code: exitcode.Usage, Msg: "--file is required"}
+			}
+			f, err := accountanalytics.LoadHatchExperiments(file)
+			if err != nil {
+				return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
+			}
+			intervals, notes, err := accountanalytics.CompareHatchExperiments(f)
+			if err != nil {
+				return &ExitError{Code: exitcode.Upstream, Msg: err.Error()}
+			}
+			payload := map[string]any{
+				"methodId":  accountanalytics.MethodIDHatchExperiment,
+				"intervals": intervals, "notes": notes, "observationCount": len(f.Observations),
+			}
+			w := output.Writer{Out: app.stdout(), Pretty: app.Flags.Pretty, Clock: app.Deps.Clock}
+			return w.Write(output.NewSuccess("account hatch compare", nil, output.DefaultFreshnessNull(), payload))
+		},
+	}
+	cmd.Flags().StringVar(&file, "file", "", "hatch experiment observations JSON")
 	return cmd
 }
 

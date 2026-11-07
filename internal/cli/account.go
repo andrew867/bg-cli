@@ -39,6 +39,7 @@ This client is unofficial and not endorsed by BIG Games.`,
 	cmd.AddCommand(newAccountPowerCmd(app))
 	cmd.AddCommand(newAccountExperimentCmd(app))
 	cmd.AddCommand(newAccountForgeCmd(app))
+	cmd.AddCommand(newAccountCraftCmd(app))
 	cmd.AddCommand(newAccountIndexCmd(app))
 	cmd.AddCommand(newAccountTransactionsCmd(app))
 	cmd.AddCommand(newAccountHatchCmd(app))
