@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `account craft` Combine-o-Matic (NOT Forge): recipes, BOM plan, optimize; Gargantuan BOM 480/3420/48/12/4/2 regression
 - `account hatch compare` for versioned experiment checkpoints; Masquerade Thorn Egg Nov 7 fixture; EggHatchCount≠pull-size warnings
 - Item-flow annotations + Candy Coins runway economics with explicit residuals
+- Public data observatory: `public discover|sync|inspect|status|diff|export`, `egg show|odds|flags|cost`, `graph unresolved`; Secret Room odds models + 51724 hatch fixture; docs under `docs/public-*.md` / `docs/egg-probability-models.md`
 
 ## [0.1.4] - 2026-11-07
 

@@ -10,6 +10,7 @@
 - Access tokens stored in the operating system credential store only
 - Authenticated account reads for inventory, profile, currencies, and related views
 - Public leaderboards, opted-in player views, collections, RAP, and exists
+- Public catalog observatory (`public discover|sync|inspect|…`), hypothetical egg odds models, and unresolved entity-graph joins
 - Stable JSON output (default), richer table view, CSV export for inventory/currencies, and raw upstream bodies for data commands
 - `doctor` and shell completions for local setup checks
 - Deterministic exit codes suitable for scripting
