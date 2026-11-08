@@ -4,6 +4,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,6 +43,38 @@ func TestDirectPercentNotSilentForTinyWeights(t *testing.T) {
 		if !ln.NotVerifiedLiveOdds || !EnsureNeverVerifiedLive(string(ln.Interpretation)) {
 			t.Fatalf("must not claim verified live: %+v", ln)
 		}
+	}
+}
+
+func TestParseLiveShapedSecretRoomEgg(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "observatory", "eggs-secret-room-live.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := FindEggByDisplayName(b, "Secret Room Egg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.DisplayName != "Secret Room Egg" {
+		t.Fatalf("display=%q", doc.DisplayName)
+	}
+	if len(doc.Pets) != 4 {
+		t.Fatalf("pets=%d", len(doc.Pets))
+	}
+	if doc.Pets[0].ID != "Phantom Tiger" || doc.Pets[0].RawWeight != "90" {
+		t.Fatalf("tuple parse: %+v", doc.Pets[0])
+	}
+	if doc.Pets[2].Label != "Great" {
+		t.Fatalf("label=%q", doc.Pets[2].Label)
+	}
+	foundFlag := false
+	for _, f := range doc.OddsFFlags {
+		if strings.Contains(f, "HalloweenGames_ThornEggAgonyMult") {
+			foundFlag = true
+		}
+	}
+	if !foundFlag {
+		t.Fatalf("oddsFFlags=%v", doc.OddsFFlags)
 	}
 }
 

@@ -3,6 +3,7 @@ package observatory
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -30,6 +31,7 @@ type EggDocument struct {
 	ConfigName  string          `json:"configName"`
 	DisplayName string          `json:"displayName"`
 	Pets        []EggPetEntry   `json:"pets"`
+	OddsFFlags  []string        `json:"oddsFFlags,omitempty"` // named modifiers only; magnitudes unknown
 	RawJSON     json.RawMessage `json:"rawJson"`
 }
 
@@ -68,6 +70,26 @@ func overlayConfigData(raw json.RawMessage, doc *EggDocument) error {
 	if v, ok := cd["name"]; ok {
 		_ = json.Unmarshal(v, &doc.DisplayName)
 	}
+	if v, ok := cd["oddsFFlags"]; ok {
+		var flags []string
+		if json.Unmarshal(v, &flags) == nil {
+			doc.OddsFFlags = flags
+		} else {
+			// Live Eggs often use a map of petId → named flag (magnitudes unknown).
+			var m map[string]string
+			if json.Unmarshal(v, &m) == nil {
+				keys := make([]string, 0, len(m))
+				for k := range m {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+				for _, k := range keys {
+					flags = append(flags, k+"="+m[k])
+				}
+				doc.OddsFFlags = flags
+			}
+		}
+	}
 	petsRaw, ok := cd["pets"]
 	if !ok {
 		return nil
@@ -87,18 +109,33 @@ func overlayConfigData(raw json.RawMessage, doc *EggDocument) error {
 }
 
 func parsePetEntry(raw json.RawMessage, path string) (EggPetEntry, error) {
+	ent := EggPetEntry{
+		JSONPath:  path,
+		Semantics: WeightNotPercent,
+		Extra:     map[string]json.RawMessage{},
+	}
+
+	// Live Eggs often encode pets as [id, weight] or [id, weight, label] tuples.
+	decArr := json.NewDecoder(strings.NewReader(string(raw)))
+	decArr.UseNumber()
+	var arr []any
+	if err := decArr.Decode(&arr); err == nil && len(arr) >= 2 {
+		ent.ID = fmt.Sprintf("%v", arr[0])
+		ent.RawWeight = numberToExactString(arr[1])
+		ent.Semantics = WeightRawDecimal
+		if len(arr) >= 3 {
+			ent.Label = fmt.Sprintf("%v", arr[2])
+		}
+		return ent, nil
+	}
+
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.UseNumber()
 	var m map[string]any
 	if err := dec.Decode(&m); err != nil {
 		return EggPetEntry{}, err
 	}
-	ent := EggPetEntry{
-		JSONPath:  path,
-		Semantics: WeightNotPercent,
-		Extra:     map[string]json.RawMessage{},
-	}
-	// Standard keys in Pet Simulator eggs table: id + weight (numeric) + optional rarity label field.
+	// Object form: id + weight (+ optional rarity label).
 	if v, ok := m["id"]; ok {
 		ent.ID = fmt.Sprintf("%v", v)
 	}
@@ -135,6 +172,34 @@ func parsePetEntry(raw json.RawMessage, path string) (EggPetEntry, error) {
 	return ent, nil
 }
 
+// eggNameMatches reports whether a user query matches config/display names.
+// Live configs often use "N | Display Name" prefixes.
+func eggNameMatches(configName, displayName, query string) bool {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return false
+	}
+	cands := []string{configName, displayName}
+	for _, c := range cands {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if strings.EqualFold(c, q) {
+			return true
+		}
+		if i := strings.LastIndex(c, " | "); i >= 0 {
+			if strings.EqualFold(strings.TrimSpace(c[i+3:]), q) {
+				return true
+			}
+		}
+		if strings.EqualFold(c, "1 | "+q) || strings.HasSuffix(strings.ToLower(c), strings.ToLower(" | "+q)) {
+			return true
+		}
+	}
+	return false
+}
+
 func numberToExactString(v any) string {
 	switch x := v.(type) {
 	case json.Number:
@@ -160,7 +225,7 @@ func FindEggByDisplayName(collectionRaw []byte, displayName string) (EggDocument
 		if err != nil {
 			continue
 		}
-		if doc.DisplayName == displayName || doc.ConfigName == displayName {
+		if eggNameMatches(doc.ConfigName, doc.DisplayName, displayName) {
 			return doc, nil
 		}
 	}
