@@ -1,0 +1,596 @@
+{
+  "status": "ok",
+  "data": [
+    {
+      "configName": "Enchant | Strong Pets",
+      "category": "Enchants",
+      "configData": {
+        "BaseTier": 1,
+        "DiminishPowerThreshold": 336,
+        "Tiers": [
+          {
+            "Rarity": {
+              "RarityNumber": 1,
+              "Lootbag": null,
+              "_id": "Basic",
+              "Color": null,
+              "DisplayName": "Basic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 15,
+            "Desc": "Increases the strength of your pets by 15%!",
+            "Icon": "rbxassetid://15030239929",
+            "DisplayName": "Strong Pets I"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 2,
+              "Lootbag": null,
+              "_id": "Rare",
+              "Color": null,
+              "DisplayName": "Rare",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 25,
+            "Desc": "Increases the strength of your pets by 25%!",
+            "Icon": "rbxassetid://15030239753",
+            "DisplayName": "Strong Pets II"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 3,
+              "Lootbag": null,
+              "_id": "Epic",
+              "Color": null,
+              "DisplayName": "Epic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 40,
+            "Desc": "Increases the strength of your pets by 40%!",
+            "Icon": "rbxassetid://15030239649",
+            "DisplayName": "Strong Pets III"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 4,
+              "Lootbag": null,
+              "_id": "Legendary",
+              "Color": null,
+              "DisplayName": "Legendary",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 60,
+            "Desc": "Increases the strength of your pets by 60%!",
+            "Icon": "rbxassetid://15030239477",
+            "DisplayName": "Strong Pets IV"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 5,
+              "Lootbag": null,
+              "_id": "Mythical",
+              "Color": null,
+              "DisplayName": "Mythical",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 75,
+            "Desc": "Increases the strength of your pets by 75%!",
+            "Icon": "rbxassetid://15030239264",
+            "DisplayName": "Strong Pets V"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 6,
+              "Lootbag": null,
+              "_id": "Exotic",
+              "Color": null,
+              "DisplayName": "Exotic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 90,
+            "Desc": "Increases the strength of your pets by 90%!",
+            "Icon": "rbxassetid://15696986509",
+            "DisplayName": "Strong Pets VI"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 7,
+              "Lootbag": null,
+              "_id": "Divine",
+              "Color": null,
+              "DisplayName": "Divine",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 105,
+            "Desc": "Increases the strength of your pets by 105%!",
+            "Icon": "rbxassetid://15801600870",
+            "DisplayName": "Strong Pets VII"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 8,
+              "Lootbag": null,
+              "_id": "Superior",
+              "Color": null,
+              "DisplayName": "Superior",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 120,
+            "Desc": "Increases the strength of your pets by 120%!",
+            "Icon": "rbxassetid://16318190917",
+            "DisplayName": "Strong Pets VIII"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 9,
+              "Lootbag": null,
+              "_id": "Celestial",
+              "Color": null,
+              "DisplayName": "Celestial",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 135,
+            "Desc": "Increases the strength of your pets by 135%!",
+            "Icon": "rbxassetid://16888547248",
+            "DisplayName": "Strong Pets IX"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 9,
+              "Lootbag": null,
+              "_id": "Celestial",
+              "Color": null,
+              "DisplayName": "Celestial",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 140,
+            "Desc": "Increases the strength of your pets by 140%!",
+            "Icon": "rbxassetid://93291705199169",
+            "DisplayName": "Strong Pets X"
+          }
+        ],
+        "EmpoweredBoost": 40,
+        "MaxTier": 10,
+        "PageIcon": "rbxassetid://13824100032"
+      },
+      "dateModified": "2025-07-05T23:28:49.137Z",
+      "dateCreated": null,
+      "collection": "Enchants",
+      "hashShort": "d1ae0cab90f00de1"
+    },
+    {
+      "configName": "Enchant | Lucky Eggs",
+      "category": "Enchants",
+      "configData": {
+        "BaseTier": 1,
+        "DiminishPowerThreshold": 384,
+        "Tiers": [
+          {
+            "Rarity": {
+              "RarityNumber": 1,
+              "Lootbag": null,
+              "_id": "Basic",
+              "Color": null,
+              "DisplayName": "Basic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 15,
+            "Desc": "Increases your egg luck by 15%!",
+            "Icon": "rbxassetid://15030240936",
+            "DisplayName": "Lucky Eggs I"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 2,
+              "Lootbag": null,
+              "_id": "Rare",
+              "Color": null,
+              "DisplayName": "Rare",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 30,
+            "Desc": "Increases your egg luck by 30%!",
+            "Icon": "rbxassetid://15030240839",
+            "DisplayName": "Lucky Eggs II"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 3,
+              "Lootbag": null,
+              "_id": "Epic",
+              "Color": null,
+              "DisplayName": "Epic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 50,
+            "Desc": "Increases your egg luck by 50%!",
+            "Icon": "rbxassetid://15030240731",
+            "DisplayName": "Lucky Eggs III"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 4,
+              "Lootbag": null,
+              "_id": "Legendary",
+              "Color": null,
+              "DisplayName": "Legendary",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 75,
+            "Desc": "Increases your egg luck by 75%!",
+            "Icon": "rbxassetid://15030240650",
+            "DisplayName": "Lucky Eggs IV"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 5,
+              "Lootbag": null,
+              "_id": "Mythical",
+              "Color": null,
+              "DisplayName": "Mythical",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 95,
+            "Desc": "Increases your egg luck by 95%!",
+            "Icon": "rbxassetid://15030240562",
+            "DisplayName": "Lucky Eggs V"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 6,
+              "Lootbag": null,
+              "_id": "Exotic",
+              "Color": null,
+              "DisplayName": "Exotic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 110,
+            "Desc": "Increases your egg luck by 110%!",
+            "Icon": "rbxassetid://15696961903",
+            "DisplayName": "Lucky Eggs VI"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 7,
+              "Lootbag": null,
+              "_id": "Divine",
+              "Color": null,
+              "DisplayName": "Divine",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 125,
+            "Desc": "Increases your egg luck by 125%!",
+            "Icon": "rbxassetid://15801601280",
+            "DisplayName": "Lucky Eggs VII"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 8,
+              "Lootbag": null,
+              "_id": "Superior",
+              "Color": null,
+              "DisplayName": "Superior",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 140,
+            "Desc": "Increases your egg luck by 140%!",
+            "Icon": "rbxassetid://16318191353",
+            "DisplayName": "Lucky Eggs VIII"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 9,
+              "Lootbag": null,
+              "_id": "Celestial",
+              "Color": null,
+              "DisplayName": "Celestial",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 155,
+            "Desc": "Increases your egg luck by 155%!",
+            "Icon": "rbxassetid://16888547308",
+            "DisplayName": "Lucky Eggs IX"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 9,
+              "Lootbag": null,
+              "_id": "Celestial",
+              "Color": null,
+              "DisplayName": "Celestial",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 160,
+            "Desc": "Increases your egg luck by 160%!",
+            "Icon": "rbxassetid://119384620589816",
+            "DisplayName": "Lucky Eggs X"
+          }
+        ],
+        "EmpoweredBoost": 25,
+        "MaxTier": 10,
+        "PageIcon": "rbxassetid://13824100032"
+      },
+      "dateModified": "2025-07-05T23:28:49.172Z",
+      "dateCreated": null,
+      "collection": "Enchants",
+      "hashShort": "0ac846027ee2fa75"
+    },
+    {
+      "configName": "Enchant | Coins",
+      "category": "Enchants",
+      "configData": {
+        "BaseTier": 1,
+        "DiminishPowerThreshold": 480,
+        "Tiers": [
+          {
+            "Rarity": {
+              "RarityNumber": 1,
+              "Lootbag": null,
+              "_id": "Basic",
+              "Color": null,
+              "DisplayName": "Basic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 20,
+            "Desc": "Increases the number of Coins you earn from breakables by 20%!",
+            "Icon": "rbxassetid://15030243757",
+            "DisplayName": "Coins I"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 2,
+              "Lootbag": null,
+              "_id": "Rare",
+              "Color": null,
+              "DisplayName": "Rare",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 40,
+            "Desc": "Increases the number of Coins you earn from breakables by 40%!",
+            "Icon": "rbxassetid://15030243629",
+            "DisplayName": "Coins II"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 3,
+              "Lootbag": null,
+              "_id": "Epic",
+              "Color": null,
+              "DisplayName": "Epic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 60,
+            "Desc": "Increases the number of Coins you earn from breakables by 60%!",
+            "Icon": "rbxassetid://15030243525",
+            "DisplayName": "Coins III"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 4,
+              "Lootbag": null,
+              "_id": "Legendary",
+              "Color": null,
+              "DisplayName": "Legendary",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 80,
+            "Desc": "Increases the number of Coins you earn from breakables by 80%!",
+            "Icon": "rbxassetid://15030327119",
+            "DisplayName": "Coins IV"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 5,
+              "Lootbag": null,
+              "_id": "Mythical",
+              "Color": null,
+              "DisplayName": "Mythical",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": false,
+              "_script": null
+            },
+            "Power": 100,
+            "Desc": "Increases the number of Coins you earn from breakables by 100%!",
+            "Icon": "rbxassetid://15030243249",
+            "DisplayName": "Coins V"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 6,
+              "Lootbag": null,
+              "_id": "Exotic",
+              "Color": null,
+              "DisplayName": "Exotic",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 120,
+            "Desc": "Increases the number of Coins you earn from breakables by 120%!",
+            "Icon": "rbxassetid://15696962457",
+            "DisplayName": "Coins VI"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 7,
+              "Lootbag": null,
+              "_id": "Divine",
+              "Color": null,
+              "DisplayName": "Divine",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 140,
+            "Desc": "Increases the number of Coins you earn from breakables by 140%!",
+            "Icon": "rbxassetid://15801602105",
+            "DisplayName": "Coins VII"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 8,
+              "Lootbag": null,
+              "_id": "Superior",
+              "Color": null,
+              "DisplayName": "Superior",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 160,
+            "Desc": "Increases the number of Coins you earn from breakables by 160%!",
+            "Icon": "rbxassetid://16318192171",
+            "DisplayName": "Coins VIII"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 9,
+              "Lootbag": null,
+              "_id": "Celestial",
+              "Color": null,
+              "DisplayName": "Celestial",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 180,
+            "Desc": "Increases the number of Coins you earn from breakables by 180%!",
+            "Icon": "rbxassetid://16888547603",
+            "DisplayName": "Coins IX"
+          },
+          {
+            "Rarity": {
+              "RarityNumber": 9,
+              "Lootbag": null,
+              "_id": "Celestial",
+              "Color": null,
+              "DisplayName": "Celestial",
+              "Message": null,
+              "ItemSlot": null,
+              "Gradient": null,
+              "Announce": true,
+              "_script": null
+            },
+            "Power": 200,
+            "Desc": "Increases the number of Coins you earn from breakables by 200%!",
+            "Icon": "rbxassetid://117145802658778",
+            "DisplayName": "Coins X"
+          }
+        ],
+        "EmpoweredBoost": 50,
+        "MaxTier": 10,
+        "PageIcon": "rbxassetid://13824100032"
+      },
+      "dateModified": "2025-07-05T23:28:49.191Z",
+      "dateCreated": null,
+      "collection": "Enchants",
+      "hashShort": "690afe771ae787f9"
+    }
+  ]
+}
