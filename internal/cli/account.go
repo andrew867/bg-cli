@@ -31,6 +31,7 @@ authorized that profile. Data is a cached snapshot, not real time.
 This client is unofficial and not endorsed by BIG Games.`,
 	}
 	cmd.AddCommand(newAccountInventoryCmd(app))
+	cmd.AddCommand(newAccountTiersCmd(app))
 	cmd.AddCommand(newAccountProfileCmd(app))
 	cmd.AddCommand(newAccountCurrenciesCmd(app))
 	cmd.AddCommand(newAccountQuotaCmd(app))
