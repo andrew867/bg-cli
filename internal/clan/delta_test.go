@@ -14,15 +14,16 @@ func TestPositiveNegativeUnchangedAndMultipleCurrencies(t *testing.T) {
 	now := time.Date(2026, 11, 18, 15, 0, 0, 0, time.UTC)
 	baseAt := now.Add(-30 * time.Minute)
 	prior := Prior{
-		File:           "2026-11-18-143000-ps99-summary.json",
-		ExportedAt:     baseAt,
-		ExportedAtText: baseAt.Format(time.RFC3339),
-		SessionID:      "ps99-session",
-		BattleID:       "CozyBattle2026",
-		Points:         "1000",
-		PointsOK:       true,
-		UserPoints:     "100",
-		UserPointsOK:   true,
+		File:            "2026-11-18-143000-ps99-summary.json",
+		ExportedAt:      baseAt,
+		ExportedAtText:  baseAt.Format(time.RFC3339),
+		SessionID:       "ps99-session",
+		BattleID:        "CozyBattle2026",
+		Points:          "1000",
+		PointsOK:        true,
+		UserPoints:      "100",
+		UserPointsOK:    true,
+		CurrenciesKnown: true,
 		Currencies: map[string]string{
 			"PumpkinTokens":      "4500",
 			"PumpkinTycoonCoins": "970000000000",
@@ -35,7 +36,6 @@ func TestPositiveNegativeUnchangedAndMultipleCurrencies(t *testing.T) {
 		LocalStamp:      "2026-11-18-150000",
 		Prefix:          "ps99",
 		SessionID:       "ps99-session",
-		UserID:          DefaultUserID,
 		CurrenciesKnown: true,
 		Currencies: map[string]CurrencyAmount{
 			"PumpkinTokens":      {Amount: "6009", DisplayName: "Pumpkin Tokens"},
@@ -102,7 +102,7 @@ func TestVeryLargeCurrencyBeyond64Bit(t *testing.T) {
 		Currencies:      map[string]CurrencyAmount{"Huge": {Amount: plus.String(), DisplayName: "Huge"}},
 		Priors: []Prior{{
 			File: "a-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
-			SessionID: "s", Currencies: map[string]string{"Huge": huge},
+			SessionID: "s", CurrenciesKnown: true, Currencies: map[string]string{"Huge": huge},
 		}},
 	})
 	got := sum.Windows.Hour.ChangedCurrencies["Huge"]
@@ -124,9 +124,9 @@ func TestVeryLargeCurrencyBeyond64Bit(t *testing.T) {
 	if _, ok := ParseExactInt("2.5"); ok {
 		t.Fatal("fraction accepted")
 	}
-	rate, ok := NetPerHour("1", 7)
-	if !ok || rate != "3600/7" {
-		t.Fatalf("fractional rate=%s", rate)
+	exact, approx, ok := NetPerHourParts("1", 7)
+	if !ok || exact != "3600/7" || approx != "514.285714" {
+		t.Fatalf("fractional rate exact=%s approx=%s", exact, approx)
 	}
 }
 
@@ -137,7 +137,7 @@ func TestSharedBaselineAndIrregularElapsed(t *testing.T) {
 		File: "b-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
 		SessionID: "sess", BattleID: "ActiveBattle", Points: "1000", PointsOK: true,
 		UserPoints: "10", UserPointsOK: true,
-		Currencies: map[string]string{"PumpkinTokens": "100"},
+		CurrenciesKnown: true, Currencies: map[string]string{"PumpkinTokens": "100"},
 	}
 	sum := Build(Input{
 		Now: now, Prefix: "ps99", SessionID: "sess", CurrenciesKnown: true,
@@ -180,7 +180,7 @@ func TestMissingFiveMinuteAndSparseAndFirstSnapshot(t *testing.T) {
 		Priors: []Prior{{
 			File: "old-ps99-summary.json", ExportedAt: sparseAt, ExportedAtText: sparseAt.Format(time.RFC3339),
 			SessionID: "sess", BattleID: "B", Points: "1", PointsOK: true, UserPoints: "1", UserPointsOK: true,
-			Currencies: map[string]string{"PumpkinTokens": "1"},
+			CurrenciesKnown: true, Currencies: map[string]string{"PumpkinTokens": "1"},
 		}},
 	})
 	if sparse.Windows.Five.Valid {
@@ -213,17 +213,17 @@ func TestWholeSessionBaselineIsSharedAndStable(t *testing.T) {
 			{
 				File: "mid-ps99-summary.json", ExportedAt: mid, ExportedAtText: mid.Format(time.RFC3339),
 				SessionID: "sess-a", BattleID: "Battle", Points: "40", PointsOK: true, UserPoints: "4", UserPointsOK: true,
-				Currencies: map[string]string{"PumpkinTokens": "40"},
+				CurrenciesKnown: true, Currencies: map[string]string{"PumpkinTokens": "40"},
 			},
 			{
 				File: "early-ps99-summary.json", ExportedAt: early, ExportedAtText: early.Format(time.RFC3339),
 				SessionID: "sess-a", BattleID: "Battle", Points: "10", PointsOK: true, UserPoints: "1", UserPointsOK: true,
-				Currencies: map[string]string{"PumpkinTokens": "10"},
+				CurrenciesKnown: true, Currencies: map[string]string{"PumpkinTokens": "10"},
 			},
 			{
 				File: "other-ps99-summary.json", ExportedAt: other, ExportedAtText: other.Format(time.RFC3339),
 				SessionID: "sess-b", BattleID: "Battle", Points: "9999", PointsOK: true, UserPoints: "9999", UserPointsOK: true,
-				Currencies: map[string]string{"PumpkinTokens": "9999"},
+				CurrenciesKnown: true, Currencies: map[string]string{"PumpkinTokens": "9999"},
 			},
 		},
 	})
@@ -252,7 +252,7 @@ func TestBattleIDChangeBlocksClanDeltaOnly(t *testing.T) {
 		Priors: []Prior{{
 			File: "a-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
 			SessionID: "sess", BattleID: "BattleA", Points: "10", PointsOK: true, UserPoints: "1", UserPointsOK: true,
-			Currencies: map[string]string{"PumpkinTokens": "3"},
+			CurrenciesKnown: true, Currencies: map[string]string{"PumpkinTokens": "3"},
 		}},
 	})
 	w := sum.Windows.Five
@@ -281,7 +281,7 @@ func TestCurrencyPresentOnOneEndpointAndExplicitZero(t *testing.T) {
 		},
 		Priors: []Prior{{
 			File: "a-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
-			SessionID: "sess",
+			SessionID: "sess", CurrenciesKnown: true,
 			Currencies: map[string]string{
 				"OldCoin": "7",
 				"Zeroed":  "5",
@@ -308,14 +308,14 @@ func TestUserContributionRank(t *testing.T) {
 			"BattleID":"ActiveBattle","Points":56704,"Place":1602,
 			"PointContributions":[
 				{"UserID":111,"Points":500},
-				{"UserID":4092648666,"Points":428},
+				{"UserID":1001,"Points":428},
 				{"UserID":333,"Points":428},
 				{"UserID":222,"Points":100}
 			]
 		}}
 	}`)
 	battleRaw := json.RawMessage(`{"configName":"ActiveBattle","configData":{"Title":"Nine Eyed Clan Battle!","StartTime":` + unix(now.Add(-time.Hour)) + `,"FinishTime":` + unix(now.Add(time.Hour)) + `,"Enabled":null}}`)
-	got := Observe(now, DefaultUserID, "SYN", clanRaw, battleRaw, true, true)
+	got := Observe(now, "1001", "SYN", clanRaw, battleRaw, true, true)
 	if got.Tag != "SYN" || got.Name != "Synthetic" || got.MemberCount == nil || *got.MemberCount != 2 {
 		t.Fatalf("identity=%+v", got)
 	}
@@ -329,11 +329,18 @@ func TestUserContributionRank(t *testing.T) {
 	if b.Place == nil || *b.Place != 1602 || b.UserContribution != "428" || b.UserContributorRank == nil || *b.UserContributorRank != 2 {
 		t.Fatalf("rank=%+v", b)
 	}
-	off := Observe(now, DefaultUserID, "SYN", clanRaw, json.RawMessage(`{"configName":"ActiveBattle","configData":{"Title":"Done","StartTime":1,"FinishTime":2}}`), true, true)
+	anon := Observe(now, "", "SYN", clanRaw, battleRaw, true, true)
+	if anon.ActiveBattle == nil || anon.ActiveBattle.Points != "56704" || anon.ActiveBattle.UserContribution != "" || anon.ActiveBattle.UserContributorRank != nil {
+		t.Fatalf("unconfigured user received a contribution: %+v", anon.ActiveBattle)
+	}
+	if anon.ActiveBattle == nil || !contains(anon.ActiveBattle.Reason, "not configured") {
+		t.Fatalf("missing unconfigured reason: %+v", anon.ActiveBattle)
+	}
+	off := Observe(now, "1001", "SYN", clanRaw, json.RawMessage(`{"configName":"ActiveBattle","configData":{"Title":"Done","StartTime":1,"FinishTime":2}}`), true, true)
 	if off.ActiveBattle != nil {
 		t.Fatal("finished battle reported as active")
 	}
-	disabled := Observe(now, DefaultUserID, "SYN", clanRaw, json.RawMessage(`{"configName":"ActiveBattle","configData":{"Title":"X","StartTime":1,"FinishTime":`+unix(now.Add(time.Hour))+`,"Enabled":false}}`), true, true)
+	disabled := Observe(now, "1001", "SYN", clanRaw, json.RawMessage(`{"configName":"ActiveBattle","configData":{"Title":"X","StartTime":1,"FinishTime":`+unix(now.Add(time.Hour))+`,"Enabled":false}}`), true, true)
 	if disabled.ActiveBattle != nil || !contains(disabled.Reason, "not enabled") {
 		t.Fatalf("disabled=%+v", disabled)
 	}
@@ -418,16 +425,192 @@ func TestCurrenciesFromProfileStayExact(t *testing.T) {
 }
 
 func TestResolveUserID(t *testing.T) {
-	if ResolveUserID("", "") != DefaultUserID || DefaultUserID != "4092648666" {
-		t.Fatal(ResolveUserID("", ""))
+	id, ok := ResolveUserID("", "")
+	if ok || id != "" {
+		t.Fatalf("unconfigured id=%q ok=%v", id, ok)
 	}
-	if ResolveUserID("42", "7") != "42" || ResolveUserID("", "7") != "7" {
-		t.Fatal("override failed")
+	id, ok = ResolveUserID("42", "7")
+	if !ok || id != "42" {
+		t.Fatalf("flag=%s", id)
+	}
+	id, ok = ResolveUserID("", "7")
+	if !ok || id != "7" {
+		t.Fatalf("profile=%s", id)
+	}
+}
+
+func TestHistoryDoesNotCrossAccountsClansOrUsers(t *testing.T) {
+	now := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	closeAt := now.Add(-5 * time.Minute)
+	sameAt := now.Add(-6 * time.Minute)
+	other := Prior{
+		File: "other-ps99-summary.json", ExportedAt: closeAt, ExportedAtText: closeAt.Format(time.RFC3339),
+		SessionID: "sess", AccountID: "acct-b", Profile: "alt", UserID: "222", ClanTag: "SYN",
+		BattleID: "Battle", Points: "1", PointsOK: true, UserPoints: "1", UserPointsOK: true,
+		CurrenciesKnown: true, Currencies: map[string]string{"PumpkinTokens": "1"},
+	}
+	same := Prior{
+		File: "same-ps99-summary.json", ExportedAt: sameAt, ExportedAtText: sameAt.Format(time.RFC3339),
+		SessionID: "sess", AccountID: "acct-a", Profile: "main", UserID: "111", ClanTag: "SYN",
+		BattleID: "Battle", Points: "1000", PointsOK: true, UserPoints: "10", UserPointsOK: true,
+		CurrenciesKnown: true, Currencies: map[string]string{"PumpkinTokens": "10"},
+	}
+	current := Input{
+		Now: now, Prefix: "ps99", SessionID: "sess", AccountID: "acct-a", Profile: "main",
+		UserID: "111", CurrenciesKnown: true,
+		Currencies: map[string]CurrencyAmount{"PumpkinTokens": {Amount: "20", DisplayName: "Pumpkin Tokens"}},
+		Clan:       clanTagged("SYN", "Battle", "2000", "40"),
+		Priors:     []Prior{other, same},
+	}
+	sum := Build(current)
+	w := sum.Windows.Five
+	if !w.Valid || w.BaselineFile != "same-ps99-summary.json" || w.ChangedCurrencies["PumpkinTokens"].Baseline != "10" || w.ChangedCurrencies["PumpkinTokens"].Delta != "10" {
+		t.Fatalf("crossed accounts: file=%s tok=%+v", w.BaselineFile, w.ChangedCurrencies["PumpkinTokens"])
+	}
+	if w.Clan == nil || w.Clan.Points == nil || w.Clan.Points.Delta != "1000" || w.Clan.UserContribution == nil || w.Clan.UserContribution.Delta != "30" {
+		t.Fatalf("same account continuation: %+v", w.Clan)
+	}
+
+	onlyOther := current
+	onlyOther.Priors = []Prior{other}
+	sum = Build(onlyOther)
+	if sum.Windows.Five.Valid || sum.Windows.Five.ChangedCurrencies != nil || sum.Windows.Five.Clan != nil && sum.Windows.Five.Clan.Points != nil {
+		t.Fatalf("other account became a baseline: %+v", sum.Windows.Five)
+	}
+
+	users := current
+	users.UserID = "222"
+	users.Clan = clanTagged("SYN", "Battle", "2000", "50")
+	users.Priors = []Prior{same}
+	sum = Build(users)
+	w = sum.Windows.Five
+	if w.ChangedCurrencies["PumpkinTokens"].Delta != "10" || w.Clan == nil || w.Clan.Points == nil || w.Clan.Points.Delta != "1000" {
+		t.Fatalf("shared totals blocked: tok=%+v clan=%+v", w.ChangedCurrencies["PumpkinTokens"], w.Clan)
+	}
+	if w.Clan.UserContribution == nil || w.Clan.UserContribution.Status != "unavailable" || w.Clan.UserContribution.Delta != "" || !contains(w.Clan.UserContribution.Reason, "differs") {
+		t.Fatalf("user delta leaked: %+v", w.Clan.UserContribution)
+	}
+
+	moved := current
+	moved.Clan = clanTagged("OTHER", "Battle", "2000", "40")
+	moved.Priors = []Prior{same}
+	sum = Build(moved)
+	w = sum.Windows.Five
+	if w.ChangedCurrencies["PumpkinTokens"].Delta != "10" {
+		t.Fatal("currency delta blocked by a clan change")
+	}
+	if w.Clan == nil || w.Clan.Status != "unavailable" || w.Clan.Points != nil || !contains(w.Clan.Reason, "clan tag") {
+		t.Fatalf("clan change produced a delta: %+v", w.Clan)
+	}
+}
+
+func TestMatchingSessionStaysOnTheSameAccount(t *testing.T) {
+	now := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	priors := []Prior{
+		{File: "same.json", ExportedAt: now.Add(-time.Hour), SessionID: "sess-a", AccountID: "acct-a", Profile: "main"},
+		{File: "other.json", ExportedAt: now.Add(-time.Minute), SessionID: "sess-b", AccountID: "acct-b", Profile: "alt"},
+	}
+	if got := MatchingSession(priors, "acct-a", "main"); got != "sess-a" {
+		t.Fatalf("session=%s", got)
+	}
+}
+
+func TestCurrencyListValidity(t *testing.T) {
+	now := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	baseAt := now.Add(-5 * time.Minute)
+	priorKnown := Prior{
+		File: "known-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
+		SessionID: "sess", CurrenciesKnown: true,
+		Currencies: map[string]string{"PumpkinTokens": "10"},
+	}
+	currentUnknown := Build(Input{
+		Now: now, Prefix: "ps99", SessionID: "sess", CurrenciesKnown: false,
+		Currencies: map[string]CurrencyAmount{"PumpkinTokens": {Amount: "99", DisplayName: "Pumpkin Tokens"}},
+		Priors:     []Prior{priorKnown},
+	})
+	w := currentUnknown.Windows.Five
+	if !w.Valid || w.CurrenciesStatus != "unavailable" || !contains(w.CurrenciesReason, "current") || w.ChangedCurrencies != nil {
+		t.Fatalf("current unknown: %+v", w)
+	}
+
+	priorUnknown := Build(Input{
+		Now: now, Prefix: "ps99", SessionID: "sess", CurrenciesKnown: true,
+		Currencies: map[string]CurrencyAmount{"PumpkinTokens": {Amount: "20", DisplayName: "Pumpkin Tokens"}},
+		Priors: []Prior{{
+			File: "failed-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
+			SessionID: "sess", CurrenciesKnown: false,
+			Currencies: map[string]string{"PumpkinTokens": "1"},
+		}},
+	})
+	w = priorUnknown.Windows.Five
+	if w.CurrenciesStatus != "unavailable" || !contains(w.CurrenciesReason, "baseline") || w.ChangedCurrencies != nil {
+		t.Fatalf("prior unknown: %+v", w)
+	}
+
+	knownEmpty := Build(Input{
+		Now: now, Prefix: "ps99", SessionID: "sess", CurrenciesKnown: true,
+		Currencies: map[string]CurrencyAmount{},
+		Priors:     []Prior{priorKnown},
+	})
+	w = knownEmpty.Windows.Five
+	if w.CurrenciesStatus != "" || w.ChangedCurrencies["PumpkinTokens"].Reason != "no longer returned" || w.ChangedCurrencies["PumpkinTokens"].Delta != "" {
+		t.Fatalf("known empty: %+v", w.ChangedCurrencies["PumpkinTokens"])
+	}
+
+	fresh := Build(Input{
+		Now: now, Prefix: "ps99", SessionID: "sess", CurrenciesKnown: true,
+		Currencies: map[string]CurrencyAmount{"Fresh": {Amount: "3", DisplayName: "Fresh"}},
+		Priors: []Prior{{
+			File: "empty-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
+			SessionID: "sess", CurrenciesKnown: true, Currencies: map[string]string{},
+		}},
+	})
+	if got := fresh.Windows.Five.ChangedCurrencies["Fresh"]; got.Reason != "newly observed" || got.Delta != "" {
+		t.Fatalf("newly observed: %+v", got)
+	}
+
+	raw, err := json.Marshal(Build(Input{Now: now, Prefix: "ps99", LocalStamp: "s", CurrenciesKnown: true}))
+	if err != nil || !contains(string(raw), `"currenciesKnown":true`) {
+		t.Fatalf("known flag missing: %s", raw)
+	}
+	raw, err = json.Marshal(Build(Input{Now: now, Prefix: "ps99", LocalStamp: "s", CurrenciesKnown: false}))
+	if err != nil || !contains(string(raw), `"currenciesKnown":false`) {
+		t.Fatalf("unknown flag missing: %s", raw)
+	}
+}
+
+func TestDecodeUnknownCurrencyList(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	doc := summaryDoc(now.Add(-5*time.Minute), "sess", "Battle", "10", "1", map[string]string{"PumpkinTokens": "10"})
+	doc.Current.CurrenciesKnown = false
+	writeSummary(t, dir, "old-ps99-summary.json", doc)
+	scanned, err := Scan(dir, "ps99", now, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scanned.Priors) != 1 || scanned.Priors[0].CurrenciesKnown || len(scanned.Priors[0].Currencies) != 0 {
+		t.Fatalf("unknown list decoded as currencies: %+v", scanned.Priors)
+	}
+}
+
+func TestExtractAccountID(t *testing.T) {
+	if got := ExtractAccountID(json.RawMessage(`{"UserID":1001,"Pets":{"UserID":9}}`)); got != "1001" {
+		t.Fatalf("id=%s", got)
+	}
+	if got := ExtractAccountID(json.RawMessage(`{"Rank":12,"Currency":{"Diamonds":{"_am":1}}}`)); got != "" {
+		t.Fatalf("rank used as account id: %s", got)
 	}
 }
 
 func clanWith(id, points, user string) ClanCurrent {
 	return ClanCurrent{ActiveBattle: &BattleCurrent{ID: id, Points: points, UserContribution: user}}
+}
+
+func clanTagged(tag, id, points, user string) ClanCurrent {
+	c := clanWith(id, points, user)
+	c.Tag = tag
+	return c
 }
 
 func unix(t time.Time) string {
@@ -474,8 +657,9 @@ func summaryDoc(at time.Time, session, battle, points, user string, curs map[str
 		ExportedAt:    at.Format(time.RFC3339),
 		SessionID:     session,
 		Current: Current{
-			Currencies: cur,
-			Clan:       clanWith(battle, points, user),
+			CurrenciesKnown: true,
+			Currencies:      cur,
+			Clan:            clanWith(battle, points, user),
 		},
 	}
 }

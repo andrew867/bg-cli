@@ -21,8 +21,14 @@ type clanSnapState struct {
 	ExtendedFetched bool
 }
 
-func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, prefix, profile string, now time.Time, man *snapshot.Manifest, st clanSnapState, clanTag, userID string) {
-	userID = a.configuredPS99UserID(userID)
+func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, prefix, profile string, now time.Time, man *snapshot.Manifest, st clanSnapState, opt snapshotOptions) {
+	userID, userOK := a.configuredPS99UserID(opt.UserID)
+	var warnings []string
+	if !userOK {
+		msg := "player user id is not configured; contribution and rank omitted"
+		warnings = append(warnings, msg)
+		a.notice("%s", msg)
+	}
 	if len(st.ProfileBody) == 0 && !st.ProfileFetched {
 		raw, err := a.fetchAccountData(ctx, "/v1/account/profile", api.ScopeProfile)
 		if err != nil {
@@ -31,8 +37,8 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			st.ProfileBody = raw
 		}
 	}
-	tag := clanTag
-	tagField := "--clan-tag"
+	accountID := a.configuredAccountID(st.ProfileBody)
+	tag := opt.ClanTag
 	if tag == "" {
 		var ext json.RawMessage
 		if len(st.ExtendedBody) == 0 && !st.ExtendedFetched {
@@ -45,42 +51,42 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		} else {
 			ext = st.ExtendedBody
 		}
-		if found, field, ok := clan.ExtractTag(st.ProfileBody, ext); ok {
+		if found, _, ok := clan.ExtractTag(st.ProfileBody, ext); ok {
 			tag = found
-			tagField = field
 		}
 	}
-	_ = tagField
 
 	currencies, currenciesKnown := clan.CurrenciesFromProfile(st.ProfileBody)
+	telemetry := map[string]any{}
 
 	var clanRaw json.RawMessage
 	clanOK := false
+	var clanErr error
 	if tag != "" {
 		if err := api.ValidateClanTag(tag); err != nil {
+			clanErr = err
 			a.notice("clan tag rejected: %v", err)
 		} else {
 			clanName := snapshot.FileName(stamp, collision, prefix, "clan.json")
-			path := "/api/clan/" + url.PathEscape(tag)
-			pr, err := a.getPublicCached(ctx, path, nil, api.BodyLimitDefault)
-			if err != nil {
-				man.OK = false
+			clanPath := "/api/clan/" + url.PathEscape(tag)
+			pr, err := a.getPublicFresh(ctx, clanPath, nil, api.BodyLimitDefault)
+			switch {
+			case err != nil:
+				clanErr = err
 				a.notice("clan fetch failed: %v", err)
 				man.Files = append(man.Files, failRec(clanName, "clan-json", err))
-			} else if pr.Res.HTTPStatus < 200 || pr.Res.HTTPStatus >= 300 {
-				man.OK = false
-				err = fmt.Errorf("clan HTTP %d", pr.Res.HTTPStatus)
-				a.notice("%s", err.Error())
-				man.Files = append(man.Files, failRec(clanName, "clan-json", err))
-			} else if len(pr.Res.Data) == 0 || string(pr.Res.Data) == "null" {
-				man.OK = false
-				err = fmt.Errorf("clan payload is empty")
-				a.notice("%s", err.Error())
-				man.Files = append(man.Files, failRec(clanName, "clan-json", err))
-			} else {
+			case pr.Res.HTTPStatus < 200 || pr.Res.HTTPStatus >= 300:
+				clanErr = fmt.Errorf("clan HTTP %d", pr.Res.HTTPStatus)
+				a.notice("%s", clanErr.Error())
+				man.Files = append(man.Files, failRec(clanName, "clan-json", clanErr))
+			case len(pr.Res.Data) == 0 || string(pr.Res.Data) == "null":
+				clanErr = fmt.Errorf("clan payload is empty")
+				a.notice("%s", clanErr.Error())
+				man.Files = append(man.Files, failRec(clanName, "clan-json", clanErr))
+			default:
 				clanRaw = append(json.RawMessage(nil), pr.Res.Data...)
 				clanOK = true
-				source := publicSource(path, pr, now)
+				source := publicSource(clanPath, pr, now)
 				env := output.NewSuccess("account snapshot clan", source, output.DefaultFreshnessNull(), map[string]any{
 					"tag":  tag,
 					"clan": clanRaw,
@@ -97,33 +103,62 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			}
 		}
 	} else {
+		clanErr = fmt.Errorf("clan tag is absent from profile and extended profile")
 		a.notice("clan tag is absent from profile and extended profile; clan.json omitted")
+	}
+	switch {
+	case clanErr != nil:
+		telemetry["clan"] = "unavailable"
+		telemetry["clanError"] = clanErr.Error()
+		warnings = append(warnings, "clan telemetry unavailable: "+clanErr.Error())
+		if opt.RequireClan {
+			man.OK = false
+		}
+	case !clanOK:
+		telemetry["clan"] = "unavailable"
+		telemetry["clanError"] = "clan file was not saved"
+		warnings = append(warnings, "clan telemetry unavailable: clan file was not saved")
+	default:
+		telemetry["clan"] = "ok"
 	}
 
 	battleName := snapshot.FileName(stamp, collision, prefix, "clanbattle.json")
 	var battleRaw json.RawMessage
 	battleFetched := false
+	var battleErr error
+	var battlePR publicResult
 	const battlePath = "/api/activeClanBattle"
-	bpr, berr := a.getPublicCached(ctx, battlePath, nil, api.BodyLimitDefault)
-	if berr != nil {
-		man.OK = false
+	bpr, berr := a.getPublicFresh(ctx, battlePath, nil, api.BodyLimitDefault)
+	battlePR = bpr
+	switch {
+	case berr != nil:
+		battleErr = berr
 		a.notice("active clan battle fetch failed: %v", berr)
 		man.Files = append(man.Files, failRec(battleName, "clan-battle-json", berr))
-	} else if bpr.Res.HTTPStatus < 200 || bpr.Res.HTTPStatus >= 300 {
-		man.OK = false
-		err := fmt.Errorf("active clan battle HTTP %d", bpr.Res.HTTPStatus)
-		a.notice("%s", err.Error())
-		man.Files = append(man.Files, failRec(battleName, "clan-battle-json", err))
-	} else {
+	case bpr.Res.HTTPStatus < 200 || bpr.Res.HTTPStatus >= 300:
+		battleErr = fmt.Errorf("active clan battle HTTP %d", bpr.Res.HTTPStatus)
+		a.notice("%s", battleErr.Error())
+		man.Files = append(man.Files, failRec(battleName, "clan-battle-json", battleErr))
+	default:
 		battleFetched = true
 		if len(bpr.Res.Data) > 0 && string(bpr.Res.Data) != "null" {
 			battleRaw = append(json.RawMessage(nil), bpr.Res.Data...)
 		}
 	}
+	if battleErr != nil {
+		telemetry["activeBattle"] = "unavailable"
+		telemetry["activeBattleError"] = battleErr.Error()
+		warnings = append(warnings, "active battle telemetry unavailable: "+battleErr.Error())
+		if opt.RequireClan {
+			man.OK = false
+		}
+	} else {
+		telemetry["activeBattle"] = "ok"
+	}
 
 	observed := clan.Observe(now, userID, tag, clanRaw, battleRaw, clanOK, battleFetched)
 	if observed.ActiveBattle != nil && battleFetched {
-		source := publicSource(battlePath, bpr, now)
+		source := publicSource(battlePath, battlePR, now)
 		env := output.NewSuccess("account snapshot clan battle", source, output.DefaultFreshnessNull(), map[string]any{
 			"active": true,
 			"battle": battleRaw,
@@ -140,7 +175,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 
 	sumName := snapshot.FileName(stamp, collision, prefix, "summary.json")
 	scanned, scanErr := clan.Scan(absDir, prefix, now, sumName)
-	warnings := append([]string{}, scanned.Warnings...)
+	warnings = append(warnings, scanned.Warnings...)
 	if scanErr != nil {
 		warnings = append(warnings, fmt.Sprintf("summary scan failed: %v", scanErr))
 		a.notice("summary scan failed: %v", scanErr)
@@ -148,9 +183,19 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	for _, w := range scanned.Warnings {
 		a.notice("summary history: %s", w)
 	}
-	sessionID := scanned.SessionID
-	if sessionID == "" {
+	sessionID := opt.SessionID
+	switch {
+	case sessionID != "":
+	case opt.NewSession:
 		sessionID = clan.NewSessionID(prefix, stamp)
+		if collision != "" {
+			sessionID += "-" + collision
+		}
+	default:
+		sessionID = clan.MatchingSession(scanned.Priors, accountID, profile)
+		if sessionID == "" {
+			sessionID = clan.NewSessionID(prefix, stamp)
+		}
 	}
 	sum := clan.Build(clan.Input{
 		Now:             now,
@@ -158,6 +203,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		CollisionSuffix: collision,
 		Prefix:          prefix,
 		Profile:         profile,
+		AccountID:       accountID,
 		UserID:          userID,
 		SessionID:       sessionID,
 		Currencies:      currencies,
@@ -180,7 +226,13 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		man.OK = false
 	}
 	man.Summary["sessionId"] = sum.SessionID
-	man.Summary["userId"] = sum.UserID
+	if sum.AccountID != "" {
+		man.Summary["accountId"] = sum.AccountID
+	}
+	if sum.UserID != "" {
+		man.Summary["userId"] = sum.UserID
+	}
+	man.Summary["clanTelemetry"] = telemetry
 	man.Summary["clan"] = sum.Current.Clan
 	man.Summary["windows"] = sum.Windows
 	fmt.Fprint(a.stderr(), clan.FormatConsole(sum))

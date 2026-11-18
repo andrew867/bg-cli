@@ -100,17 +100,24 @@ func decodePrior(name string, body []byte, now time.Time) (Prior, string, bool) 
 		return Prior{}, "", false
 	}
 	p := Prior{
-		File:           name,
-		ExportedAt:     exported,
-		ExportedAtText: sum.ExportedAt,
-		SessionID:      sum.SessionID,
-		Currencies:     map[string]string{},
+		File:            name,
+		ExportedAt:      exported,
+		ExportedAtText:  sum.ExportedAt,
+		SessionID:       sum.SessionID,
+		AccountID:       strings.TrimSpace(sum.AccountID),
+		Profile:         sum.Profile,
+		UserID:          strings.TrimSpace(sum.UserID),
+		ClanTag:         sum.Current.Clan.Tag,
+		CurrenciesKnown: sum.Current.CurrenciesKnown,
+		Currencies:      map[string]string{},
 	}
-	for id, cur := range sum.Current.Currencies {
-		if cur.Amount == "" {
-			continue
+	if p.CurrenciesKnown {
+		for id, cur := range sum.Current.Currencies {
+			if cur.Amount == "" {
+				continue
+			}
+			p.Currencies[id] = CanonicalAmount(cur.Amount)
 		}
-		p.Currencies[id] = CanonicalAmount(cur.Amount)
 	}
 	if b := sum.Current.Clan.ActiveBattle; b != nil && b.ID != "" {
 		p.BattleID = b.ID

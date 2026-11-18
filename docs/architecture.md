@@ -35,6 +35,10 @@ player|leaderboard|collection|market|clan *
   → optional public cache lookup
   → unauthenticated GET
   → JSON envelope on stdout
+
+account snapshot clan and activeClanBattle
+  → unauthenticated GET with the public cache bypassed
+  → summary.json deltas use that retrieval, not a cached body
 ```
 
 ## Design constraints

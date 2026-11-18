@@ -2,6 +2,7 @@ package clan
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,7 @@ type Summary struct {
 	SessionID       string   `json:"sessionId"`
 	Prefix          string   `json:"prefix,omitempty"`
 	Profile         string   `json:"profile,omitempty"`
+	AccountID       string   `json:"accountId,omitempty"`
 	UserID          string   `json:"userId,omitempty"`
 	Current         Current  `json:"current"`
 	Windows         Windows  `json:"windows"`
@@ -32,8 +34,9 @@ type Summary struct {
 
 // Current holds the full currency map and the clan row for this snapshot.
 type Current struct {
-	Currencies map[string]CurrencyAmount `json:"currencies"`
-	Clan       ClanCurrent               `json:"clan"`
+	CurrenciesKnown bool                      `json:"currenciesKnown"`
+	Currencies      map[string]CurrencyAmount `json:"currencies"`
+	Clan            ClanCurrent               `json:"clan"`
 }
 
 // Windows holds one shared baseline per interval.
@@ -54,18 +57,21 @@ type Window struct {
 	BaselineErrorSeconds *int64                   `json:"baselineErrorSeconds,omitempty"`
 	Valid                bool                     `json:"valid"`
 	Reason               string                   `json:"reason,omitempty"`
+	CurrenciesStatus     string                   `json:"currenciesStatus,omitempty"`
+	CurrenciesReason     string                   `json:"currenciesReason,omitempty"`
 	ChangedCurrencies    map[string]CurrencyDelta `json:"changedCurrencies,omitempty"`
 	Clan                 *ClanWindow              `json:"clan,omitempty"`
 }
 
 // CurrencyDelta is one currency whose balance changed, or an unavailable comparison.
 type CurrencyDelta struct {
-	Status     string `json:"status,omitempty"`
-	Reason     string `json:"reason,omitempty"`
-	Baseline   string `json:"baseline,omitempty"`
-	Current    string `json:"current,omitempty"`
-	Delta      string `json:"delta,omitempty"`
-	NetPerHour string `json:"netPerHour,omitempty"`
+	Status           string `json:"status,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+	Baseline         string `json:"baseline,omitempty"`
+	Current          string `json:"current,omitempty"`
+	Delta            string `json:"delta,omitempty"`
+	NetPerHour       string `json:"netPerHour,omitempty"`
+	NetPerHourApprox string `json:"netPerHourApprox,omitempty"`
 }
 
 // ClanWindow is the clan-point and contribution delta for the shared baseline.
@@ -80,26 +86,32 @@ type ClanWindow struct {
 
 // MetricDelta is an exact signed change and net per hour.
 type MetricDelta struct {
-	Status     string `json:"status,omitempty"`
-	Reason     string `json:"reason,omitempty"`
-	Baseline   string `json:"baseline,omitempty"`
-	Current    string `json:"current,omitempty"`
-	Delta      string `json:"delta,omitempty"`
-	NetPerHour string `json:"netPerHour,omitempty"`
+	Status           string `json:"status,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+	Baseline         string `json:"baseline,omitempty"`
+	Current          string `json:"current,omitempty"`
+	Delta            string `json:"delta,omitempty"`
+	NetPerHour       string `json:"netPerHour,omitempty"`
+	NetPerHourApprox string `json:"netPerHourApprox,omitempty"`
 }
 
 // Prior is one earlier summary used as a baseline candidate.
 type Prior struct {
-	File           string
-	ExportedAt     time.Time
-	ExportedAtText string
-	SessionID      string
-	BattleID       string
-	Points         string
-	PointsOK       bool
-	UserPoints     string
-	UserPointsOK   bool
-	Currencies     map[string]string
+	File            string
+	ExportedAt      time.Time
+	ExportedAtText  string
+	SessionID       string
+	AccountID       string
+	Profile         string
+	UserID          string
+	ClanTag         string
+	BattleID        string
+	Points          string
+	PointsOK        bool
+	UserPoints      string
+	UserPointsOK    bool
+	CurrenciesKnown bool
+	Currencies      map[string]string
 }
 
 // Input is the current snapshot plus priors already scanned from summary files.
@@ -109,6 +121,7 @@ type Input struct {
 	CollisionSuffix string
 	Prefix          string
 	Profile         string
+	AccountID       string
 	UserID          string
 	SessionID       string
 	Currencies      map[string]CurrencyAmount
@@ -146,10 +159,7 @@ func Build(in Input) Summary {
 	if session == "" {
 		session = NewSessionID(in.Prefix, in.LocalStamp)
 	}
-	user := in.UserID
-	if user == "" {
-		user = DefaultUserID
-	}
+	user := strings.TrimSpace(in.UserID)
 	nowText := in.Now.Format(time.RFC3339)
 	sum := Summary{
 		SchemaVersion:   SchemaVersion,
@@ -159,10 +169,12 @@ func Build(in Input) Summary {
 		SessionID:       session,
 		Prefix:          in.Prefix,
 		Profile:         in.Profile,
+		AccountID:       strings.TrimSpace(in.AccountID),
 		UserID:          user,
 		Current: Current{
-			Currencies: in.Currencies,
-			Clan:       in.Clan,
+			CurrenciesKnown: in.CurrenciesKnown,
+			Currencies:      in.Currencies,
+			Clan:            in.Clan,
 		},
 		Warnings: append([]string(nil), in.Warnings...),
 	}
@@ -178,7 +190,7 @@ func Build(in Input) Summary {
 
 func buildWindow(in Input, session, nowText string, requested *int64) Window {
 	w := Window{CurrentAt: nowText, RequestedSeconds: requested}
-	base, ok := selectBaseline(in.Priors, in.Now, session, requested)
+	base, ok := selectBaseline(in.Priors, in.Now, session, in.AccountID, in.Profile, requested)
 	if !ok {
 		w.Reason = "no earlier snapshot in this session"
 		return w
@@ -210,20 +222,28 @@ func buildWindow(in Input, session, nowText string, requested *int64) Window {
 		}
 		w.Valid = true
 	}
-	if in.CurrenciesKnown {
+	switch {
+	case in.CurrenciesKnown && base.CurrenciesKnown:
 		w.ChangedCurrencies = diffCurrencies(base.Currencies, in.Currencies, elapsed)
-	} else {
-		w.Reason = joinReason(w.Reason, "current currency list is absent")
+	case !in.CurrenciesKnown && !base.CurrenciesKnown:
+		w.CurrenciesStatus = "unavailable"
+		w.CurrenciesReason = "currency list is unknown on the baseline and the current snapshot"
+	case !base.CurrenciesKnown:
+		w.CurrenciesStatus = "unavailable"
+		w.CurrenciesReason = "baseline currency list is unknown"
+	default:
+		w.CurrenciesStatus = "unavailable"
+		w.CurrenciesReason = "current currency list is unknown"
 	}
-	w.Clan = diffClan(base, in.Clan, elapsed)
+	w.Clan = diffClan(base, in.Clan, elapsed, strings.TrimSpace(in.UserID))
 	return w
 }
 
-func selectBaseline(priors []Prior, now time.Time, session string, requested *int64) (Prior, bool) {
+func selectBaseline(priors []Prior, now time.Time, session, accountID, profile string, requested *int64) (Prior, bool) {
 	var best Prior
 	found := false
 	for _, p := range priors {
-		if p.SessionID != session || !p.ExportedAt.Before(now) {
+		if p.SessionID != session || !sameAccount(accountID, profile, p.AccountID, p.Profile) || !p.ExportedAt.Before(now) {
 			continue
 		}
 		age := now.Unix() - p.ExportedAt.Unix()
@@ -305,9 +325,7 @@ func diffCurrencies(base map[string]string, current map[string]CurrencyAmount, e
 				break
 			}
 			delta.Delta = d
-			if rate, ok := NetPerHour(d, elapsed); ok {
-				delta.NetPerHour = rate
-			} else {
+			if !setCurrencyRate(&delta, d, elapsed) {
 				delta.Status = "unavailable"
 				delta.Reason = "elapsed time is not positive"
 			}
@@ -325,7 +343,7 @@ func diffCurrencies(base map[string]string, current map[string]CurrencyAmount, e
 	return out
 }
 
-func diffClan(base Prior, clan ClanCurrent, elapsed int64) *ClanWindow {
+func diffClan(base Prior, clan ClanCurrent, elapsed int64, userID string) *ClanWindow {
 	curID, curPoints, curPointsOK, curUser, curUserOK := currentBattle(clan)
 	out := &ClanWindow{BattleID: curID, BaselineBattleID: base.BattleID}
 	if curID == "" || base.BattleID == "" || curID != base.BattleID {
@@ -342,9 +360,42 @@ func diffClan(base Prior, clan ClanCurrent, elapsed int64) *ClanWindow {
 		}
 		return out
 	}
+	if ok, reason := clanTagsCompatible(base.ClanTag, clan.Tag); !ok {
+		out.Status = "unavailable"
+		out.Reason = reason
+		return out
+	}
 	out.Points = metric(base.Points, base.PointsOK, curPoints, curPointsOK, elapsed, "clan battle points")
-	out.UserContribution = metric(base.UserPoints, base.UserPointsOK, curUser, curUserOK, elapsed, "player contribution")
+	out.UserContribution = userContribution(base, curUser, curUserOK, elapsed, userID)
 	return out
+}
+
+func clanTagsCompatible(base, current string) (bool, string) {
+	if base == current {
+		return true, ""
+	}
+	if base == "" || current == "" {
+		return false, "clan tag is absent on one side of the comparison"
+	}
+	return false, "clan tag differs from the baseline"
+}
+
+func userContribution(base Prior, cur string, curOK bool, elapsed int64, userID string) *MetricDelta {
+	switch {
+	case userID == "" && base.UserID == "":
+		return metric(base.UserPoints, base.UserPointsOK, cur, curOK, elapsed, "player contribution")
+	case userID == "":
+		d := &MetricDelta{Status: "unavailable", Reason: "player user id is not configured"}
+		return d
+	case base.UserID == "":
+		d := &MetricDelta{Status: "unavailable", Reason: "baseline player user id is absent"}
+		return d
+	case userID != base.UserID:
+		d := &MetricDelta{Status: "unavailable", Reason: "player user id differs from the baseline"}
+		return d
+	default:
+		return metric(base.UserPoints, base.UserPointsOK, cur, curOK, elapsed, "player contribution")
+	}
 }
 
 func currentBattle(clan ClanCurrent) (id, points string, pointsOK bool, user string, userOK bool) {
@@ -382,12 +433,34 @@ func metric(base string, baseOK bool, cur string, curOK bool, elapsed int64, nam
 		return d
 	}
 	d.Delta = delta
-	rate, ok := NetPerHour(delta, elapsed)
-	if !ok {
+	if !setMetricRate(d, delta, elapsed) {
 		d.Status = "unavailable"
 		d.Reason = "elapsed time is not positive"
 		return d
 	}
-	d.NetPerHour = rate
 	return d
+}
+
+func setCurrencyRate(d *CurrencyDelta, delta string, elapsed int64) bool {
+	exact, approx, ok := NetPerHourParts(delta, elapsed)
+	if !ok {
+		return false
+	}
+	d.NetPerHour = exact
+	if approx != exact {
+		d.NetPerHourApprox = approx
+	}
+	return true
+}
+
+func setMetricRate(d *MetricDelta, delta string, elapsed int64) bool {
+	exact, approx, ok := NetPerHourParts(delta, elapsed)
+	if !ok {
+		return false
+	}
+	d.NetPerHour = exact
+	if approx != exact {
+		d.NetPerHourApprox = approx
+	}
+	return true
 }

@@ -217,6 +217,10 @@ func applyBattleRow(battle *BattleCurrent, clanRaw json.RawMessage, battleID, us
 	}
 	n := int64(len(contribs))
 	battle.setContrib(&n)
+	if strings.TrimSpace(userID) == "" {
+		battle.Reason = joinReason(battle.Reason, "player user id is not configured")
+		return
+	}
 	userCanon, userOK := ParseExactInt(userID)
 	if !userOK {
 		battle.Reason = joinReason(battle.Reason, "configured user id is not an integer")

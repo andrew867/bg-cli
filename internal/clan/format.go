@@ -58,7 +58,13 @@ func FormatConsole(sum Summary) string {
 
 	pref, prefName := preferredWindow(sum.Windows)
 	b.WriteString("\nChanged currencies:\n")
-	if pref == nil || !pref.Valid || len(pref.ChangedCurrencies) == 0 {
+	if pref == nil || !pref.Valid || (pref.CurrenciesStatus == "unavailable" && len(pref.ChangedCurrencies) == 0) {
+		if pref != nil && pref.Valid && pref.CurrenciesReason != "" {
+			fmt.Fprintf(&b, "(%s)\n", pref.CurrenciesReason)
+		} else {
+			b.WriteString("(none)\n")
+		}
+	} else if len(pref.ChangedCurrencies) == 0 {
 		b.WriteString("(none)\n")
 	} else {
 		elapsed := int64(0)
@@ -73,7 +79,7 @@ func FormatConsole(sum Summary) string {
 				continue
 			}
 			fmt.Fprintf(&b, "%s  %s  %s / %s  %s/h net\n",
-				id, formatCount(row.Current), formatSigned(row.Delta), formatElapsed(elapsed), formatSigned(row.NetPerHour))
+				id, formatCount(row.Current), formatSigned(row.Delta), formatElapsed(elapsed), formatRate(row.NetPerHour, row.NetPerHourApprox))
 		}
 		_ = prefName
 	}
@@ -118,7 +124,7 @@ func writeWindowLine(b *strings.Builder, label string, w Window) {
 	}
 	clan := "clan points unavailable"
 	if w.Clan != nil && w.Clan.Status == "" && w.Clan.Points != nil && w.Clan.Points.Delta != "" {
-		clan = fmt.Sprintf("clan %s / %s  %s/h net", formatSigned(w.Clan.Points.Delta), formatElapsed(elapsed), formatSigned(w.Clan.Points.NetPerHour))
+		clan = fmt.Sprintf("clan %s / %s  %s/h net", formatSigned(w.Clan.Points.Delta), formatElapsed(elapsed), formatRate(w.Clan.Points.NetPerHour, w.Clan.Points.NetPerHourApprox))
 	} else if w.Clan != nil && w.Clan.Reason != "" {
 		clan = w.Clan.Reason
 	}
@@ -151,6 +157,16 @@ func formatElapsed(seconds int64) string {
 		return fmt.Sprintf("%dm", seconds/60)
 	}
 	return fmt.Sprintf("%dh%dm", seconds/3600, (seconds%3600)/60)
+}
+
+func formatRate(exact, approx string) string {
+	if approx != "" && approx != exact {
+		if strings.HasPrefix(exact, "-") || strings.HasPrefix(approx, "-") {
+			return approx + " (" + exact + ")"
+		}
+		return "+" + approx + " (" + exact + ")"
+	}
+	return formatSigned(exact)
 }
 
 func formatSigned(s string) string {

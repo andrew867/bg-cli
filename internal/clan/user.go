@@ -2,17 +2,14 @@ package clan
 
 import "strings"
 
-// DefaultUserID is the configured Pet Simulator 99 user id used for
-// contribution and rank when the profile and the --user-id flag are empty.
-const DefaultUserID = "4092648666"
-
-// ResolveUserID picks the flag, then the configured profile value, then DefaultUserID.
-func ResolveUserID(flag, configured string) string {
+// ResolveUserID returns the explicit flag, then the profile ps99UserId.
+// The third result is false when neither is set. There is no built-in user id.
+func ResolveUserID(flag, configured string) (string, bool) {
 	if s := strings.TrimSpace(flag); s != "" {
-		return s
+		return s, true
 	}
 	if s := strings.TrimSpace(configured); s != "" {
-		return s
+		return s, true
 	}
-	return DefaultUserID
+	return "", false
 }

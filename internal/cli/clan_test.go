@@ -16,6 +16,8 @@ import (
 
 	"github.com/andrew867/bg-cli/internal/auth"
 	"github.com/andrew867/bg-cli/internal/clan"
+	"github.com/andrew867/bg-cli/internal/config"
+	"github.com/andrew867/bg-cli/internal/exitcode"
 	"github.com/andrew867/bg-cli/internal/output"
 	"github.com/andrew867/bg-cli/internal/snapshot"
 )
@@ -118,7 +120,7 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 	start := strconv.FormatInt(fixed.Add(-time.Hour).Unix(), 10)
 	finish := strconv.FormatInt(fixed.Add(time.Hour).Unix(), 10)
 	battle := []byte(`{"status":"ok","data":{"configName":"ActiveBattle","configData":{"Title":"Live","StartTime":` + start + `,"FinishTime":` + finish + `,"Enabled":null}}}`)
-	clanBody := []byte(`{"status":"ok","data":{"Name":"Synthetic","Members":[{},{}],"Battles":{"Christmas2023":{"BattleID":"Christmas2023","Points":10},"ActiveBattle":{"BattleID":"ActiveBattle","Points":2000,"Place":4,"PointContributions":[{"UserID":111,"Points":500},{"UserID":4092648666,"Points":428}]}}}}`)
+	clanBody := []byte(`{"status":"ok","data":{"Name":"Synthetic","Members":[{},{}],"Battles":{"Christmas2023":{"BattleID":"Christmas2023","Points":10},"ActiveBattle":{"BattleID":"ActiveBattle","Points":2000,"Place":4,"PointContributions":[{"UserID":111,"Points":500},{"UserID":1001,"Points":428}]}}}}`)
 
 	var sawAuth bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -152,13 +154,15 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 		SchemaVersion: clan.SchemaVersion,
 		ExportedAt:    priorAt.Format(time.RFC3339),
 		SessionID:     "ps99-session",
+		Profile:       "main",
 		Current: clan.Current{
+			CurrenciesKnown: true,
 			Currencies: map[string]clan.CurrencyAmount{
 				"Diamonds":           {Amount: "10", DisplayName: "Diamonds"},
 				"PumpkinTokens":      {Amount: "4500", DisplayName: "Pumpkin Tokens"},
 				"PumpkinTycoonCoins": {Amount: "970000000000", DisplayName: "Pumpkin Tycoon Coins"},
 			},
-			Clan: clan.ClanCurrent{ActiveBattle: &clan.BattleCurrent{ID: "ActiveBattle", Points: "1000", UserContribution: "400"}},
+			Clan: clan.ClanCurrent{Tag: "SYN", ActiveBattle: &clan.BattleCurrent{ID: "ActiveBattle", Points: "1000", UserContribution: "400"}},
 		},
 	}
 	raw, _ := json.Marshal(prior)
@@ -180,7 +184,7 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
 		BaseURL: srv.URL, HTTPClient: srv.Client(),
 		Clock: output.FixedClock{T: fixed},
-	}, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99"})
+	}, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99", "--user-id", "1001"})
 	if code != 0 {
 		t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
@@ -216,8 +220,8 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 	if sum.Current.Clan.ActiveBattle == nil || sum.Current.Clan.ActiveBattle.UserContributorRank == nil || *sum.Current.Clan.ActiveBattle.UserContributorRank != 2 {
 		t.Fatalf("rank=%+v", sum.Current.Clan.ActiveBattle)
 	}
-	if sum.UserID != clan.DefaultUserID {
-		t.Fatalf("user=%s", sum.UserID)
+	if sum.UserID != "1001" || !sum.Current.CurrenciesKnown {
+		t.Fatalf("user=%s known=%v", sum.UserID, sum.Current.CurrenciesKnown)
 	}
 	if !strings.Contains(stderr.String(), "PumpkinTokens") || strings.Contains(stderr.String(), "Diamonds") {
 		t.Fatalf("console=%s", stderr.String())
@@ -268,5 +272,344 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 		if strings.Contains(ent.Name(), ".tmp") || strings.HasPrefix(ent.Name(), ".bg-cli-snap-") {
 			t.Fatalf("partial file left: %s", ent.Name())
 		}
+	}
+}
+
+func TestSnapshotSessionResetAndContinuation(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	fixed := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	inv, ext := accountFixtureBytes(t)
+	profile := []byte(`{"status":"ok","data":{"Currency":{"Diamonds":{"id":"Diamonds","_am":5,"displayName":"Diamonds"}}}}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/inventory":
+			_, _ = w.Write(inv)
+		case "/v1/account/profile":
+			_, _ = w.Write(profile)
+		case "/v1/account/extendedProfile":
+			_, _ = w.Write(ext)
+		case "/api/activeClanBattle":
+			_, _ = w.Write(inactiveClanBattleBody)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	plant := func(t *testing.T, dir string) {
+		t.Helper()
+		prior := clan.Summary{
+			SchemaVersion: clan.SchemaVersion,
+			ExportedAt:    fixed.Add(-5 * time.Minute).Format(time.RFC3339),
+			SessionID:     "kept-session",
+			Profile:       "main",
+			Current: clan.Current{
+				CurrenciesKnown: true,
+				Currencies:      map[string]clan.CurrencyAmount{"Diamonds": {Amount: "1", DisplayName: "Diamonds"}},
+			},
+		}
+		raw, _ := json.Marshal(prior)
+		if err := os.WriteFile(filepath.Join(dir, "2026-11-18-155500-ps99-summary.json"), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func(t *testing.T, dir string, extra ...string) clan.Summary {
+		t.Helper()
+		args := []string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99"}
+		args = append(args, extra...)
+		var stdout, stderr bytes.Buffer
+		code := Execute(Deps{
+			Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+			BaseURL: srv.URL, HTTPClient: srv.Client(),
+			Clock: output.FixedClock{T: fixed},
+		}, args)
+		if code != 0 {
+			t.Fatalf("exit %d stderr=%s", code, stderr.String())
+		}
+		return readSummary(t, dir, fixed)
+	}
+
+	continued := t.TempDir()
+	plant(t, continued)
+	sum := run(t, continued)
+	if sum.SessionID != "kept-session" || !sum.Windows.Five.Valid || sum.Windows.Five.BaselineFile != "2026-11-18-155500-ps99-summary.json" {
+		t.Fatalf("restart did not continue the session: %+v", sum.Windows.Five)
+	}
+	if sum.Windows.Five.ChangedCurrencies["Diamonds"].Delta != "4" {
+		t.Fatalf("continued delta: %+v", sum.Windows.Five.ChangedCurrencies["Diamonds"])
+	}
+
+	reset := t.TempDir()
+	plant(t, reset)
+	sum = run(t, reset, "--new-session")
+	if sum.SessionID == "kept-session" || sum.Windows.Five.Valid || sum.Windows.Five.ChangedCurrencies != nil {
+		t.Fatalf("new session reused the old baseline: session=%s window=%+v", sum.SessionID, sum.Windows.Five)
+	}
+	if !strings.Contains(sum.Windows.Five.Reason, "no earlier snapshot") {
+		t.Fatalf("reason=%s", sum.Windows.Five.Reason)
+	}
+	if _, err := os.Stat(filepath.Join(reset, "2026-11-18-155500-ps99-summary.json")); err != nil {
+		t.Fatal("old summary was removed")
+	}
+
+	explicit := t.TempDir()
+	plant(t, explicit)
+	sum = run(t, explicit, "--session-id", "scripted-1")
+	if sum.SessionID != "scripted-1" || sum.Windows.Five.Valid {
+		t.Fatalf("explicit session inherited history: %+v", sum.Windows.Five)
+	}
+}
+
+func TestSnapshotClanReadsBypassPublicCache(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	fixed := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	inv, ext := accountFixtureBytes(t)
+	profile := []byte(`{"status":"ok","data":{"Clan":"SYN","Currency":{"Diamonds":{"id":"Diamonds","_am":1}}}}`)
+	clanBody := []byte(`{"status":"ok","data":{"Name":"Synthetic","Members":[{}]}}`)
+	var clanHits, battleHits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/inventory":
+			_, _ = w.Write(inv)
+		case "/v1/account/profile":
+			_, _ = w.Write(profile)
+		case "/v1/account/extendedProfile":
+			_, _ = w.Write(ext)
+		case "/api/clan/SYN":
+			clanHits++
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			_, _ = w.Write(clanBody)
+		case "/api/activeClanBattle":
+			battleHits++
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			_, _ = w.Write(inactiveClanBattleBody)
+		default:
+			t.Errorf("unexpected %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	for i := 0; i < 2; i++ {
+		var stdout, stderr bytes.Buffer
+		code := Execute(Deps{
+			Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+			BaseURL: srv.URL, HTTPClient: srv.Client(),
+			Clock: output.FixedClock{T: fixed},
+		}, []string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99"})
+		if code != 0 {
+			t.Fatalf("run %d exit %d stderr=%s", i, code, stderr.String())
+		}
+	}
+	if clanHits != 2 || battleHits != 2 {
+		t.Fatalf("upstream reads clan=%d battle=%d", clanHits, battleHits)
+	}
+}
+
+func TestUnconfiguredUserDoesNotReceiveAnotherContribution(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	fixed := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	inv, ext := accountFixtureBytes(t)
+	start := strconv.FormatInt(fixed.Add(-time.Hour).Unix(), 10)
+	finish := strconv.FormatInt(fixed.Add(time.Hour).Unix(), 10)
+	profile := []byte(`{"status":"ok","data":{"UserID":555,"Clan":"SYN","Currency":{"Diamonds":{"id":"Diamonds","_am":1}}}}`)
+	battle := []byte(`{"status":"ok","data":{"configName":"ActiveBattle","configData":{"Title":"Live","StartTime":` + start + `,"FinishTime":` + finish + `}}}`)
+	clanBody := []byte(`{"status":"ok","data":{"Name":"Synthetic","Members":[{}],"Battles":{"ActiveBattle":{"BattleID":"ActiveBattle","Points":2000,"Place":4,"PointContributions":[{"UserID":555,"Points":999},{"UserID":1001,"Points":1}]}}}}`)
+	srv := accountAndClanServer(t, inv, profile, ext, clanBody, battle, 200, 200)
+	defer srv.Close()
+	dir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Clock: output.FixedClock{T: fixed},
+	}, []string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99"})
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s", code, stderr.String())
+	}
+	sum := readSummary(t, dir, fixed)
+	if sum.AccountID != "555" || sum.UserID != "" {
+		t.Fatalf("account=%s user=%s", sum.AccountID, sum.UserID)
+	}
+	b := sum.Current.Clan.ActiveBattle
+	if b == nil || b.Points != "2000" || b.UserContribution != "" || b.UserContributorRank != nil {
+		t.Fatalf("contribution leaked: %+v", b)
+	}
+	if b == nil || !strings.Contains(b.Reason, "not configured") {
+		t.Fatalf("reason=%+v", b)
+	}
+}
+
+func TestSnapshotClanTelemetryIsNonFatal(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	fixed := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	inv, ext := accountFixtureBytes(t)
+	profile := []byte(`{"status":"ok","data":{"Clan":"SYN","Currency":{"Diamonds":{"id":"Diamonds","_am":1}}}}`)
+	clanBody := []byte(`{"status":"ok","data":{"Name":"Synthetic"}}`)
+
+	run := func(t *testing.T, clanStatus, battleStatus int, args ...string) (int, clan.Summary, snapshot.Manifest) {
+		t.Helper()
+		srv := accountAndClanServer(t, inv, profile, ext, clanBody, inactiveClanBattleBody, clanStatus, battleStatus)
+		defer srv.Close()
+		dir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		cmd := append([]string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99"}, args...)
+		code := Execute(Deps{
+			Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+			BaseURL: srv.URL, HTTPClient: srv.Client(),
+			Clock: output.FixedClock{T: fixed},
+		}, cmd)
+		sum := readSummary(t, dir, fixed)
+		man := readManifest(t, dir, fixed)
+		if _, err := os.Stat(filepath.Join(dir, stampName(fixed)+"-ps99-inv.json")); err != nil {
+			t.Fatal("inventory file missing after clan telemetry failure")
+		}
+		return code, sum, man
+	}
+
+	code, sum, man := run(t, 500, 200)
+	if code != 0 || !man.OK || !warningHas(sum.Warnings, "clan") || !failedKind(man, "clan-json") {
+		t.Fatalf("clan failure code=%d ok=%v warnings=%v", code, man.OK, sum.Warnings)
+	}
+	code, sum, man = run(t, 200, 500)
+	if code != 0 || !man.OK || !warningHas(sum.Warnings, "active battle") {
+		t.Fatalf("battle failure code=%d ok=%v warnings=%v", code, man.OK, sum.Warnings)
+	}
+	code, sum, _ = run(t, 500, 200, "--require-clan")
+	if code != exitcode.Upstream {
+		t.Fatalf("require-clan exit=%d warnings=%v", code, sum.Warnings)
+	}
+	if sum.SchemaVersion == "" {
+		t.Fatal("require-clan skipped the summary")
+	}
+}
+
+func accountFixtureBytes(t *testing.T) (inv, ext []byte) {
+	t.Helper()
+	var err error
+	inv, err = os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-inventory-ok.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ext, err = os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-extended-profile-ok.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inv, ext
+}
+
+func accountAndClanServer(t *testing.T, inv, profile, ext, clanBody, battle []byte, clanStatus, battleStatus int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/inventory":
+			_, _ = w.Write(inv)
+		case "/v1/account/profile":
+			_, _ = w.Write(profile)
+		case "/v1/account/extendedProfile":
+			_, _ = w.Write(ext)
+		case "/api/clan/SYN":
+			w.WriteHeader(clanStatus)
+			if clanStatus == 200 {
+				_, _ = w.Write(clanBody)
+			}
+		case "/api/activeClanBattle":
+			w.WriteHeader(battleStatus)
+			if battleStatus == 200 {
+				_, _ = w.Write(battle)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+}
+
+func stampName(fixed time.Time) string {
+	return fixed.In(time.Local).Format("2006-01-02-150405")
+}
+
+func readSummary(t *testing.T, dir string, fixed time.Time) clan.Summary {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(dir, stampName(fixed)+"-ps99-summary.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sum clan.Summary
+	if err := json.Unmarshal(body, &sum); err != nil {
+		t.Fatal(err)
+	}
+	return sum
+}
+
+func readManifest(t *testing.T, dir string, fixed time.Time) snapshot.Manifest {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(dir, stampName(fixed)+"-ps99-manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var man snapshot.Manifest
+	if err := json.Unmarshal(body, &man); err != nil {
+		t.Fatal(err)
+	}
+	return man
+}
+
+func warningHas(warnings []string, sub string) bool {
+	for _, w := range warnings {
+		if strings.Contains(w, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func failedKind(man snapshot.Manifest, kind string) bool {
+	for _, f := range man.Files {
+		if f.Kind == kind && !f.OK && f.Error != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestProfilePS99UserIDSuppliesContribution(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := cfg.Profiles["main"]
+	p.PS99UserID = "1001"
+	cfg.Profiles["main"] = p
+	if err := config.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	fixed := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC)
+	inv, ext := accountFixtureBytes(t)
+	start := strconv.FormatInt(fixed.Add(-time.Hour).Unix(), 10)
+	finish := strconv.FormatInt(fixed.Add(time.Hour).Unix(), 10)
+	profile := []byte(`{"status":"ok","data":{"Clan":"SYN","Currency":{"Diamonds":{"id":"Diamonds","_am":1}}}}`)
+	battle := []byte(`{"status":"ok","data":{"configName":"ActiveBattle","configData":{"Title":"Live","StartTime":` + start + `,"FinishTime":` + finish + `}}}`)
+	clanBody := []byte(`{"status":"ok","data":{"Name":"Synthetic","Battles":{"ActiveBattle":{"BattleID":"ActiveBattle","Points":80,"PointContributions":[{"UserID":1001,"Points":12}]}}}}`)
+	srv := accountAndClanServer(t, inv, profile, ext, clanBody, battle, 200, 200)
+	defer srv.Close()
+	dir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Clock: output.FixedClock{T: fixed},
+	}, []string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99"})
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s", code, stderr.String())
+	}
+	sum := readSummary(t, dir, fixed)
+	if sum.UserID != "1001" || sum.Current.Clan.ActiveBattle == nil || sum.Current.Clan.ActiveBattle.UserContribution != "12" {
+		t.Fatalf("profile user id was not used: %+v", sum.Current.Clan.ActiveBattle)
 	}
 }

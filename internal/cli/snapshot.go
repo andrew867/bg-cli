@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/andrew867/bg-cli/internal/api"
+	"github.com/andrew867/bg-cli/internal/clan"
 	"github.com/andrew867/bg-cli/internal/exitcode"
 	"github.com/andrew867/bg-cli/internal/jsonutil"
 	"github.com/andrew867/bg-cli/internal/output"
@@ -44,12 +45,13 @@ written only while a battle is active.`,
 	cmd.AddCommand(newAccountSnapshotValidateCmd(app))
 	// Default RunE when invoked as `account snapshot` (no subcommand) → export.
 	var af accountFlags
-	var outDir, prefix, note, include, clanTag, userID string
-	var joinRAP, allViews bool
+	var outDir, prefix, note, include, clanTag, userID, sessionID string
+	var joinRAP, allViews, newSession, requireClan bool
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		return app.runAccountSnapshot(c.Context(), snapshotOptions{
 			Flags: af, Dir: outDir, Prefix: prefix, JoinRAP: joinRAP, Note: note,
 			AllViews: allViews, Include: include, ClanTag: clanTag, UserID: userID,
+			NewSession: newSession, SessionID: sessionID, RequireClan: requireClan,
 		})
 	}
 	cmd.Flags().BoolVar(&af.refresh, "refresh", false, "request refresh=true on the first requested view only (consumes quota; needs --yes if non-interactive)")
@@ -61,14 +63,17 @@ written only while a battle is active.`,
 	cmd.Flags().BoolVar(&allViews, "all-views", false, "capture all seven authenticated account views (includes trades/booth/mail)")
 	cmd.Flags().StringVar(&include, "include", "", "comma-separated views (inventory,profile,extendedProfile,itemIndex,trades,booth,mail) or all")
 	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag to read; otherwise taken from the profile")
-	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (default 4092648666, or profile ps99UserId)")
+	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (otherwise profile ps99UserId; omitted when unset)")
+	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account")
+	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session")
+	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
 	return cmd
 }
 
 func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	var af accountFlags
-	var outDir, prefix, note, include, clanTag, userID string
-	var joinRAP, allViews bool
+	var outDir, prefix, note, include, clanTag, userID, sessionID string
+	var joinRAP, allViews, newSession, requireClan bool
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "Write a dated snapshot (same as account snapshot)",
@@ -76,6 +81,7 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 			return app.runAccountSnapshot(c.Context(), snapshotOptions{
 				Flags: af, Dir: outDir, Prefix: prefix, JoinRAP: joinRAP, Note: note,
 				AllViews: allViews, Include: include, ClanTag: clanTag, UserID: userID,
+				NewSession: newSession, SessionID: sessionID, RequireClan: requireClan,
 			})
 		},
 	}
@@ -88,7 +94,10 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&allViews, "all-views", false, "capture all seven authenticated account views")
 	cmd.Flags().StringVar(&include, "include", "", "comma-separated views or all")
 	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag to read; otherwise taken from the profile")
-	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank")
+	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (otherwise profile ps99UserId; omitted when unset)")
+	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account")
+	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session")
+	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
 	return cmd
 }
 
@@ -120,20 +129,29 @@ func newAccountSnapshotValidateCmd(app *App) *cobra.Command {
 }
 
 type snapshotOptions struct {
-	Flags    accountFlags
-	Dir      string
-	Prefix   string
-	JoinRAP  bool
-	Note     string
-	AllViews bool
-	Include  string
-	ClanTag  string
-	UserID   string
+	Flags       accountFlags
+	Dir         string
+	Prefix      string
+	JoinRAP     bool
+	Note        string
+	AllViews    bool
+	Include     string
+	ClanTag     string
+	UserID      string
+	NewSession  bool
+	SessionID   string
+	RequireClan bool
 }
 
 func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error {
 	if err := a.confirmRefresh(opt.Flags, "account snapshot"); err != nil {
 		return err
+	}
+	opt.SessionID = strings.TrimSpace(opt.SessionID)
+	if opt.SessionID != "" {
+		if err := clan.ValidateSessionID(opt.SessionID); err != nil {
+			return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
+		}
 	}
 	if err := snapshot.ValidatePrefix(opt.Prefix); err != nil {
 		return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
@@ -339,7 +357,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		}
 	}
 
-	a.attachClanSnapshot(ctx, absDir, stamp, collision, opt.Prefix, profileAlias, now, &man, clanState, opt.ClanTag, opt.UserID)
+	a.attachClanSnapshot(ctx, absDir, stamp, collision, opt.Prefix, profileAlias, now, &man, clanState, opt)
 
 	manName := snapshot.FileName(stamp, collision, opt.Prefix, "manifest.json")
 	man.ManifestFile = manName

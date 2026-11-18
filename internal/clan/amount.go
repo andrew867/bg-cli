@@ -94,23 +94,51 @@ func Sub(current, baseline string) (string, bool) {
 // NetPerHour is delta / elapsedSeconds * 3600 using exact integer arithmetic.
 // Integral results are decimal integers. Other results are a reduced fraction.
 func NetPerHour(delta string, elapsedSeconds int64) (string, bool) {
+	exact, _, ok := NetPerHourParts(delta, elapsedSeconds)
+	return exact, ok
+}
+
+// NetPerHourParts returns the exact rate and a decimal approximation.
+// The exact form is an integer or a reduced fraction. The approximation is
+// decimal text and is not used for stored balances or deltas.
+func NetPerHourParts(delta string, elapsedSeconds int64) (exact, approx string, ok bool) {
 	if elapsedSeconds <= 0 {
-		return "", false
+		return "", "", false
 	}
 	d, ok := ParseExactInt(delta)
 	if !ok {
-		return "", false
+		return "", "", false
 	}
 	num := new(big.Int).Mul(d, big.NewInt(3600))
 	den := big.NewInt(elapsedSeconds)
 	g := new(big.Int).GCD(nil, nil, new(big.Int).Abs(num), den)
 	if g.Sign() == 0 {
-		return "", false
+		return "", "", false
 	}
 	num.Quo(num, g)
 	den.Quo(den, g)
+	approx = decimalApprox(num, den)
 	if den.Cmp(big.NewInt(1)) == 0 {
-		return num.String(), true
+		return num.String(), approx, true
 	}
-	return num.String() + "/" + den.String(), true
+	return num.String() + "/" + den.String(), approx, true
+}
+
+func decimalApprox(num, den *big.Int) string {
+	if den.Cmp(big.NewInt(1)) == 0 {
+		return num.String()
+	}
+	return trimDecimal(new(big.Rat).SetFrac(num, den).FloatString(6))
+}
+
+func trimDecimal(s string) string {
+	if !strings.Contains(s, ".") {
+		return s
+	}
+	s = strings.TrimRight(s, "0")
+	s = strings.TrimRight(s, ".")
+	if s == "" || s == "-" {
+		return "0"
+	}
+	return s
 }

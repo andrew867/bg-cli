@@ -97,7 +97,8 @@ func newClanBattleCmd(app *App) *cobra.Command {
 				return err
 			}
 			now := app.nowLocal()
-			observed := clan.Observe(now, app.configuredPS99UserID(""), "", nil, pr.Res.Data, false, true)
+			userID, _ := app.configuredPS99UserID("")
+			observed := clan.Observe(now, userID, "", nil, pr.Res.Data, false, true)
 			active := observed.ActiveBattle != nil
 			data := map[string]any{
 				"active": active,
@@ -152,10 +153,20 @@ func (a *App) fetchAccountData(ctx context.Context, path, scope string) (json.Ra
 	return append(json.RawMessage(nil), res.Data...), nil
 }
 
-func (a *App) configuredPS99UserID(flag string) string {
+func (a *App) configuredPS99UserID(flag string) (string, bool) {
 	configured := ""
 	if p, _, _, err := a.resolveProfileToken(""); err == nil {
 		configured = p.PS99UserID
 	}
 	return clan.ResolveUserID(flag, configured)
+}
+
+func (a *App) configuredAccountID(profileBody json.RawMessage) string {
+	if id := clan.ExtractAccountID(profileBody); id != "" {
+		return id
+	}
+	if p, _, _, err := a.resolveProfileToken(""); err == nil {
+		return strings.TrimSpace(p.AccountID)
+	}
+	return ""
 }
