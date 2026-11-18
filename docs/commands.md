@@ -66,7 +66,7 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account snapshot validate` | local manifest | none (offline) |
 | `account index\|transactions\|hatch\|progression\|portfolio\|reconcile\|audit` | offline manifests / RAP / catalogs | none (offline) |
 | `releases\|leagues\|clans` | public API | none |
-| `clan show\|battle` | `GET /api/clan/{tag}`, `GET /api/activeClanBattle` | none for the public reads; profile read only to resolve the tag |
+| `clan show\|battle` | `GET /api/clan/{tag}`, `GET /api/activeClanBattle` | none for the public reads; `clan show` reads the account only when no `--tag` and no stored `ps99ClanTag` |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -207,7 +207,7 @@ Public, read-only. No `Authorization` header and no account refresh.
 
 | Command | Description |
 | --- | --- |
-| `clan show [--tag TAG]` | `GET /api/clan/{tag}`. Tag comes from the signed-in profile or extended profile, or from `--tag`. The body includes `Battles`. |
+| `clan show [--tag TAG]` | `GET /api/clan/{tag}`. Tag comes from `--tag`, then stored `ps99ClanTag` (no token required), then the signed-in profile or extended profile. The body includes `Battles`. |
 | `clan battle` | `GET /api/activeClanBattle`. `active` is true only inside the schedule. |
 
 ```bash

@@ -97,7 +97,7 @@ bg-cli auth profile unset --profile main --clan-tag
 }
 ```
 
-`ps99UserId` is the PS99 user id used for battle contribution and rank. `--user-id` overrides it. `ps99ClanTag` is the clan tag for `GET /api/clan/{tag}`, used when the profile and extended profile do not include one. `--clan-tag` and a tag found on those documents override it. `auth status` prints the three fields.
+`ps99UserId` is the PS99 user id used for battle contribution and rank. `--user-id` overrides it. `ps99ClanTag` is the clan tag for `GET /api/clan/{tag}`. `clan show` uses `--tag`, then the stored tag, and only then the account documents. A stored tag does not require an access token. `account snapshot` still prefers a tag on the profile or extended profile, then `ps99ClanTag`. `--clan-tag` overrides that snapshot order. `auth status` prints the three fields.
 
 ## Multiple accounts
 

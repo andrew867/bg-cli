@@ -104,6 +104,55 @@ func TestClanShowMissingTag(t *testing.T) {
 	}
 }
 
+func TestClanShowUsesStoredTagWithoutToken(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {Alias: "main", PS99ClanTag: "QNE"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store := auth.NewMemoryStore()
+	var accountHits int
+	var sawAuth bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			sawAuth = true
+		}
+		switch r.URL.Path {
+		case "/api/clan/QNE":
+			_, _ = w.Write([]byte(`{"status":"ok","data":{"Name":"Synthetic","Battles":{}}}`))
+		case "/v1/account/profile", "/v1/account/extendedProfile":
+			accountHits++
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: srv.URL, HTTPClient: srv.Client(),
+	}, []string{"clan", "show", "--profile", "main"})
+	if code != 0 {
+		t.Fatalf("exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if accountHits != 0 || sawAuth {
+		t.Fatalf("accountHits=%d auth=%v", accountHits, sawAuth)
+	}
+	if !strings.Contains(stdout.String(), `"tagSource":"config"`) && !strings.Contains(stdout.String(), `"tagSource": "config"`) {
+		t.Fatalf("stdout %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Synthetic") {
+		t.Fatalf("stdout %s", stdout.String())
+	}
+}
+
 func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 	store := auth.NewMemoryStore()
 	setupProfile(t, store, auth.DefaultScopes)
