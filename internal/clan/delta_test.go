@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -89,6 +90,9 @@ func TestPositiveNegativeUnchangedAndMultipleCurrencies(t *testing.T) {
 	}
 	if !contains(text, "PumpkinTokens") || !contains(text, "Spent") {
 		t.Fatalf("console missing changed currencies:\n%s", text)
+	}
+	if strings.Index(text, "Previous:") > strings.Index(text, "Session:") || strings.Index(text, "Previous:") < 0 {
+		t.Fatalf("console printed Session before Previous:\n%s", text)
 	}
 }
 

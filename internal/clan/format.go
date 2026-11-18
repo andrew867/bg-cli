@@ -87,8 +87,8 @@ func FormatConsole(sum Summary) string {
 	writeWindowLine(&b, "5m", sum.Windows.Five)
 	writeWindowLine(&b, "30m", sum.Windows.Thirty)
 	writeWindowLine(&b, "1h", sum.Windows.Hour)
-	writeWindowLine(&b, "Session", sum.Windows.Session)
 	writeWindowLine(&b, "Previous", sum.Windows.Previous)
+	writeWindowLine(&b, "Session", sum.Windows.Session)
 	return b.String()
 }
 
