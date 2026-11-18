@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- (none)
+
+## [0.2.1] - 2026-11-18
+
+### Added
+
 - Profile config stores `ps99ClanTag`. `clan show` uses that stored tag before any account lookup and does not require an access token. Snapshots still prefer a tag on the profile or extended profile, then `ps99ClanTag`. `auth profile set` and `auth profile unset` edit `ps99UserId`, `ps99ClanTag`, and `accountId`. `auth login` keeps those fields.
 
 ## [0.2.0] - 2026-11-18
