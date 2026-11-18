@@ -285,11 +285,11 @@ func TestLoginReauthKeepsIdentityMetadata(t *testing.T) {
 		DefaultProfile: "main",
 		Profiles: map[string]config.Profile{
 			"main": {
-				Alias:      "main",
-				ClientID:   "old-client",
-				Scopes:     []string{"player-data:pet-simulator-99:profile:read"},
-				AccountID:  "acct-kept",
-				PS99UserID: "1001",
+				Alias:       "main",
+				ClientID:    "old-client",
+				Scopes:      []string{"player-data:pet-simulator-99:profile:read"},
+				AccountID:   "acct-kept",
+				PS99UserID:  "1001",
 				PS99ClanTag: "SYN",
 			},
 		},
