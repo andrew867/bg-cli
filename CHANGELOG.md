@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Auth docs state that reauthorizing a profile assumes the same game account. The snapshot console prints the previous window before the session window.
+
 ### Added
 
 - Seven-view `account snapshot` via `--all-views` / `--include` (default three-view behavior unchanged); `account snapshot validate` integrity checks; manifest schema `1.2` with view request/content status
