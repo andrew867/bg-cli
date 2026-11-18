@@ -16,7 +16,7 @@ var tagKeys = []string{
 
 // ResolveClanTag chooses the clan tag for a public clan read.
 // An explicit flag wins, then a tag discovered on the account documents,
-// then the stored profile ps99ClanId. There is no built-in tag.
+// then the stored profile ps99ClanTag. There is no built-in tag.
 func ResolveClanTag(flag, discovered, configured string) (tag, source string, ok bool) {
 	if s := strings.TrimSpace(flag); s != "" {
 		return s, "flag", true

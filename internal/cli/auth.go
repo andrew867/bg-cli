@@ -205,7 +205,7 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 				"redirectUri":  p.RedirectURI,
 				"accountId":    p.AccountID,
 				"ps99UserId":   p.PS99UserID,
-				"ps99ClanId":   p.PS99ClanID,
+				"ps99ClanTag":  p.PS99ClanTag,
 			}
 			return app.emit(output.NewSuccess("auth status", nil, output.DefaultFreshnessNull(), data))
 		},

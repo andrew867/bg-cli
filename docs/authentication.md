@@ -72,7 +72,7 @@ bg-cli auth logout --profile main
 
 Access tokens are valid for 30 days. There is no refresh-token endpoint. When a token expires or is revoked, account commands exit with code 8 and login must be repeated.
 
-Running `auth login` again for an existing profile replaces the token, client id, scopes, and expiry. It keeps `accountId`, `ps99UserId`, and `ps99ClanId`. Those fields are not part of the OAuth response, and a reauthorization does not erase them. Reauthorizing an existing profile assumes it still represents the same game account. To authorize a different account, use a new profile alias or log out that profile first so stored account identity metadata is not carried forward.
+Running `auth login` again for an existing profile replaces the token, client id, scopes, and expiry. It keeps `accountId`, `ps99UserId`, and `ps99ClanTag`. Those fields are not part of the OAuth response, and a reauthorization does not erase them. Reauthorizing an existing profile assumes it still represents the same game account. To authorize a different account, use a new profile alias or log out that profile first so stored account identity metadata is not carried forward.
 
 ## Stored account identity
 
@@ -91,13 +91,13 @@ bg-cli auth profile unset --profile main --clan-tag
       "redirectUri": "http://127.0.0.1:8765/callback",
       "accountId": "1234",
       "ps99UserId": "1234",
-      "ps99ClanId": "YOURTAG"
+      "ps99ClanTag": "YOURTAG"
     }
   }
 }
 ```
 
-`ps99UserId` is the PS99 user id used for battle contribution and rank. `--user-id` overrides it. `ps99ClanId` is the clan tag for `GET /api/clan/{tag}`, used when the profile and extended profile do not include one. `--clan-tag` and a tag found on those documents override it. `auth status` prints the three fields.
+`ps99UserId` is the PS99 user id used for battle contribution and rank. `--user-id` overrides it. `ps99ClanTag` is the clan tag for `GET /api/clan/{tag}`, used when the profile and extended profile do not include one. `--clan-tag` and a tag found on those documents override it. `auth status` prints the three fields.
 
 ## Multiple accounts
 

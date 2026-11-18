@@ -56,7 +56,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			discovered = found
 		}
 	}
-	tag, _, _ := clan.ResolveClanTag(opt.ClanTag, discovered, a.configuredPS99ClanID())
+	tag, _, _ := clan.ResolveClanTag(opt.ClanTag, discovered, a.configuredPS99ClanTag())
 
 	currencies, currenciesKnown := clan.CurrenciesFromProfile(st.ProfileBody)
 	telemetry := map[string]any{}
@@ -105,8 +105,8 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			}
 		}
 	} else {
-		clanErr = fmt.Errorf("clan tag is absent from profile, extended profile, and config ps99ClanId")
-		a.notice("clan tag is absent from profile, extended profile, and config ps99ClanId; clan.json omitted")
+		clanErr = fmt.Errorf("clan tag is absent from profile, extended profile, and config ps99ClanTag")
+		a.notice("clan tag is absent from profile, extended profile, and config ps99ClanTag; clan.json omitted")
 	}
 	switch {
 	case clanErr != nil:

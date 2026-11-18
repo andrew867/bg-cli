@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Profile config stores `ps99ClanId`. Snapshots and `clan show` use it when the account documents have no clan tag. `auth profile set` and `auth profile unset` edit `ps99UserId`, `ps99ClanId`, and `accountId`. `auth login` keeps those fields.
+- Profile config stores `ps99ClanTag`. Snapshots and `clan show` use it when the account documents have no clan tag. `auth profile set` and `auth profile unset` edit `ps99UserId`, `ps99ClanTag`, and `accountId`. `auth login` keeps those fields.
 
 ## [0.2.0] - 2026-11-18
 

@@ -21,7 +21,7 @@ func newAuthProfileCmd(app *App) *cobra.Command {
 OAuth does not return these values. auth profile set stores them, and a later
 auth login keeps them. The access token is not changed.
 
-ps99ClanId stores the clan tag used by GET /api/clan/{tag}.`,
+ps99ClanTag stores the clan tag used by GET /api/clan/{tag}.`,
 		Example: `  bg-cli auth profile set --profile main --ps99-user-id 1234 --clan-tag SYN
   bg-cli auth profile unset --profile main --clan-tag`,
 	}
@@ -35,7 +35,7 @@ func newAuthProfileSetCmd(app *App) *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "set",
-		Short: "Set ps99UserId, ps99ClanId, or accountId",
+		Short: "Set ps99UserId, ps99ClanTag, or accountId",
 		Example: `  bg-cli auth profile set --profile main --ps99-user-id 1234 --clan-tag SYN
   bg-cli auth profile set --profile main --account-id 1234 --dry-run`,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -52,7 +52,7 @@ func newAuthProfileSetCmd(app *App) *cobra.Command {
 				if err := api.ValidateClanTag(v); err != nil {
 					return profileUsage(app, fmt.Errorf("%w\n  bg-cli auth profile set --profile main --clan-tag <TAG>", err))
 				}
-				fields["ps99ClanId"] = v
+				fields["ps99ClanTag"] = v
 			}
 			if c.Flags().Changed("account-id") {
 				v, err := cleanIdentity("account-id", accountID)
@@ -68,7 +68,7 @@ func newAuthProfileSetCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&userID, "ps99-user-id", "", "PS99 user id stored as ps99UserId")
-	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag stored as ps99ClanId")
+	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag stored as ps99ClanTag")
 	cmd.Flags().StringVar(&accountID, "account-id", "", "account id stored as accountId")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the profile fields that would be saved")
 	return cmd
@@ -79,7 +79,7 @@ func newAuthProfileUnsetCmd(app *App) *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "unset",
-		Short: "Clear ps99UserId, ps99ClanId, or accountId",
+		Short: "Clear ps99UserId, ps99ClanTag, or accountId",
 		Example: `  bg-cli auth profile unset --profile main --ps99-user-id --clan-tag
   bg-cli auth profile unset --profile main --account-id --dry-run`,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -88,7 +88,7 @@ func newAuthProfileUnsetCmd(app *App) *cobra.Command {
 				fields["ps99UserId"] = ""
 			}
 			if clanTag {
-				fields["ps99ClanId"] = ""
+				fields["ps99ClanTag"] = ""
 			}
 			if accountID {
 				fields["accountId"] = ""
@@ -100,7 +100,7 @@ func newAuthProfileUnsetCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&userID, "ps99-user-id", false, "clear ps99UserId")
-	cmd.Flags().BoolVar(&clanTag, "clan-tag", false, "clear ps99ClanId")
+	cmd.Flags().BoolVar(&clanTag, "clan-tag", false, "clear ps99ClanTag")
 	cmd.Flags().BoolVar(&accountID, "account-id", false, "clear accountId")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the profile fields that would be saved")
 	return cmd
@@ -153,7 +153,7 @@ func (a *App) writeProfileIdentity(fields map[string]string, clearing, dryRun bo
 		p = config.Profile{Alias: alias}
 	}
 	updated := make([]string, 0, len(fields))
-	for _, key := range []string{"accountId", "ps99UserId", "ps99ClanId"} {
+	for _, key := range []string{"accountId", "ps99UserId", "ps99ClanTag"} {
 		value, changed := fields[key]
 		if !changed {
 			continue
@@ -163,8 +163,8 @@ func (a *App) writeProfileIdentity(fields map[string]string, clearing, dryRun bo
 			p.AccountID = value
 		case "ps99UserId":
 			p.PS99UserID = value
-		case "ps99ClanId":
-			p.PS99ClanID = value
+		case "ps99ClanTag":
+			p.PS99ClanTag = value
 		}
 		updated = append(updated, key)
 	}
@@ -177,11 +177,11 @@ func (a *App) writeProfileIdentity(fields map[string]string, clearing, dryRun bo
 		}
 	}
 	return a.emit(output.NewSuccess("auth profile", nil, output.DefaultFreshnessNull(), map[string]any{
-		"profile":    alias,
-		"accountId":  p.AccountID,
-		"ps99UserId": p.PS99UserID,
-		"ps99ClanId": p.PS99ClanID,
-		"updated":    updated,
-		"dryRun":     dryRun,
+		"profile":     alias,
+		"accountId":   p.AccountID,
+		"ps99UserId":  p.PS99UserID,
+		"ps99ClanTag": p.PS99ClanTag,
+		"updated":     updated,
+		"dryRun":      dryRun,
 	}))
 }

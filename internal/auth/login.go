@@ -202,8 +202,8 @@ func keptIdentityFields(p config.Profile) []string {
 	if strings.TrimSpace(p.PS99UserID) != "" {
 		kept = append(kept, "ps99UserId")
 	}
-	if strings.TrimSpace(p.PS99ClanID) != "" {
-		kept = append(kept, "ps99ClanId")
+	if strings.TrimSpace(p.PS99ClanTag) != "" {
+		kept = append(kept, "ps99ClanTag")
 	}
 	return kept
 }

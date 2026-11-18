@@ -290,7 +290,7 @@ func TestLoginReauthKeepsIdentityMetadata(t *testing.T) {
 				Scopes:     []string{"player-data:pet-simulator-99:profile:read"},
 				AccountID:  "acct-kept",
 				PS99UserID: "1001",
-				PS99ClanID: "SYN",
+				PS99ClanTag: "SYN",
 			},
 		},
 	}); err != nil {
@@ -368,13 +368,13 @@ func TestLoginReauthKeepsIdentityMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := cfg.Profiles["main"]
-	if p.AccountID != "acct-kept" || p.PS99UserID != "1001" || p.PS99ClanID != "SYN" {
-		t.Fatalf("reauth erased identity: account=%q user=%q clan=%q", p.AccountID, p.PS99UserID, p.PS99ClanID)
+	if p.AccountID != "acct-kept" || p.PS99UserID != "1001" || p.PS99ClanTag != "SYN" {
+		t.Fatalf("reauth erased identity: account=%q user=%q clan=%q", p.AccountID, p.PS99UserID, p.PS99ClanTag)
 	}
 	if p.ClientID != "test-client-id" {
 		t.Fatalf("client id was not updated: %s", p.ClientID)
 	}
-	if !strings.Contains(stderr.String(), "Kept accountId, ps99UserId, and ps99ClanId") {
+	if !strings.Contains(stderr.String(), "Kept accountId, ps99UserId, and ps99ClanTag") {
 		t.Fatalf("stderr=%s", stderr.String())
 	}
 }

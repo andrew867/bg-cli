@@ -626,7 +626,7 @@ func TestProfilePS99UserIDSuppliesContribution(t *testing.T) {
 	}
 }
 
-func TestConfigPS99ClanIDSuppliesClan(t *testing.T) {
+func TestConfigPS99ClanTagSuppliesClan(t *testing.T) {
 	store := auth.NewMemoryStore()
 	setupProfile(t, store, auth.DefaultScopes)
 	cfg, err := config.Load()
@@ -634,7 +634,7 @@ func TestConfigPS99ClanIDSuppliesClan(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := cfg.Profiles["main"]
-	p.PS99ClanID = "SYN"
+	p.PS99ClanTag = "SYN"
 	cfg.Profiles["main"] = p
 	if err := config.Save(cfg); err != nil {
 		t.Fatal(err)

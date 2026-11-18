@@ -177,7 +177,7 @@ func TestAuthProfileSetAndUnset(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := loaded.Profiles["main"]
-	if p.PS99UserID != "1234" || p.PS99ClanID != "SYN" || p.ClientID != "cid" || p.RedirectURI == "" {
+	if p.PS99UserID != "1234" || p.PS99ClanTag != "SYN" || p.ClientID != "cid" || p.RedirectURI == "" {
 		t.Fatalf("profile %+v", p)
 	}
 	if strings.Contains(string(mustRead(t, filepath.Join(dir, config.ConfigFile))), "access_token") {
@@ -209,7 +209,7 @@ func TestAuthProfileSetAndUnset(t *testing.T) {
 		t.Fatal(err)
 	}
 	p = loaded.Profiles["main"]
-	if p.PS99UserID != "1234" || p.PS99ClanID != "" {
+	if p.PS99UserID != "1234" || p.PS99ClanTag != "" {
 		t.Fatalf("after unset %+v", p)
 	}
 

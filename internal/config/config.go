@@ -20,7 +20,7 @@ const (
 var profileAliasRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
 // Profile is non-secret metadata for one authorized account alias.
-// AccountID, PS99UserID, and PS99ClanID are not part of the OAuth response.
+// AccountID, PS99UserID, and PS99ClanTag are not part of the OAuth response.
 // They are stored on the profile so a later auth login can fill them once
 // and a reauthorization does not erase a value already written here.
 type Profile struct {
@@ -32,9 +32,9 @@ type Profile struct {
 	RedirectURI string    `json:"redirectUri,omitempty"`
 	AccountID   string    `json:"accountId,omitempty"`
 	PS99UserID  string    `json:"ps99UserId,omitempty"`
-	// PS99ClanID is the clan tag used by GET /api/clan/{tag} when the account
+	// PS99ClanTag is the clan tag used by GET /api/clan/{tag} when the account
 	// profile and extended profile do not include one.
-	PS99ClanID string `json:"ps99ClanId,omitempty"`
+	PS99ClanTag string `json:"ps99ClanTag,omitempty"`
 }
 
 // File is the on-disk configuration document. It must never contain secrets.
@@ -118,11 +118,11 @@ func Save(f *File) error {
 
 // PreserveProfileIdentity copies non-secret account metadata that OAuth does
 // not return. Reauthorization replaces the token fields and keeps accountId,
-// ps99UserId, and ps99ClanId instead of erasing them.
+// ps99UserId, and ps99ClanTag instead of erasing them.
 func PreserveProfileIdentity(next, previous Profile) Profile {
 	next.AccountID = previous.AccountID
 	next.PS99UserID = previous.PS99UserID
-	next.PS99ClanID = previous.PS99ClanID
+	next.PS99ClanTag = previous.PS99ClanTag
 	return next
 }
 
