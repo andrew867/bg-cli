@@ -47,7 +47,7 @@ CSV currencies columns: `key`, `id`, `_am`, `amount` (`amount` mirrors exact `_a
 
 ## Snapshot export
 
-`account snapshot` writes dated JSON/CSV files into `--dir` and a `*-manifest.json` that includes API `snapshotAt` (from inventory `fetchedAt` when present), per-file SHA-256 digests, `petQuantitySum`, exact currency amounts, and profile Statistics. The manifest does not claim a self-referential size/digest. Stdout is only a compact summary envelope — not the payload files.
+`account snapshot` writes dated JSON/CSV files into `--dir` and a `*-manifest.json` that includes API `snapshotAt` (from inventory `fetchedAt` when present), per-file SHA-256 digests, `petQuantitySum`, exact currency amounts, and profile Statistics. The manifest does not claim a self-referential size/digest. Every snapshot also writes `summary.json` atomically and lists that file with its size and SHA-256. Later snapshots read prior `*-{prefix}-summary.json` files for clan-point and currency deltas. They do not reopen raw inventory, profile, or clan payloads for those rates. Amounts stay exact integer text. `netPerHour` uses actual elapsed seconds. A window is omitted from the rate when no prior summary is close enough to that window, and a clan delta is not taken across two battle ids. Stdout is only a compact summary envelope — not the payload files. A short changed-currency view goes to stderr.
 
 ## Offline snapshot diff
 

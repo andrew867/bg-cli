@@ -46,3 +46,18 @@ func TestIsAccountPath(t *testing.T) {
 		t.Fatal("path traversal must fail allowlist")
 	}
 }
+
+func TestIsPublicPathClan(t *testing.T) {
+	if !IsPublicPath("/api/clan/SYN") || !IsPublicPath("/api/activeClanBattle") || !IsPublicPath("/api/clan/40z") {
+		t.Fatal("confirmed clan routes are not public")
+	}
+	if IsPublicPath("/api/clans") || IsPublicPath("/api/clan/SYN/history") || IsPublicPath("/api/clan/") {
+		t.Fatal("clan allowlist is too wide")
+	}
+	if err := ValidateClanTag(""); err == nil || ValidateClanTag("..") == nil || ValidateClanTag("a/b") == nil {
+		t.Fatal("unsafe clan tags accepted")
+	}
+	if err := ValidateClanTag("40z"); err != nil {
+		t.Fatal(err)
+	}
+}

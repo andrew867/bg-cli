@@ -7,6 +7,7 @@ cmd/bg-cli/          process entrypoint
 internal/api/        official HTTP client, host/path allowlists
 internal/auth/       OAuth, PKCE, loopback callback, keyring store
 internal/cache/      public response cache only
+internal/clan/       clan tag, active battle, shared snapshot deltas
 internal/cli/        Cobra command wiring
 internal/config/     non-secret profile metadata
 internal/exitcode/   stable process codes
@@ -30,7 +31,7 @@ account *
   → GET https://ps99.biggamesapi.io/v1/account/...
   → JSON envelope on stdout
 
-player|leaderboard|collection|market *
+player|leaderboard|collection|market|clan *
   → optional public cache lookup
   → unauthenticated GET
   → JSON envelope on stdout

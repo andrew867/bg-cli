@@ -27,6 +27,7 @@ type Profile struct {
 	IssuedAt    time.Time `json:"issuedAt"`
 	ExpiresAt   time.Time `json:"expiresAt"`
 	AccountID   string    `json:"accountId,omitempty"`
+	PS99UserID  string    `json:"ps99UserId,omitempty"`
 	RedirectURI string    `json:"redirectUri,omitempty"`
 }
 

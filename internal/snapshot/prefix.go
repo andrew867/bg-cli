@@ -35,6 +35,9 @@ var PayloadKinds = []string{
 	"extended-profile-json",
 	"inventory-csv",
 	"currencies-csv",
+	"clan-json",
+	"clan-battle-json",
+	"snapshot-summary",
 }
 
 // FileName builds "{stamp}-{prefix}-{suffix}" or "{stamp}-{suffixPart}-{prefix}-{suffix}" with collision.
@@ -62,6 +65,9 @@ func AllocateStamp(dir, stamp, prefix string) (fullStamp string, collision strin
 			FileName(stamp, coll, prefix, "extprof.json"),
 			FileName(stamp, coll, prefix, "inventory.csv"),
 			FileName(stamp, coll, prefix, "currencies.csv"),
+			FileName(stamp, coll, prefix, "clan.json"),
+			FileName(stamp, coll, prefix, "clanbattle.json"),
+			FileName(stamp, coll, prefix, "summary.json"),
 			FileName(stamp, coll, prefix, "manifest.json"),
 		}
 		conflict := false

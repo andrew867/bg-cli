@@ -91,6 +91,11 @@ func IsPublicPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, "/v1/clans/"):
 		return true
+	case path == "/api/activeClanBattle":
+		return true
+	case strings.HasPrefix(path, "/api/clan/"):
+		rest := path[len("/api/clan/"):]
+		return rest != "" && !strings.Contains(rest, "/")
 	default:
 		return false
 	}

@@ -64,6 +64,7 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account snapshot validate` | local manifest | none (offline) |
 | `account index\|transactions\|hatch\|progression\|portfolio\|reconcile\|audit` | offline manifests / RAP / catalogs | none (offline) |
 | `releases\|leagues\|clans` | public API | none |
+| `clan show\|battle` | `GET /api/clan/{tag}`, `GET /api/activeClanBattle` | none for the public reads; profile read only to resolve the tag |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -83,7 +84,7 @@ Currencies filter: `--id`.
 
 `account quota` returns refresh used/limit/`resetsAt` plus rate-limit remaining and `Retry-After` without printing the profile body.
 
-`account snapshot` writes a dated five-file dump (plus manifest) into `--dir` (default `.`):
+`account snapshot` writes a dated dump plus a manifest into `--dir` (default `.`):
 
 ```text
 {yyyy-MM-dd-HHmmss}-{prefix}-inv.json
@@ -91,10 +92,21 @@ Currencies filter: `--id`.
 {yyyy-MM-dd-HHmmss}-{prefix}-extprof.json
 {yyyy-MM-dd-HHmmss}-{prefix}-inventory.csv
 {yyyy-MM-dd-HHmmss}-{prefix}-currencies.csv
+{yyyy-MM-dd-HHmmss}-{prefix}-clan.json
+{yyyy-MM-dd-HHmmss}-{prefix}-clanbattle.json
+{yyyy-MM-dd-HHmmss}-{prefix}-summary.json
 {yyyy-MM-dd-HHmmss}-{prefix}-manifest.json
 ```
 
-Same-second runs get a `-0001` collision suffix. The manifest lists payload files with exact byte sizes and SHA-256 digests (it does not self-reference its own digest). Optional `--note` stores experiment context. Stdout gets a small summary only.
+`clan.json` is the full public clan document, including `Battles`, and is written when a clan tag resolves. `clanbattle.json` is written only while a battle is active (`StartTime <= now < FinishTime`, and `Enabled` is not false). Both are public GETs with no bearer token and no `refresh=true`.
+
+`summary.json` is written on every snapshot, atomically, and listed in the manifest with its byte size and SHA-256. It is the only file later snapshots read for deltas. Currency amounts inside it come from the profile `Currency` map, stored as exact integer text. A friendly `displayName` is copied when the currency object has one; otherwise the currency id is used.
+
+Clan points and currencies share one prior `*-{prefix}-summary.json` per window (5 minutes, 30 minutes, 1 hour, and the whole session). The baseline is the summary in the same `sessionId` whose age is closest to the requested window. It counts only when the absolute error is within a quarter of that window, and at least 60 seconds. An 18-minute gap is not reported as a 5-minute rate. `netPerHour` is `delta / elapsedSeconds * 3600` using the actual elapsed seconds. The session id is copied from the latest prior summary so it survives a restart; the session baseline is the earliest summary with that id. A clan delta is unavailable when the active battle id differs from the baseline. A currency missing on one side is `newly observed` or `no longer returned`, not zero. Absent amounts stay unresolved.
+
+`--user-id` selects the player for contribution and rank. Otherwise the profile `ps99UserId` is used, then `4092648666`. `--clan-tag` overrides tag discovery. There is no separate historic clan-battle route; `Battles` on the clan document is that record. `clans battle` remains the sampled `GET /v1/clans/battles/:battleId` command.
+
+Same-second runs get a `-0001` collision suffix. The manifest lists payload files with exact byte sizes and SHA-256 digests (it does not self-reference its own digest). Optional `--note` stores experiment context. Stdout stays a JSON summary. A short clan and changed-currency view is printed to stderr. Unchanged currencies are left out of that view.
 
 `account snapshot diff --from OLD_MANIFEST --to NEW_MANIFEST` is fully offline: no auth, no network, no quota. It diffs Statistics, PurchasedEggs, PetHatchCount, Pet inventory variants, and currencies; optional `--egg` / `--pet` / `--egg-price` / `--currency` / `--future-eggs` / `--batch-size` enable observed hatch-rate, reconciliation, and cost/timing analysis. Observed rates are not official game odds.
 
@@ -186,3 +198,21 @@ A missing row maps to `not_ranked_or_not_retained` (exit 3). That outcome is not
 | --- | --- |
 | `market rap` | Public RAP dataset; optional `--category`, `--id` |
 | `market exists` | Public exists tallies; optional `--category`, `--id` |
+
+## clan
+
+Public, read-only. No `Authorization` header and no account refresh.
+
+| Command | Description |
+| --- | --- |
+| `clan show [--tag TAG]` | `GET /api/clan/{tag}`. Tag comes from the signed-in profile or extended profile, or from `--tag`. The body includes `Battles`. |
+| `clan battle` | `GET /api/activeClanBattle`. `active` is true only inside the schedule. |
+
+```bash
+bg-cli clan show --profile main
+bg-cli clan show --tag SYN
+bg-cli clan battle
+bg-cli account snapshot --profile main --dir . --prefix ps99 --user-id 4092648666
+```
+
+No separate historic HTTP route is called. Per-clan history stays in the clan document's `Battles` object. Sampled battle detail by id is the existing `clans battle` command.

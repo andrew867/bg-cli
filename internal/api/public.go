@@ -4,9 +4,27 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+// clanTagRE matches a single clan tag path segment. Tags may start with a digit.
+var clanTagRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`)
+
+// ValidateClanTag rejects empty, dotted, or multi-segment clan tags.
+func ValidateClanTag(tag string) error {
+	if tag == "" || strings.TrimSpace(tag) != tag {
+		return fmt.Errorf("clan tag is empty")
+	}
+	if tag == "." || tag == ".." || strings.ContainsAny(tag, `/\?#`) {
+		return fmt.Errorf("clan tag %q is not a single path segment", tag)
+	}
+	if !clanTagRE.MatchString(tag) {
+		return fmt.Errorf("clan tag %q is not a safe clan name", tag)
+	}
+	return nil
+}
 
 // GetPlayer fetches opted-in public player views.
 func (c *Client) GetPlayer(ctx context.Context, slug string, include []string) (Result, error) {
@@ -194,6 +212,27 @@ func (c *Client) GetClanBattle(ctx context.Context, battleID string) (Result, er
 		return Result{}, fmt.Errorf("battle id is required")
 	}
 	path := "/v1/clans/battles/" + url.PathEscape(battleID)
+	return c.GetPublic(ctx, path, nil, BodyLimitDefault)
+}
+
+// GetLegacyClan fetches GET /api/clan/{tag}. The tag is a single path segment.
+func (c *Client) GetLegacyClan(ctx context.Context, tag string) (Result, error) {
+	if err := ValidateClanTag(tag); err != nil {
+		return Result{}, err
+	}
+	path := "/api/clan/" + url.PathEscape(tag)
+	if !IsPublicPath(path) {
+		return Result{}, fmt.Errorf("refusing non-public clan path")
+	}
+	return c.GetPublic(ctx, path, nil, BodyLimitDefault)
+}
+
+// GetActiveClanBattle fetches GET /api/activeClanBattle.
+func (c *Client) GetActiveClanBattle(ctx context.Context) (Result, error) {
+	const path = "/api/activeClanBattle"
+	if !IsPublicPath(path) {
+		return Result{}, fmt.Errorf("refusing non-public clan battle path")
+	}
 	return c.GetPublic(ctx, path, nil, BodyLimitDefault)
 }
 

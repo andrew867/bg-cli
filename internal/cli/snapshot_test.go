@@ -16,6 +16,8 @@ import (
 	"github.com/andrew867/bg-cli/internal/snapshot"
 )
 
+var inactiveClanBattleBody = []byte(`{"status":"ok","data":{"configName":"FinishedBattle","category":"GuildBattles","configData":{"Title":"Finished","StartTime":1,"FinishTime":2,"Enabled":true}}}`)
+
 func TestAccountSnapshotWritesFilesAndManifest(t *testing.T) {
 	store := auth.NewMemoryStore()
 	setupProfile(t, store, auth.DefaultScopes)
@@ -31,6 +33,11 @@ func TestAccountSnapshotWritesFilesAndManifest(t *testing.T) {
 			_, _ = w.Write(profBody)
 		case "/v1/account/extendedProfile":
 			_, _ = w.Write(extBody)
+		case "/api/activeClanBattle":
+			if r.Header.Get("Authorization") != "" {
+				t.Error("bearer sent to public clan battle")
+			}
+			_, _ = w.Write(inactiveClanBattleBody)
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)
 			w.WriteHeader(404)
@@ -81,6 +88,13 @@ func TestAccountSnapshotWritesFilesAndManifest(t *testing.T) {
 	if !man.OK {
 		t.Fatalf("manifest not ok: %s", manBytes)
 	}
+	sumPath := filepath.Join(outDir, stamp+"-ps99-summary.json")
+	if _, err := os.Stat(sumPath); err != nil {
+		t.Fatalf("summary missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, stamp+"-ps99-clanbattle.json")); !os.IsNotExist(err) {
+		t.Fatal("inactive battle wrote clanbattle.json")
+	}
 }
 
 func TestAccountSnapshotRejectsBadPrefix(t *testing.T) {
@@ -111,6 +125,8 @@ func TestAccountSnapshotCollisionSuffix(t *testing.T) {
 			_, _ = w.Write(profBody)
 		case "/v1/account/extendedProfile":
 			_, _ = w.Write(extBody)
+		case "/api/activeClanBattle":
+			_, _ = w.Write(inactiveClanBattleBody)
 		}
 	}))
 	defer srv.Close()
