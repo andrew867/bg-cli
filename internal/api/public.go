@@ -97,6 +97,106 @@ func (c *Client) GetRAP(ctx context.Context, category, id string) (Result, error
 	return c.GetPublic(ctx, "/api/rap", q, BodyLimitRAP)
 }
 
+// ListReleases fetches GET /v1/releases.
+func (c *Client) ListReleases(ctx context.Context, page, pageSize int) (Result, error) {
+	q := url.Values{}
+	if page > 0 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	if pageSize > 0 {
+		q.Set("pageSize", strconv.Itoa(pageSize))
+	}
+	return c.GetPublic(ctx, "/v1/releases", q, BodyLimitDefault)
+}
+
+// GetRelease fetches GET /v1/releases/:version (version number or "latest").
+func (c *Client) GetRelease(ctx context.Context, version string) (Result, error) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return Result{}, fmt.Errorf("release version is required")
+	}
+	path := "/v1/releases/" + url.PathEscape(version)
+	return c.GetPublic(ctx, path, nil, BodyLimitDefault)
+}
+
+// ListItemChanges fetches GET /v1/items/changes (since required).
+func (c *Client) ListItemChanges(ctx context.Context, since string, page, pageSize int) (Result, error) {
+	since = strings.TrimSpace(since)
+	if since == "" {
+		return Result{}, fmt.Errorf("since is required")
+	}
+	q := url.Values{}
+	q.Set("since", since)
+	if page > 0 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	if pageSize > 0 {
+		q.Set("pageSize", strconv.Itoa(pageSize))
+	}
+	return c.GetPublic(ctx, "/v1/items/changes", q, BodyLimitDefault)
+}
+
+// ListLeagueSeasons fetches GET /v1/leagues/seasons.
+func (c *Client) ListLeagueSeasons(ctx context.Context) (Result, error) {
+	return c.GetPublic(ctx, "/v1/leagues/seasons", nil, BodyLimitDefault)
+}
+
+// GetLeagueSeason fetches GET /v1/leagues/seasons/:seasonId.
+func (c *Client) GetLeagueSeason(ctx context.Context, seasonID string) (Result, error) {
+	seasonID = strings.TrimSpace(seasonID)
+	if seasonID == "" {
+		return Result{}, fmt.Errorf("season id is required")
+	}
+	path := "/v1/leagues/seasons/" + url.PathEscape(seasonID)
+	return c.GetPublic(ctx, path, nil, BodyLimitDefault)
+}
+
+// ListLeagues fetches GET /v1/leagues (PascalCase league rows).
+func (c *Client) ListLeagues(ctx context.Context, season string, page, pageSize int) (Result, error) {
+	q := url.Values{}
+	if season != "" {
+		q.Set("season", season)
+	}
+	if page > 0 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	if pageSize > 0 {
+		q.Set("pageSize", strconv.Itoa(pageSize))
+	}
+	return c.GetPublic(ctx, "/v1/leagues", q, BodyLimitDefault)
+}
+
+// ListLeagueContributors fetches GET /v1/leagues/players (top-500 sample).
+func (c *Client) ListLeagueContributors(ctx context.Context, season string) (Result, error) {
+	q := url.Values{}
+	if season != "" {
+		q.Set("season", season)
+	}
+	return c.GetPublic(ctx, "/v1/leagues/players", q, BodyLimitDefault)
+}
+
+// ListClanPlayersAggregate fetches GET /v1/clans/players.
+func (c *Client) ListClanPlayersAggregate(ctx context.Context, page, pageSize int) (Result, error) {
+	q := url.Values{}
+	if page > 0 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	if pageSize > 0 {
+		q.Set("pageSize", strconv.Itoa(pageSize))
+	}
+	return c.GetPublic(ctx, "/v1/clans/players", q, BodyLimitDefault)
+}
+
+// GetClanBattle fetches GET /v1/clans/battles/:battleId (camelCase detail).
+func (c *Client) GetClanBattle(ctx context.Context, battleID string) (Result, error) {
+	battleID = strings.TrimSpace(battleID)
+	if battleID == "" {
+		return Result{}, fmt.Errorf("battle id is required")
+	}
+	path := "/v1/clans/battles/" + url.PathEscape(battleID)
+	return c.GetPublic(ctx, path, nil, BodyLimitDefault)
+}
+
 // GetExists fetches /api/exists.
 func (c *Client) GetExists(ctx context.Context, category, id string) (Result, error) {
 	q := url.Values{}

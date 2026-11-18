@@ -83,8 +83,8 @@ func newAccountForgeAnalyzeCmd(app *App) *cobra.Command {
 }
 
 func newAccountForgeOptimizeCmd(app *App) *cobra.Command {
-	var observations, snapshotPath, weightsPath, objective string
-	var butlerBudget, maxButlers int
+	var observations, snapshotPath, weightsPath, objective, mode string
+	var butlerBudget, maxButlers, shardBudget, minButlers int
 	cmd := &cobra.Command{
 		Use:   "optimize",
 		Short: "Recommend Forge recipes from fitted displayed probabilities + inventory",
@@ -96,15 +96,11 @@ func newAccountForgeOptimizeCmd(app *App) *cobra.Command {
 			if err != nil {
 				return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
 			}
-			an := forge.AnalyzeObservations(f)
-			var model *forge.CappedLinearModel
-			for _, g := range an.Groups {
-				if g.Model != nil && (model == nil || g.Model.NPoints > model.NPoints) {
-					model = g.Model
-				}
+			if mode == "" {
+				mode = "butler-only"
 			}
-			if model == nil {
-				return &ExitError{Code: exitcode.Usage, Msg: "no fitted butler-only model available from observations"}
+			if mode != "butler-only" && mode != "observed-mixed" {
+				return &ExitError{Code: exitcode.Usage, Msg: "--mode must be butler-only or observed-mixed"}
 			}
 			weights := forge.DefaultButlerWeights()
 			if weightsPath != "" {
@@ -146,16 +142,39 @@ func newAccountForgeOptimizeCmd(app *App) *cobra.Command {
 			}
 			obj := forge.ObjectiveID(objective)
 			if obj == "" {
-				obj = forge.ObjMinButlers
+				if mode == "observed-mixed" {
+					obj = forge.ObjMinShards
+				} else {
+					obj = forge.ObjMinButlers
+				}
 			}
-			if maxButlers <= 0 {
-				maxButlers = 30
+			var rep forge.OptimizeReport
+			switch mode {
+			case "observed-mixed":
+				rep, err = forge.OptimizeObservedMixed(f, forge.ObservedMixedOptions{
+					Objective: obj, Weights: weights, Inventory: inv,
+					ShardBudget: shardBudget, MinButlers: minButlers, ProtectVariants: true,
+				})
+			default:
+				an := forge.AnalyzeObservations(f)
+				var model *forge.CappedLinearModel
+				for _, g := range an.Groups {
+					if g.Model != nil && (model == nil || g.Model.NPoints > model.NPoints) {
+						model = g.Model
+					}
+				}
+				if model == nil {
+					return &ExitError{Code: exitcode.Usage, Msg: "no fitted butler-only model available from observations"}
+				}
+				if maxButlers <= 0 {
+					maxButlers = 30
+				}
+				rep, err = forge.OptimizeButlerOnly(forge.OptimizeOptions{
+					Objective: obj, Weights: weights, Inventory: inv,
+					ButlerBudget: butlerBudget, Model: *model,
+					ShardsPerAttempt: 100, MaxButlers: maxButlers, MinButlers: 1, ProtectVariants: true,
+				})
 			}
-			rep, err := forge.OptimizeButlerOnly(forge.OptimizeOptions{
-				Objective: obj, Weights: weights, Inventory: inv,
-				ButlerBudget: butlerBudget, Model: *model,
-				ShardsPerAttempt: 100, MaxButlers: maxButlers, MinButlers: 1, ProtectVariants: true,
-			})
 			if err != nil {
 				return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
 			}
@@ -166,9 +185,12 @@ func newAccountForgeOptimizeCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&observations, "observations", "", "forge observations JSON")
 	cmd.Flags().StringVar(&snapshotPath, "snapshot", "", "optional snapshot manifest for inventory availability")
 	cmd.Flags().StringVar(&weightsPath, "weights", "", "optional resource weights JSON")
-	cmd.Flags().StringVar(&objective, "objective", "min-butlers", "min-butlers|min-shards|max-success|max-success-budget|weighted-cost")
-	cmd.Flags().IntVar(&butlerBudget, "butler-budget", 0, "budget for max-success-budget")
-	cmd.Flags().IntVar(&maxButlers, "max-butlers", 30, "search upper bound")
+	cmd.Flags().StringVar(&mode, "mode", "butler-only", "butler-only|observed-mixed")
+	cmd.Flags().StringVar(&objective, "objective", "", "min-butlers|min-shards|max-success|max-success-budget|weighted-cost")
+	cmd.Flags().IntVar(&butlerBudget, "butler-budget", 0, "budget for max-success-budget (butler-only)")
+	cmd.Flags().IntVar(&shardBudget, "shard-budget", 0, "max spirit shards per attempt (observed-mixed)")
+	cmd.Flags().IntVar(&minButlers, "min-butlers", 0, "minimum butlers required (observed-mixed)")
+	cmd.Flags().IntVar(&maxButlers, "max-butlers", 30, "search upper bound (butler-only)")
 	return cmd
 }
 

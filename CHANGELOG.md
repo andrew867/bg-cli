@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (none)
+- Seven-view `account snapshot` via `--all-views` / `--include` (default three-view behavior unchanged); `account snapshot validate` integrity checks; manifest schema `1.2` with view request/content status
+- Offline analytics: `account index`, `transactions`, `hatch`, `progression`, `portfolio`, `reconcile`, `audit`
+- Public intelligence: `releases`, `leagues`, `clans` (sampled ranking depth disclosed)
+- Forge `--mode observed-mixed` with variable shard budgets and observed Pareto frontier (Butler-only model unchanged)
+- Docs: `docs/research/analytics-methodology.md`; Windows offline smoke `scripts/windows-smoke-offline.ps1`
 
 ## [0.1.4] - 2026-11-07
 

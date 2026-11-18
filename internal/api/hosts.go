@@ -83,6 +83,14 @@ func IsPublicPath(path string) bool {
 		return true
 	case path == "/api/rap" || path == "/api/exists":
 		return true
+	case path == "/v1/releases" || strings.HasPrefix(path, "/v1/releases/"):
+		return true
+	case path == "/v1/items/changes":
+		return true
+	case strings.HasPrefix(path, "/v1/leagues"):
+		return true
+	case strings.HasPrefix(path, "/v1/clans/"):
+		return true
 	default:
 		return false
 	}

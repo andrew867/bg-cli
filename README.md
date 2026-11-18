@@ -71,6 +71,9 @@ Research notes: [`docs/research/pet-power-and-events.md`](docs/research/pet-powe
 ```bash
 bg-cli account forge analyze --observations ./testdata/fixtures/forge-observations-butler-2026-11-06.json --pretty
 bg-cli account forge optimize --observations ./testdata/fixtures/forge-observations-butler-2026-11-06.json --objective min-butlers --pretty
+bg-cli account forge optimize --observations ./testdata/fixtures/forge-observations-mixed-shards.json --mode observed-mixed --shard-budget 63 --pretty
+bg-cli account hatch report --from OLD-manifest.json --to NEW-manifest.json --egg "Hollow Egg" --pretty
+bg-cli releases list --page-size 100 --pretty
 ```
 
 ## Documentation
