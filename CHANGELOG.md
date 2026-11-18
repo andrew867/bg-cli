@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public intelligence: `releases`, `leagues`, `clans` (sampled ranking depth disclosed)
 - Forge `--mode observed-mixed` with variable shard budgets and observed Pareto frontier (Butler-only model unchanged)
 - Docs: `docs/research/analytics-methodology.md`; Windows offline smoke `scripts/windows-smoke-offline.ps1`
+- `account craft` Combine-o-Matic (NOT Forge): recipes, BOM plan, optimize; Gargantuan BOM 480/3420/48/12/4/2 regression
+- `account hatch compare` for versioned experiment checkpoints; Masquerade Thorn Egg Nov 7 fixture; EggHatchCount≠pull-size warnings
+- Item-flow annotations + Candy Coins runway economics with explicit residuals
 
 ## [0.1.4] - 2026-11-07
 

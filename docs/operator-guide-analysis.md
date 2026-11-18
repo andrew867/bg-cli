@@ -58,3 +58,14 @@ bg-cli account reconcile --from OLD-manifest.json --to NEW-manifest.json --prett
 bg-cli releases list --page-size 100 --pretty
 bg-cli leagues players --season SEASON_ID --pretty
 ```
+
+## 7. Combine-o-Matic (not Forge) + Masquerade hatch experiments
+
+```powershell
+bg-cli account craft recipes --pretty
+bg-cli account craft plan --target gargantuan-butler-penguin --pretty
+bg-cli account craft optimize --objective earliest-first-huge --pretty
+bg-cli account hatch compare --file .\testdata\fixtures\analytics\masquerade-thorn-hatch-2026-11-07.json --pretty
+```
+
+Combine-o-Matic recipes are screenshot observations. Parallel 43h paths are theoretical until craft slots are verified. Never apply Forge Saver here without evidence.
