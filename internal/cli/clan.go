@@ -11,6 +11,7 @@ import (
 
 	"github.com/andrew867/bg-cli/internal/api"
 	"github.com/andrew867/bg-cli/internal/clan"
+	"github.com/andrew867/bg-cli/internal/config"
 	"github.com/andrew867/bg-cli/internal/exitcode"
 )
 
@@ -20,8 +21,10 @@ func newClanCmd(app *App) *cobra.Command {
 		Short: "Read-only clan document and active clan battle",
 		Long: `Reads the public clan document and the current clan battle.
 
-clan show calls GET /api/clan/{tag}. The tag comes from the signed-in profile
-or extended profile, or from --tag. The document includes Battles, which is the
+clan show calls GET /api/clan/{tag}. The tag comes from --tag, then
+profiles.<alias>.ps99ClanTag in config.json, then the signed-in profile or
+extended profile. A stored tag is read without an access token and skips the
+account lookup. The document includes Battles, which is the
 per-clan history the API returns. There is no separate historic HTTP route.
 Sampled battle detail by id remains "clans battle" (GET /v1/clans/battles/:id).
 
@@ -78,7 +81,7 @@ func newClanShowCmd(app *App) *cobra.Command {
 			}, nil)
 		},
 	}
-	cmd.Flags().StringVar(&tag, "tag", "", "clan tag; skips the account lookup when set")
+	cmd.Flags().StringVar(&tag, "tag", "", "clan tag; skips the stored ps99ClanTag and account lookup when set")
 	return cmd
 }
 
@@ -119,22 +122,37 @@ func newClanBattleCmd(app *App) *cobra.Command {
 }
 
 func (a *App) resolveClanTag(ctx context.Context) (tag, field, source string, err error) {
-	profile, err := a.fetchAccountData(ctx, "/v1/account/profile", api.ScopeProfile)
-	if err != nil {
-		return "", "", "", err
+	p, ok, metaErr := a.profileMetadata()
+	if metaErr != nil {
+		return "", "", "", metaErr
 	}
-	extended, extErr := a.fetchAccountData(ctx, "/v1/account/extendedProfile", api.ScopeExtendedProfile)
-	if extErr != nil {
-		a.notice("extended profile lookup skipped: %v", extErr)
-	}
-	tag, field, ok := clan.ExtractTag(profile, extended)
-	if !ok {
-		return "", "", "", &ExitError{
-			Code: exitcode.Usage,
-			Msg:  "clan tag is absent from the signed-in profile and extended profile\n  bg-cli clan show --tag <CLAN_TAG>",
+	if ok {
+		if stored := strings.TrimSpace(p.PS99ClanTag); stored != "" {
+			return stored, "ps99ClanTag", "config", nil
 		}
 	}
-	return tag, field, "profile", nil
+	profile, fetchErr := a.fetchAccountData(ctx, "/v1/account/profile", api.ScopeProfile)
+	var extended json.RawMessage
+	if fetchErr != nil {
+		a.notice("profile lookup for clan tag skipped: %v", fetchErr)
+	} else {
+		var extErr error
+		extended, extErr = a.fetchAccountData(ctx, "/v1/account/extendedProfile", api.ScopeExtendedProfile)
+		if extErr != nil {
+			a.notice("extended profile lookup skipped: %v", extErr)
+		}
+	}
+	discovered, field, found := clan.ExtractTag(profile, extended)
+	if found {
+		return discovered, field, "profile", nil
+	}
+	if fetchErr != nil {
+		return "", "", "", fetchErr
+	}
+	return "", "", "", &ExitError{
+		Code: exitcode.Usage,
+		Msg:  "clan tag is absent from config ps99ClanTag, the signed-in profile, and the extended profile\n  bg-cli clan show --tag <CLAN_TAG>",
+	}
 }
 
 func (a *App) fetchAccountData(ctx context.Context, path, scope string) (json.RawMessage, error) {
@@ -153,19 +171,44 @@ func (a *App) fetchAccountData(ctx context.Context, path, scope string) (json.Ra
 	return append(json.RawMessage(nil), res.Data...), nil
 }
 
+// profileMetadata reads one local profile from config.json. It does not touch
+// the credential store. A missing profile is not an error.
+func (a *App) profileMetadata() (config.Profile, bool, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Profile{}, false, err
+	}
+	alias := strings.TrimSpace(a.Flags.Profile)
+	if alias == "" {
+		alias = strings.TrimSpace(cfg.DefaultProfile)
+	}
+	if alias == "" {
+		return config.Profile{}, false, nil
+	}
+	p, ok := config.Get(cfg, alias)
+	return p, ok, nil
+}
+
 func (a *App) configuredPS99UserID(flag string) (string, bool) {
 	configured := ""
-	if p, _, _, err := a.resolveProfileToken(""); err == nil {
+	if p, ok, err := a.profileMetadata(); err == nil && ok {
 		configured = p.PS99UserID
 	}
 	return clan.ResolveUserID(flag, configured)
+}
+
+func (a *App) configuredPS99ClanTag() string {
+	if p, ok, err := a.profileMetadata(); err == nil && ok {
+		return strings.TrimSpace(p.PS99ClanTag)
+	}
+	return ""
 }
 
 func (a *App) configuredAccountID(profileBody json.RawMessage) string {
 	if id := clan.ExtractAccountID(profileBody); id != "" {
 		return id
 	}
-	if p, _, _, err := a.resolveProfileToken(""); err == nil {
+	if p, ok, err := a.profileMetadata(); err == nil && ok {
 		return strings.TrimSpace(p.AccountID)
 	}
 	return ""

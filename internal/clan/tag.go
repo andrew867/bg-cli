@@ -14,6 +14,22 @@ var tagKeys = []string{
 	"Guild", "GuildTag", "GuildName", "GuildID", "GuildId",
 }
 
+// ResolveClanTag chooses the clan tag for a public clan read.
+// An explicit flag wins, then a tag discovered on the account documents,
+// then the stored profile ps99ClanTag. There is no built-in tag.
+func ResolveClanTag(flag, discovered, configured string) (tag, source string, ok bool) {
+	if s := strings.TrimSpace(flag); s != "" {
+		return s, "flag", true
+	}
+	if s := strings.TrimSpace(discovered); s != "" {
+		return s, "profile", true
+	}
+	if s := strings.TrimSpace(configured); s != "" {
+		return s, "config", true
+	}
+	return "", "", false
+}
+
 // ExtractTag returns the first clan tag on the profile object, then the
 // extended-profile object. The value must be a single safe path segment.
 func ExtractTag(profile, extended json.RawMessage) (tag, field string, ok bool) {

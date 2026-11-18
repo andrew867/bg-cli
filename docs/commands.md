@@ -41,6 +41,8 @@ Stdout carries data. Diagnostics go to stderr. Secrets are never printed.
 | `auth login` | OAuth login (all account scopes by default; `--scopes` to opt out); stores token in the OS credential store |
 | `auth status` | Local metadata; `--check` optionally probes the API |
 | `auth profiles` | List local profiles |
+| `auth profile set` | Set `ps99UserId`, `ps99ClanTag`, or `accountId` on a local profile |
+| `auth profile unset` | Clear those stored fields |
 | `auth logout` | Delete local token and metadata |
 
 ## account
@@ -64,7 +66,7 @@ Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching
 | `account snapshot validate` | local manifest | none (offline) |
 | `account index\|transactions\|hatch\|progression\|portfolio\|reconcile\|audit` | offline manifests / RAP / catalogs | none (offline) |
 | `releases\|leagues\|clans` | public API | none |
-| `clan show\|battle` | `GET /api/clan/{tag}`, `GET /api/activeClanBattle` | none for the public reads; profile read only to resolve the tag |
+| `clan show\|battle` | `GET /api/clan/{tag}`, `GET /api/activeClanBattle` | none for the public reads; `clan show` reads the account only when no `--tag` and no stored `ps99ClanTag` |
 | `account extended-profile` | `/v1/account/extendedProfile` | extendedProfile:read |
 | `account item-index` | `/v1/account/itemIndex` | itemIndex:read |
 | `account trades` | `/v1/account/trades` | trades:read |
@@ -104,7 +106,7 @@ Currencies filter: `--id`.
 
 Clan points and currencies share one prior `*-{prefix}-summary.json` per window (5 minutes, 30 minutes, 1 hour, the whole session, and previous). The finite baseline is the summary in the same `sessionId` and the same account whose age is closest to the requested window. `previous` is the latest compatible summary in that session, with no age limit. The session baseline is the earliest summary with that id for the same account. A finite window counts only when the absolute error is within a quarter of that window, and at least 60 seconds. An 18-minute gap is not reported as a 5-minute rate. `netPerHour` is the exact value of `delta / elapsedSeconds * 3600`. A non-integral rate also includes `netPerHourApprox`, a decimal approximation. Stored balances and deltas stay exact integers. Currency rates are observation estimates: each changed currency sets `rateBasis` to `observation_interval` and `estimated` to true, because profile currency comes from a cached player snapshot rather than a continuous counter. Clan-point rates stay on the uncached public reads and are not marked that way. By default the session id is copied from the latest prior summary for that account, so a restart continues the session. `--new-session` starts a new id. `--session-id` sets one explicitly. The two flags cannot be combined. A clan-point delta is unavailable when the clan tag or the active battle id differs from the baseline. A player-contribution delta requires the same PS99 user id. A currency missing on one side is `newly observed` or `no longer returned`, not zero. `current.currenciesKnown` records whether the currency list was actually returned. An unknown list is not treated as empty, and numeric currency deltas are omitted with a reason. Absent amounts stay unresolved.
 
-`--user-id` selects the player for contribution and rank. Otherwise the profile `ps99UserId` is used. When neither is set, clan totals are kept and contribution and rank are omitted. `--clan-tag` overrides tag discovery. Snapshot reads of the clan and active battle bypass the local public cache. A failed clan or active-battle request is a warning and does not fail the snapshot; `--require-clan` makes that failure fatal. The summary file itself is still required. There is no separate historic clan-battle route; `Battles` on the clan document is that record. `clans battle` remains the sampled `GET /v1/clans/battles/:battleId` command.
+`--user-id` selects the player for contribution and rank. Otherwise `profiles.<alias>.ps99UserId` in `config.json` is used. When neither is set, clan totals are kept and contribution and rank are omitted. `--clan-tag` overrides tag discovery. When the flag is omitted, the tag is taken from the profile or extended profile, then from `profiles.<alias>.ps99ClanTag`. Snapshot reads of the clan and active battle bypass the local public cache. A failed clan or active-battle request is a warning and does not fail the snapshot; `--require-clan` makes that failure fatal. The summary file itself is still required. There is no separate historic clan-battle route; `Battles` on the clan document is that record. `clans battle` remains the sampled `GET /v1/clans/battles/:battleId` command.
 
 Same-second runs get a `-0001` collision suffix. The manifest lists payload files with exact byte sizes and SHA-256 digests (it does not self-reference its own digest). Optional `--note` stores experiment context. Stdout stays a JSON summary. A short clan and changed-currency view is printed to stderr. Unchanged currencies are left out of that view.
 
@@ -205,7 +207,7 @@ Public, read-only. No `Authorization` header and no account refresh.
 
 | Command | Description |
 | --- | --- |
-| `clan show [--tag TAG]` | `GET /api/clan/{tag}`. Tag comes from the signed-in profile or extended profile, or from `--tag`. The body includes `Battles`. |
+| `clan show [--tag TAG]` | `GET /api/clan/{tag}`. Tag comes from `--tag`, then stored `ps99ClanTag` (no token required), then the signed-in profile or extended profile. The body includes `Battles`. |
 | `clan battle` | `GET /api/activeClanBattle`. `active` is true only inside the schedule. |
 
 ```bash

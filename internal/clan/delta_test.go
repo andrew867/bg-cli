@@ -501,6 +501,21 @@ func TestCurrenciesFromProfileStayExact(t *testing.T) {
 	}
 }
 
+func TestResolveClanTag(t *testing.T) {
+	if tag, source, ok := ResolveClanTag("FLAG", "LIVE", "STORED"); !ok || tag != "FLAG" || source != "flag" {
+		t.Fatalf("flag tag=%s source=%s ok=%v", tag, source, ok)
+	}
+	if tag, source, ok := ResolveClanTag("", "LIVE", "STORED"); !ok || tag != "LIVE" || source != "profile" {
+		t.Fatalf("profile tag=%s source=%s ok=%v", tag, source, ok)
+	}
+	if tag, source, ok := ResolveClanTag("  ", "", " STORED "); !ok || tag != "STORED" || source != "config" {
+		t.Fatalf("config tag=%s source=%s ok=%v", tag, source, ok)
+	}
+	if _, _, ok := ResolveClanTag("", "", " "); ok {
+		t.Fatal("blank config was accepted")
+	}
+}
+
 func TestResolveUserID(t *testing.T) {
 	id, ok := ResolveUserID("", "")
 	if ok || id != "" {

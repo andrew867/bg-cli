@@ -173,8 +173,8 @@ func Login(ctx context.Context, opt LoginOptions) (LoginResult, *redact.Secrets,
 	}
 	if prev, ok := config.Get(cfg, opt.Profile); ok {
 		p = config.PreserveProfileIdentity(p, prev)
-		if prev.AccountID != "" || prev.PS99UserID != "" {
-			fmt.Fprintf(stderr, "Kept accountId and ps99UserId for profile %s\n", opt.Profile)
+		if kept := keptIdentityFields(prev); len(kept) > 0 {
+			fmt.Fprintf(stderr, "Kept %s for profile %s\n", formatKeptList(kept), opt.Profile)
 		}
 	}
 	if err := config.UpsertProfile(cfg, p, cfg.DefaultProfile == "" || cfg.DefaultProfile == opt.Profile); err != nil {
@@ -192,6 +192,33 @@ func Login(ctx context.Context, opt LoginOptions) (LoginResult, *redact.Secrets,
 		ExpiresAt: expires,
 		IssuedAt:  issued,
 	}, secrets, nil
+}
+
+func keptIdentityFields(p config.Profile) []string {
+	var kept []string
+	if strings.TrimSpace(p.AccountID) != "" {
+		kept = append(kept, "accountId")
+	}
+	if strings.TrimSpace(p.PS99UserID) != "" {
+		kept = append(kept, "ps99UserId")
+	}
+	if strings.TrimSpace(p.PS99ClanTag) != "" {
+		kept = append(kept, "ps99ClanTag")
+	}
+	return kept
+}
+
+func formatKeptList(fields []string) string {
+	switch len(fields) {
+	case 0:
+		return ""
+	case 1:
+		return fields[0]
+	case 2:
+		return fields[0] + " and " + fields[1]
+	default:
+		return strings.Join(fields[:len(fields)-1], ", ") + ", and " + fields[len(fields)-1]
+	}
 }
 
 func openBrowser(rawURL string) error {
