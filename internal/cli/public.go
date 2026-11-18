@@ -22,6 +22,16 @@ type publicResult struct {
 }
 
 func (a *App) getPublicCached(ctx context.Context, path string, query url.Values, limit int64) (publicResult, error) {
+	return a.getPublic(ctx, path, query, limit, false)
+}
+
+// getPublicFresh always reads the upstream response. Snapshot clan rates use
+// this so a cached document is not stamped with the current observation time.
+func (a *App) getPublicFresh(ctx context.Context, path string, query url.Values, limit int64) (publicResult, error) {
+	return a.getPublic(ctx, path, query, limit, true)
+}
+
+func (a *App) getPublic(ctx context.Context, path string, query url.Values, limit int64, bypassCache bool) (publicResult, error) {
 	client := a.apiClient()
 	base := client.BaseURL
 	if base == "" {
@@ -41,7 +51,7 @@ func (a *App) getPublicCached(ctx context.Context, path string, query url.Values
 	}
 
 	store := cache.Store{}
-	if !a.Flags.NoCache {
+	if !bypassCache && !a.Flags.NoCache {
 		if st, body, ok, gerr := store.Get(rawURL, now); gerr == nil && ok {
 			res := api.Result{HTTPStatus: st, Body: body, Endpoint: path, Headers: http.Header{}}
 			var env struct {
@@ -68,7 +78,7 @@ func (a *App) getPublicCached(ctx context.Context, path string, query url.Values
 	if err != nil {
 		return publicResult{RequestURL: rawURL}, err
 	}
-	if !a.Flags.NoCache {
+	if !bypassCache && !a.Flags.NoCache {
 		maxAge := cache.ParseMaxAge(res.Headers.Get("Cache-Control"))
 		_ = store.Put(rawURL, res.HTTPStatus, res.Body, res.Headers.Get("Content-Type"), maxAge, now)
 	}

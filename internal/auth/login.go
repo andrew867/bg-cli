@@ -171,6 +171,12 @@ func Login(ctx context.Context, opt LoginOptions) (LoginResult, *redact.Secrets,
 		ExpiresAt:   expires,
 		RedirectURI: redirectURI,
 	}
+	if prev, ok := config.Get(cfg, opt.Profile); ok {
+		p = config.PreserveProfileIdentity(p, prev)
+		if prev.AccountID != "" || prev.PS99UserID != "" {
+			fmt.Fprintf(stderr, "Kept accountId and ps99UserId for profile %s\n", opt.Profile)
+		}
+	}
 	if err := config.UpsertProfile(cfg, p, cfg.DefaultProfile == "" || cfg.DefaultProfile == opt.Profile); err != nil {
 		_ = store.Delete(opt.Profile)
 		return LoginResult{}, secrets, err

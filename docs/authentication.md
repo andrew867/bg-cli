@@ -72,6 +72,8 @@ bg-cli auth logout --profile main
 
 Access tokens are valid for 30 days. There is no refresh-token endpoint. When a token expires or is revoked, account commands exit with code 8 and login must be repeated.
 
+Running `auth login` again for an existing profile replaces the token, client id, scopes, and expiry. It keeps `accountId` and `ps99UserId`. Those fields are not part of the OAuth response, and a reauthorization does not erase them.
+
 ## Multiple accounts
 
 ```bash

@@ -27,6 +27,7 @@ type Profile struct {
 	IssuedAt    time.Time `json:"issuedAt"`
 	ExpiresAt   time.Time `json:"expiresAt"`
 	AccountID   string    `json:"accountId,omitempty"`
+	PS99UserID  string    `json:"ps99UserId,omitempty"`
 	RedirectURI string    `json:"redirectUri,omitempty"`
 }
 
@@ -107,6 +108,15 @@ func Save(f *File) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// PreserveProfileIdentity copies non-secret account metadata that OAuth does
+// not return. Reauthorization replaces the token fields and keeps accountId
+// and ps99UserId instead of erasing them.
+func PreserveProfileIdentity(next, previous Profile) Profile {
+	next.AccountID = previous.AccountID
+	next.PS99UserID = previous.PS99UserID
+	return next
 }
 
 // UpsertProfile stores or replaces a profile and optionally sets default.

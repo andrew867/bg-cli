@@ -277,3 +277,103 @@ func TestLoginWrongStateNoExchange(t *testing.T) {
 		t.Fatalf("token exchange must not run on state mismatch, ran %d", exchanges)
 	}
 }
+
+func TestLoginReauthKeepsIdentityMetadata(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias:      "main",
+				ClientID:   "old-client",
+				Scopes:     []string{"player-data:pet-simulator-99:profile:read"},
+				AccountID:  "acct-kept",
+				PS99UserID: "1001",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	reserve, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := reserve.Addr().String()
+	_ = reserve.Close()
+	redirectURI := "http://" + addr + "/callback"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		cb := q.Get("redirect_uri") + "?code=" + url.QueryEscape("synthetic-auth-code") + "&state=" + url.QueryEscape(q.Get("state"))
+		http.Redirect(w, r, cb, http.StatusFound)
+	})
+	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(loadFixture(t, "oauth-token-ok.json"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	var stderr strings.Builder
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, _, err = Login(ctx, LoginOptions{
+		Profile: "main", ClientID: "test-client-id", RedirectURI: redirectURI,
+		Scopes: []string{
+			"player-data:pet-simulator-99:inventory:read",
+			"player-data:pet-simulator-99:profile:read",
+		},
+		AuthorizeURL: srv.URL + "/oauth/authorize",
+		TokenURL:     srv.URL + "/oauth/token",
+		HTTPClient:   srv.Client(),
+		TokenStore:   NewMemoryStore(),
+		SecretSource: SecretSource{
+			Env: func(k string) string {
+				if k == ClientSecretEnv {
+					return "synthetic-client-secret"
+				}
+				return ""
+			},
+			Stderr: io.Discard,
+			IsTTY:  func() bool { return false },
+		},
+		Stderr: &stderr,
+		OpenURL: func(u string) error {
+			go func() {
+				c := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+				resp, err := c.Get(u)
+				if err != nil {
+					return
+				}
+				loc := resp.Header.Get("Location")
+				resp.Body.Close()
+				if r2, err := http.Get(loc); err == nil {
+					r2.Body.Close()
+				}
+			}()
+			return nil
+		},
+		Now:          func() time.Time { return time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC) },
+		CallbackWait: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("reauth: %v\nstderr=%s", err, stderr.String())
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := cfg.Profiles["main"]
+	if p.AccountID != "acct-kept" || p.PS99UserID != "1001" {
+		t.Fatalf("reauth erased identity: account=%q user=%q", p.AccountID, p.PS99UserID)
+	}
+	if p.ClientID != "test-client-id" {
+		t.Fatalf("client id was not updated: %s", p.ClientID)
+	}
+	if !strings.Contains(stderr.String(), "Kept accountId and ps99UserId") {
+		t.Fatalf("stderr=%s", stderr.String())
+	}
+}
