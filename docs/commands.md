@@ -180,6 +180,43 @@ A missing row maps to `not_ranked_or_not_retained` (exit 3). That outcome is not
 | `collection list` | List collection names |
 | `collection show <name>` | Fetch one collection document |
 
+## account tiers
+
+Offline join of inventory `id` + `rawData.tn` (and equipped `level` when > 0) to official public `Tiers[].DisplayName`. Never invents equipped loadouts from ownership. Does not spend account refresh quota.
+
+```bash
+bg-cli account tiers resolve --inventory ./inv.json --live-public --pretty
+bg-cli account tiers resolve --manifest ./2026-11-08-145843-ps99-manifest.json \
+  --enchants ./Enchants.json --potions ./Potions.json --charms ./Charms.json --pretty
+```
+
+## public (catalog observatory)
+
+Offline-first public catalog. Sync never attaches account bearer tokens and does not spend inventory refresh quota.
+
+| Command | Description |
+| --- | --- |
+| `public discover` | List `/api/collections` names (or `--fixture`) |
+| `public sync` | Fetch curated or `--collections` / `--all` into `--dir` |
+| `public collections` | List collections in the local catalog |
+| `public status` | Coverage manifest |
+| `public inspect COLLECTION [NAME]` | Inspect local snapshot / egg |
+| `public diff --from A --to B` | Semantic collection JSON diff |
+| `public export` | Export coverage + collection list |
+| `public changes` | Alias to `releases changes` (official item-change feed) |
+
+## egg / graph
+
+| Command | Description |
+| --- | --- |
+| `egg show NAME` | Parse egg document from local Eggs JSON |
+| `egg odds NAME --model …` | Hypothetical odds (`direct-percent`, `normalized-weight`, `independent-rare-gate`) |
+| `egg flags NAME` | Named odds/feature flags without inventing magnitudes |
+| `egg cost NAME` | Nominal batch affordability from balance strings |
+| `graph unresolved` | Heuristic / unresolved entity joins |
+
+See `docs/public-data-cli.md`, `docs/egg-probability-models.md`, `docs/zone-egg-mapping.md`.
+
 ## market
 
 | Command | Description |

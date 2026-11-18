@@ -194,6 +194,9 @@ Never pass client_secret as a flag. Supply it via masked prompt, stdin, or BG_CL
 	root.AddCommand(newReleasesCmd(app))
 	root.AddCommand(newLeaguesCmd(app))
 	root.AddCommand(newClansCmd(app))
+	root.AddCommand(newPublicObservatoryCmd(app))
+	root.AddCommand(newEggCmd(app))
+	root.AddCommand(newGraphCmd(app))
 
 	return root
 }

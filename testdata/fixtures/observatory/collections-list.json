@@ -1,0 +1,17 @@
+{
+  "status": "ok",
+  "data": [
+    "Currency",
+    "Eggs",
+    "Pets",
+    "Zones",
+    "Worlds",
+    "ZoneFlags",
+    "SecretRooms",
+    "Charms",
+    "Upgrades",
+    "Machines",
+    "Events",
+    "NewDiscoveryCollection"
+  ]
+}
