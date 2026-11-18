@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (none)
+
+## [0.2.0] - 2026-11-18
+
 ### Changed
 
 - Auth docs state that reauthorizing a profile assumes the same game account. The snapshot console prints the previous window before the session window.
