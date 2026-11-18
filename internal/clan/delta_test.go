@@ -63,6 +63,9 @@ func TestPositiveNegativeUnchangedAndMultipleCurrencies(t *testing.T) {
 	if tok.NetPerHour != "3018" {
 		t.Fatalf("netPerHour=%s want 3018", tok.NetPerHour)
 	}
+	if tok.RateBasis != CurrencyRateBasis || !tok.Estimated {
+		t.Fatalf("currency rate was not marked as an observation estimate: %+v", tok)
+	}
 	spent := w.ChangedCurrencies["Spent"]
 	if spent.Delta != "-60" || spent.NetPerHour != "-120" {
 		t.Fatalf("negative delta: %+v", spent)
@@ -163,7 +166,7 @@ func TestSharedBaselineAndIrregularElapsed(t *testing.T) {
 func TestMissingFiveMinuteAndSparseAndFirstSnapshot(t *testing.T) {
 	now := time.Date(2026, 11, 18, 18, 0, 0, 0, time.UTC)
 	first := Build(Input{Now: now, Prefix: "ps99", LocalStamp: "2026-11-18-180000", CurrenciesKnown: true, Currencies: map[string]CurrencyAmount{}})
-	for _, w := range []Window{first.Windows.Five, first.Windows.Thirty, first.Windows.Hour, first.Windows.Session} {
+	for _, w := range []Window{first.Windows.Five, first.Windows.Thirty, first.Windows.Hour, first.Windows.Session, first.Windows.Previous} {
 		if w.Valid || !contains(w.Reason, "no earlier snapshot") {
 			t.Fatalf("first snapshot window valid=%v reason=%s", w.Valid, w.Reason)
 		}
@@ -236,6 +239,9 @@ func TestWholeSessionBaselineIsSharedAndStable(t *testing.T) {
 	}
 	if sum.Windows.Five.BaselineFile != "mid-ps99-summary.json" {
 		t.Fatalf("5m used %s", sum.Windows.Five.BaselineFile)
+	}
+	if sum.Windows.Previous.BaselineFile != "mid-ps99-summary.json" || sum.Windows.Previous.ChangedCurrencies["PumpkinTokens"].Baseline != "40" || sum.Windows.Previous.Clan.Points.Baseline != "40" {
+		t.Fatalf("previous did not use the latest shared baseline: %+v", sum.Windows.Previous)
 	}
 	if sum.Windows.Five.ChangedCurrencies["PumpkinTokens"].Baseline == "9999" {
 		t.Fatal("5m crossed sessions")
@@ -407,6 +413,73 @@ func TestScanHistoryRules(t *testing.T) {
 	}
 	if scanned.SessionID != "sess" {
 		t.Fatalf("session=%s", scanned.SessionID)
+	}
+}
+
+func TestScanKeepsSameSecondSummariesFromDifferentAccounts(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 11, 18, 16, 0, 0, 0, time.UTC)
+	at := now.Add(-time.Minute)
+	a := summaryDoc(at, "sess-a", "Battle", "10", "1", map[string]string{"PumpkinTokens": "10"})
+	a.AccountID = "acct-a"
+	a.Profile = "main"
+	b := summaryDoc(at, "sess-b", "Battle", "99", "9", map[string]string{"PumpkinTokens": "99"})
+	b.AccountID = "acct-b"
+	b.Profile = "alt"
+	writeSummary(t, dir, "a-ps99-summary.json", a)
+	writeSummary(t, dir, "b-ps99-summary.json", b)
+	scanned, err := Scan(dir, "ps99", now, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scanned.Priors) != 2 {
+		t.Fatalf("same-second accounts collapsed: %+v", scanned.Priors)
+	}
+	got := map[string]string{}
+	for _, p := range scanned.Priors {
+		got[p.AccountID] = p.Currencies["PumpkinTokens"]
+	}
+	if got["acct-a"] != "10" || got["acct-b"] != "99" {
+		t.Fatalf("kept=%v", got)
+	}
+}
+
+func TestPreviousWindowUsesLatestRegardlessOfAge(t *testing.T) {
+	now := time.Date(2026, 11, 18, 18, 0, 0, 0, time.UTC)
+	early := now.Add(-3 * time.Hour)
+	latest := now.Add(-40 * time.Minute)
+	sum := Build(Input{
+		Now: now, Prefix: "ps99", SessionID: "sess", CurrenciesKnown: true,
+		Currencies: map[string]CurrencyAmount{"PumpkinTokens": {Amount: "30", DisplayName: "Pumpkin Tokens"}},
+		Clan:       clanWith("Battle", "30", "3"),
+		Priors: []Prior{
+			{
+				File: "early-ps99-summary.json", ExportedAt: early, ExportedAtText: early.Format(time.RFC3339),
+				SessionID: "sess", CurrenciesKnown: true, BattleID: "Battle", Points: "10", PointsOK: true,
+				UserPoints: "1", UserPointsOK: true, Currencies: map[string]string{"PumpkinTokens": "10"},
+			},
+			{
+				File: "latest-ps99-summary.json", ExportedAt: latest, ExportedAtText: latest.Format(time.RFC3339),
+				SessionID: "sess", CurrenciesKnown: true, BattleID: "Battle", Points: "20", PointsOK: true,
+				UserPoints: "2", UserPointsOK: true, Currencies: map[string]string{"PumpkinTokens": "20"},
+			},
+		},
+	})
+	if sum.Windows.Five.Valid || sum.Windows.Thirty.Valid || sum.Windows.Hour.Valid {
+		t.Fatal("a 40 minute gap was treated as a nominal window")
+	}
+	prev := sum.Windows.Previous
+	if !prev.Valid || prev.BaselineFile != "latest-ps99-summary.json" {
+		t.Fatalf("previous=%+v", prev)
+	}
+	if prev.ChangedCurrencies["PumpkinTokens"].Baseline != "20" || prev.Clan == nil || prev.Clan.Points == nil || prev.Clan.Points.Baseline != "20" {
+		t.Fatalf("previous did not share the latest baseline: %+v", prev)
+	}
+	if prev.ChangedCurrencies["PumpkinTokens"].RateBasis != CurrencyRateBasis || !prev.ChangedCurrencies["PumpkinTokens"].Estimated {
+		t.Fatalf("currency rate unmarked: %+v", prev.ChangedCurrencies["PumpkinTokens"])
+	}
+	if sum.Windows.Session.BaselineFile != "early-ps99-summary.json" {
+		t.Fatalf("session=%s", sum.Windows.Session.BaselineFile)
 	}
 }
 

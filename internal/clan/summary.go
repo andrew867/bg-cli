@@ -10,10 +10,12 @@ import (
 const SchemaVersion = "1.0"
 
 const (
-	Window5m      = "5m"
-	Window30m     = "30m"
-	Window1h      = "1h"
-	WindowSession = "session"
+	Window5m          = "5m"
+	Window30m         = "30m"
+	Window1h          = "1h"
+	WindowSession     = "session"
+	WindowPrevious    = "previous"
+	CurrencyRateBasis = "observation_interval"
 )
 
 // Summary is the lightweight history record written beside each snapshot.
@@ -41,10 +43,11 @@ type Current struct {
 
 // Windows holds one shared baseline per interval.
 type Windows struct {
-	Five    Window `json:"5m"`
-	Thirty  Window `json:"30m"`
-	Hour    Window `json:"1h"`
-	Session Window `json:"session"`
+	Five     Window `json:"5m"`
+	Thirty   Window `json:"30m"`
+	Hour     Window `json:"1h"`
+	Session  Window `json:"session"`
+	Previous Window `json:"previous"`
 }
 
 // Window is the shared baseline for every metric in that interval.
@@ -64,6 +67,8 @@ type Window struct {
 }
 
 // CurrencyDelta is one currency whose balance changed, or an unavailable comparison.
+// A numeric rate is an observation estimate: profile currency comes from a
+// cached player snapshot, not a continuous production counter.
 type CurrencyDelta struct {
 	Status           string `json:"status,omitempty"`
 	Reason           string `json:"reason,omitempty"`
@@ -72,6 +77,8 @@ type CurrencyDelta struct {
 	Delta            string `json:"delta,omitempty"`
 	NetPerHour       string `json:"netPerHour,omitempty"`
 	NetPerHourApprox string `json:"netPerHourApprox,omitempty"`
+	RateBasis        string `json:"rateBasis,omitempty"`
+	Estimated        bool   `json:"estimated,omitempty"`
 }
 
 // ClanWindow is the clan-point and contribution delta for the shared baseline.
@@ -181,16 +188,23 @@ func Build(in Input) Summary {
 	five := int64(5 * 60)
 	thirty := int64(30 * 60)
 	hour := int64(60 * 60)
-	sum.Windows.Five = buildWindow(in, session, nowText, &five)
-	sum.Windows.Thirty = buildWindow(in, session, nowText, &thirty)
-	sum.Windows.Hour = buildWindow(in, session, nowText, &hour)
-	sum.Windows.Session = buildWindow(in, session, nowText, nil)
+	sum.Windows.Five = buildWindow(in, session, nowText, &five, baselineClosest)
+	sum.Windows.Thirty = buildWindow(in, session, nowText, &thirty, baselineClosest)
+	sum.Windows.Hour = buildWindow(in, session, nowText, &hour, baselineClosest)
+	sum.Windows.Session = buildWindow(in, session, nowText, nil, baselineEarliest)
+	sum.Windows.Previous = buildWindow(in, session, nowText, nil, baselineLatest)
 	return sum
 }
 
-func buildWindow(in Input, session, nowText string, requested *int64) Window {
+const (
+	baselineClosest = iota
+	baselineEarliest
+	baselineLatest
+)
+
+func buildWindow(in Input, session, nowText string, requested *int64, kind int) Window {
 	w := Window{CurrentAt: nowText, RequestedSeconds: requested}
-	base, ok := selectBaseline(in.Priors, in.Now, session, in.AccountID, in.Profile, requested)
+	base, ok := selectBaseline(in.Priors, in.Now, session, in.AccountID, in.Profile, requested, kind)
 	if !ok {
 		w.Reason = "no earlier snapshot in this session"
 		return w
@@ -239,7 +253,7 @@ func buildWindow(in Input, session, nowText string, requested *int64) Window {
 	return w
 }
 
-func selectBaseline(priors []Prior, now time.Time, session, accountID, profile string, requested *int64) (Prior, bool) {
+func selectBaseline(priors []Prior, now time.Time, session, accountID, profile string, requested *int64, kind int) (Prior, bool) {
 	var best Prior
 	found := false
 	for _, p := range priors {
@@ -255,17 +269,31 @@ func selectBaseline(priors []Prior, now time.Time, session, accountID, profile s
 			found = true
 			continue
 		}
-		if requested == nil {
-			if p.ExportedAt.Before(best.ExportedAt) || (p.ExportedAt.Equal(best.ExportedAt) && p.File > best.File) {
-				best = p
-			}
-			continue
-		}
-		if closerBaseline(p, best, *requested, now) {
+		if betterBaseline(p, best, requested, kind, now) {
 			best = p
 		}
 	}
 	return best, found
+}
+
+func betterBaseline(p, best Prior, requested *int64, kind int, now time.Time) bool {
+	switch kind {
+	case baselineLatest:
+		if !p.ExportedAt.Equal(best.ExportedAt) {
+			return p.ExportedAt.After(best.ExportedAt)
+		}
+		return p.File > best.File
+	case baselineEarliest:
+		if !p.ExportedAt.Equal(best.ExportedAt) {
+			return p.ExportedAt.Before(best.ExportedAt)
+		}
+		return p.File > best.File
+	default:
+		if requested == nil {
+			return false
+		}
+		return closerBaseline(p, best, *requested, now)
+	}
 }
 
 func closerBaseline(p, best Prior, requested int64, now time.Time) bool {
@@ -450,6 +478,8 @@ func setCurrencyRate(d *CurrencyDelta, delta string, elapsed int64) bool {
 	if approx != exact {
 		d.NetPerHourApprox = approx
 	}
+	d.RateBasis = CurrencyRateBasis
+	d.Estimated = true
 	return true
 }
 

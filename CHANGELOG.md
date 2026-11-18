@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public intelligence: `releases`, `leagues`, `clans` (sampled ranking depth disclosed)
 - Read-only `clan show` and `clan battle` (`GET /api/clan/{tag}`, `GET /api/activeClanBattle`); snapshot `clan.json` (full document, including `Battles`) and `clanbattle.json` only while a battle is active
 - Snapshot `summary.json`: shared baselines for clan points and currencies over 5m, 30m, 1h, and the session, with exact amounts and `netPerHour` from actual elapsed seconds
-- Snapshot deltas stay inside one account, clan tag, battle, and player id. `--new-session` and `--session-id` reset the session. `currenciesKnown` is stored explicitly. Optional clan telemetry does not fail the snapshot unless `--require-clan` is set. Non-integral rates also include `netPerHourApprox`
+- Snapshot deltas stay inside one account, clan tag, battle, and player id. `--new-session` and `--session-id` reset the session and cannot be combined. `currenciesKnown` is stored explicitly. Optional clan telemetry does not fail the snapshot unless `--require-clan` is set. Non-integral rates also include `netPerHourApprox`. A `previous` window compares with the latest compatible summary. Currency rates are marked `observation_interval` estimates
+- `auth login` keeps `accountId` and `ps99UserId` when the same profile is authorized again
 - Forge `--mode observed-mixed` with variable shard budgets and observed Pareto frontier (Butler-only model unchanged)
 - Docs: `docs/research/analytics-methodology.md`; Windows offline smoke `scripts/windows-smoke-offline.ps1`
 

@@ -64,8 +64,8 @@ written only while a battle is active.`,
 	cmd.Flags().StringVar(&include, "include", "", "comma-separated views (inventory,profile,extendedProfile,itemIndex,trades,booth,mail) or all")
 	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag to read; otherwise taken from the profile")
 	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (otherwise profile ps99UserId; omitted when unset)")
-	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account")
-	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session")
+	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account (cannot be combined with --session-id)")
+	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
 	return cmd
 }
@@ -95,8 +95,8 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&include, "include", "", "comma-separated views or all")
 	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag to read; otherwise taken from the profile")
 	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (otherwise profile ps99UserId; omitted when unset)")
-	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account")
-	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session")
+	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account (cannot be combined with --session-id)")
+	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
 	return cmd
 }
@@ -148,6 +148,9 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		return err
 	}
 	opt.SessionID = strings.TrimSpace(opt.SessionID)
+	if opt.NewSession && opt.SessionID != "" {
+		return &ExitError{Code: exitcode.Usage, Msg: "use either --new-session or --session-id, not both\n  bg-cli account snapshot --new-session\n  bg-cli account snapshot --session-id <id>"}
+	}
 	if opt.SessionID != "" {
 		if err := clan.ValidateSessionID(opt.SessionID); err != nil {
 			return &ExitError{Code: exitcode.Usage, Msg: err.Error()}

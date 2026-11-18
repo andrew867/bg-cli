@@ -78,7 +78,7 @@ func FormatConsole(sum Summary) string {
 				fmt.Fprintf(&b, "%s  %s\n", id, row.Reason)
 				continue
 			}
-			fmt.Fprintf(&b, "%s  %s  %s / %s  %s/h net\n",
+			fmt.Fprintf(&b, "%s  %s  %s / %s  %s/h net est.\n",
 				id, formatCount(row.Current), formatSigned(row.Delta), formatElapsed(elapsed), formatRate(row.NetPerHour, row.NetPerHourApprox))
 		}
 		_ = prefName
@@ -88,6 +88,7 @@ func FormatConsole(sum Summary) string {
 	writeWindowLine(&b, "30m", sum.Windows.Thirty)
 	writeWindowLine(&b, "1h", sum.Windows.Hour)
 	writeWindowLine(&b, "Session", sum.Windows.Session)
+	writeWindowLine(&b, "Previous", sum.Windows.Previous)
 	return b.String()
 }
 
@@ -100,6 +101,7 @@ func preferredWindow(w Windows) (*Window, string) {
 		{"30m", w.Thirty},
 		{"1h", w.Hour},
 		{"session", w.Session},
+		{"previous", w.Previous},
 	}
 	for i := range ordered {
 		if ordered[i].w.Valid {

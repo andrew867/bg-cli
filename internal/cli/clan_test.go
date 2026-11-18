@@ -214,8 +214,8 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 	if w.Clan == nil || w.Clan.Points == nil || w.Clan.Points.Baseline != "1000" || w.Clan.Points.Delta != "1000" {
 		t.Fatalf("clan=%+v", w.Clan)
 	}
-	if w.BaselineFile != "2026-11-18-155500-ps99-summary.json" || sum.Windows.Session.BaselineFile != w.BaselineFile {
-		t.Fatalf("baselines diverged 5m=%s session=%s", w.BaselineFile, sum.Windows.Session.BaselineFile)
+	if w.BaselineFile != "2026-11-18-155500-ps99-summary.json" || sum.Windows.Session.BaselineFile != w.BaselineFile || sum.Windows.Previous.BaselineFile != w.BaselineFile {
+		t.Fatalf("baselines diverged 5m=%s session=%s previous=%s", w.BaselineFile, sum.Windows.Session.BaselineFile, sum.Windows.Previous.BaselineFile)
 	}
 	if sum.Current.Clan.ActiveBattle == nil || sum.Current.Clan.ActiveBattle.UserContributorRank == nil || *sum.Current.Clan.ActiveBattle.UserContributorRank != 2 {
 		t.Fatalf("rank=%+v", sum.Current.Clan.ActiveBattle)
@@ -272,6 +272,18 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 		if strings.Contains(ent.Name(), ".tmp") || strings.HasPrefix(ent.Name(), ".bg-cli-snap-") {
 			t.Fatalf("partial file left: %s", ent.Name())
 		}
+	}
+}
+
+func TestNewSessionAndSessionIDAreExclusive(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+	}, []string{"account", "snapshot", "--profile", "main", "--new-session", "--session-id", "scripted-1"})
+	if code != exitcode.Usage || !strings.Contains(stderr.String(), "--new-session") || !strings.Contains(stderr.String(), "--session-id") {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 }
 

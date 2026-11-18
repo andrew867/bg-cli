@@ -29,7 +29,9 @@ func Scan(dir, prefix string, now time.Time, skipName string) (ScanResult, error
 		return out, err
 	}
 	suffix := "-" + prefix + "-summary.json"
-	byStamp := map[int64]Prior{}
+	// Same-second files collapse only when they are the same account and session.
+	// A different account at that second must remain so later filtering can see it.
+	byKey := map[summaryKey]Prior{}
 	for _, ent := range ents {
 		name := ent.Name()
 		if ent.IsDir() || name == skipName || !strings.HasSuffix(name, suffix) {
@@ -58,17 +60,17 @@ func Scan(dir, prefix string, now time.Time, skipName string) (ScanResult, error
 		if !ok {
 			continue
 		}
-		key := prior.ExportedAt.Unix()
-		if prev, exists := byStamp[key]; exists {
+		key := summaryKeyFor(prior)
+		if prev, exists := byKey[key]; exists {
 			if name > prev.File {
-				byStamp[key] = prior
+				byKey[key] = prior
 			}
 			continue
 		}
-		byStamp[key] = prior
+		byKey[key] = prior
 	}
-	out.Priors = make([]Prior, 0, len(byStamp))
-	for _, p := range byStamp {
+	out.Priors = make([]Prior, 0, len(byKey))
+	for _, p := range byKey {
 		out.Priors = append(out.Priors, p)
 	}
 	sortPriors(out.Priors)
@@ -76,6 +78,21 @@ func Scan(dir, prefix string, now time.Time, skipName string) (ScanResult, error
 		out.SessionID = out.Priors[len(out.Priors)-1].SessionID
 	}
 	return out, nil
+}
+
+// summaryKey is the only collision Scan collapses: one second, one account, one session.
+type summaryKey struct {
+	unix    int64
+	ident   string
+	session string
+}
+
+func summaryKeyFor(p Prior) summaryKey {
+	ident := "alias:" + p.Profile
+	if p.AccountID != "" {
+		ident = "id:" + p.AccountID
+	}
+	return summaryKey{unix: p.ExportedAt.Unix(), ident: ident, session: p.SessionID}
 }
 
 func decodePrior(name string, body []byte, now time.Time) (Prior, string, bool) {

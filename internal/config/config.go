@@ -110,6 +110,15 @@ func Save(f *File) error {
 	return os.Rename(tmp, path)
 }
 
+// PreserveProfileIdentity copies non-secret account metadata that OAuth does
+// not return. Reauthorization replaces the token fields and keeps accountId
+// and ps99UserId instead of erasing them.
+func PreserveProfileIdentity(next, previous Profile) Profile {
+	next.AccountID = previous.AccountID
+	next.PS99UserID = previous.PS99UserID
+	return next
+}
+
 // UpsertProfile stores or replaces a profile and optionally sets default.
 func UpsertProfile(f *File, p Profile, makeDefault bool) error {
 	if err := ValidateAlias(p.Alias); err != nil {
