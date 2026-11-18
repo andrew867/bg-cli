@@ -625,3 +625,41 @@ func TestProfilePS99UserIDSuppliesContribution(t *testing.T) {
 		t.Fatalf("profile user id was not used: %+v", sum.Current.Clan.ActiveBattle)
 	}
 }
+
+func TestConfigPS99ClanIDSuppliesClan(t *testing.T) {
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := cfg.Profiles["main"]
+	p.PS99ClanID = "SYN"
+	cfg.Profiles["main"] = p
+	if err := config.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	fixed := time.Date(2026, 11, 18, 17, 30, 0, 0, time.UTC)
+	inv, ext := accountFixtureBytes(t)
+	profile := []byte(`{"status":"ok","data":{"Currency":{"Diamonds":{"id":"Diamonds","_am":1}}}}`)
+	clanBody := []byte(`{"status":"ok","data":{"Name":"Synthetic","Members":[{}]}}`)
+	srv := accountAndClanServer(t, inv, profile, ext, clanBody, inactiveClanBattleBody, 200, 200)
+	defer srv.Close()
+	dir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Clock: output.FixedClock{T: fixed},
+	}, []string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99"})
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "clan.json omitted") {
+		t.Fatalf("config clan id was ignored:\n%s", stderr.String())
+	}
+	sum := readSummary(t, dir, fixed)
+	if sum.Current.Clan.Tag != "SYN" || sum.Current.Clan.Name != "Synthetic" {
+		t.Fatalf("clan %+v", sum.Current.Clan)
+	}
+}

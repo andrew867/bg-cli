@@ -31,6 +31,7 @@ Connected apps in the BIG Games account dashboard.`,
 	cmd.AddCommand(newAuthStatusCmd(app))
 	cmd.AddCommand(newAuthLogoutCmd(app))
 	cmd.AddCommand(newAuthProfilesCmd(app))
+	cmd.AddCommand(newAuthProfileCmd(app))
 	return cmd
 }
 
@@ -202,6 +203,9 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 				"tokenPresent": hasToken,
 				"expired":      time.Now().UTC().After(p.ExpiresAt),
 				"redirectUri":  p.RedirectURI,
+				"accountId":    p.AccountID,
+				"ps99UserId":   p.PS99UserID,
+				"ps99ClanId":   p.PS99ClanID,
 			}
 			return app.emit(output.NewSuccess("auth status", nil, output.DefaultFreshnessNull(), data))
 		},

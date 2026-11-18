@@ -152,6 +152,84 @@ func TestConfigNeverContainsTokenAfterManualWriteScan(t *testing.T) {
 	}
 }
 
+func TestAuthProfileSetAndUnset(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	cfg := &config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {Alias: "main", ClientID: "cid", RedirectURI: "http://127.0.0.1:8765/callback"},
+		},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{Stdout: &stdout, Stderr: &stderr}, []string{
+		"auth", "profile", "set", "--profile", "main", "--ps99-user-id", "1234", "--clan-tag", "SYN",
+	})
+	if code != 0 {
+		t.Fatalf("set exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := loaded.Profiles["main"]
+	if p.PS99UserID != "1234" || p.PS99ClanID != "SYN" || p.ClientID != "cid" || p.RedirectURI == "" {
+		t.Fatalf("profile %+v", p)
+	}
+	if strings.Contains(string(mustRead(t, filepath.Join(dir, config.ConfigFile))), "access_token") {
+		t.Fatal("token leaked into config")
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(Deps{Stdout: &stdout, Stderr: &stderr}, []string{
+		"auth", "profile", "set", "--profile", "main", "--clan-tag", "SYN", "--dry-run",
+	})
+	if code != 0 {
+		t.Fatalf("dry-run exit %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"dryRun": true`) && !strings.Contains(stdout.String(), `"dryRun":true`) {
+		t.Fatalf("stdout %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(Deps{Stdout: &stdout, Stderr: &stderr}, []string{
+		"auth", "profile", "unset", "--profile", "main", "--clan-tag",
+	})
+	if code != 0 {
+		t.Fatalf("unset exit %d stderr=%s", code, stderr.String())
+	}
+	loaded, err = config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p = loaded.Profiles["main"]
+	if p.PS99UserID != "1234" || p.PS99ClanID != "" {
+		t.Fatalf("after unset %+v", p)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(Deps{Stdout: &stdout, Stderr: &stderr}, []string{"auth", "profile", "set", "--profile", "main"})
+	if code != exitcode.Usage || !strings.Contains(stderr.String()+stdout.String(), "auth profile set --profile main") {
+		t.Fatalf("exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 type ioDiscard struct{}
 
 func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }

@@ -20,8 +20,9 @@ func newClanCmd(app *App) *cobra.Command {
 		Short: "Read-only clan document and active clan battle",
 		Long: `Reads the public clan document and the current clan battle.
 
-clan show calls GET /api/clan/{tag}. The tag comes from the signed-in profile
-or extended profile, or from --tag. The document includes Battles, which is the
+clan show calls GET /api/clan/{tag}. The tag comes from --tag, then the
+signed-in profile or extended profile, then profiles.<alias>.ps99ClanId in
+config.json. The document includes Battles, which is the
 per-clan history the API returns. There is no separate historic HTTP route.
 Sampled battle detail by id remains "clans battle" (GET /v1/clans/battles/:id).
 
@@ -78,7 +79,7 @@ func newClanShowCmd(app *App) *cobra.Command {
 			}, nil)
 		},
 	}
-	cmd.Flags().StringVar(&tag, "tag", "", "clan tag; skips the account lookup when set")
+	cmd.Flags().StringVar(&tag, "tag", "", "clan tag; skips the account lookup and config ps99ClanId when set")
 	return cmd
 }
 
@@ -119,22 +120,32 @@ func newClanBattleCmd(app *App) *cobra.Command {
 }
 
 func (a *App) resolveClanTag(ctx context.Context) (tag, field, source string, err error) {
-	profile, err := a.fetchAccountData(ctx, "/v1/account/profile", api.ScopeProfile)
-	if err != nil {
-		return "", "", "", err
-	}
-	extended, extErr := a.fetchAccountData(ctx, "/v1/account/extendedProfile", api.ScopeExtendedProfile)
-	if extErr != nil {
-		a.notice("extended profile lookup skipped: %v", extErr)
-	}
-	tag, field, ok := clan.ExtractTag(profile, extended)
-	if !ok {
-		return "", "", "", &ExitError{
-			Code: exitcode.Usage,
-			Msg:  "clan tag is absent from the signed-in profile and extended profile\n  bg-cli clan show --tag <CLAN_TAG>",
+	profile, fetchErr := a.fetchAccountData(ctx, "/v1/account/profile", api.ScopeProfile)
+	var extended json.RawMessage
+	if fetchErr != nil {
+		a.notice("profile lookup for clan tag skipped: %v", fetchErr)
+	} else {
+		var extErr error
+		extended, extErr = a.fetchAccountData(ctx, "/v1/account/extendedProfile", api.ScopeExtendedProfile)
+		if extErr != nil {
+			a.notice("extended profile lookup skipped: %v", extErr)
 		}
 	}
-	return tag, field, "profile", nil
+	discovered, field, _ := clan.ExtractTag(profile, extended)
+	resolved, source, ok := clan.ResolveClanTag("", discovered, a.configuredPS99ClanID())
+	if !ok {
+		if fetchErr != nil {
+			return "", "", "", fetchErr
+		}
+		return "", "", "", &ExitError{
+			Code: exitcode.Usage,
+			Msg:  "clan tag is absent from the signed-in profile, extended profile, and config ps99ClanId\n  bg-cli clan show --tag <CLAN_TAG>",
+		}
+	}
+	if source == "config" {
+		field = "ps99ClanId"
+	}
+	return resolved, field, source, nil
 }
 
 func (a *App) fetchAccountData(ctx context.Context, path, scope string) (json.RawMessage, error) {
@@ -159,6 +170,13 @@ func (a *App) configuredPS99UserID(flag string) (string, bool) {
 		configured = p.PS99UserID
 	}
 	return clan.ResolveUserID(flag, configured)
+}
+
+func (a *App) configuredPS99ClanID() string {
+	if p, _, _, err := a.resolveProfileToken(""); err == nil {
+		return strings.TrimSpace(p.PS99ClanID)
+	}
+	return ""
 }
 
 func (a *App) configuredAccountID(profileBody json.RawMessage) string {

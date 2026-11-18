@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/andrew867/bg-cli/internal/api"
@@ -38,8 +39,8 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		}
 	}
 	accountID := a.configuredAccountID(st.ProfileBody)
-	tag := opt.ClanTag
-	if tag == "" {
+	discovered := ""
+	if strings.TrimSpace(opt.ClanTag) == "" {
 		var ext json.RawMessage
 		if len(st.ExtendedBody) == 0 && !st.ExtendedFetched {
 			raw, err := a.fetchAccountData(ctx, "/v1/account/extendedProfile", api.ScopeExtendedProfile)
@@ -52,9 +53,10 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			ext = st.ExtendedBody
 		}
 		if found, _, ok := clan.ExtractTag(st.ProfileBody, ext); ok {
-			tag = found
+			discovered = found
 		}
 	}
+	tag, _, _ := clan.ResolveClanTag(opt.ClanTag, discovered, a.configuredPS99ClanID())
 
 	currencies, currenciesKnown := clan.CurrenciesFromProfile(st.ProfileBody)
 	telemetry := map[string]any{}
@@ -103,8 +105,8 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			}
 		}
 	} else {
-		clanErr = fmt.Errorf("clan tag is absent from profile and extended profile")
-		a.notice("clan tag is absent from profile and extended profile; clan.json omitted")
+		clanErr = fmt.Errorf("clan tag is absent from profile, extended profile, and config ps99ClanId")
+		a.notice("clan tag is absent from profile, extended profile, and config ps99ClanId; clan.json omitted")
 	}
 	switch {
 	case clanErr != nil:
