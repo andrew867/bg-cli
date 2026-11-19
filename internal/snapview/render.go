@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -46,6 +47,7 @@ type View struct {
 	Color             bool
 	Bundle            *Bundle
 	Location          *time.Location
+	InventoryDiff     *snapshot.InventoryDiff
 }
 
 // Render writes the default terminal summary. Colour is applied only when
@@ -87,7 +89,7 @@ func Render(v View) string {
 	writeClan(&b, v, label, win, winOK)
 
 	b.WriteString("\nInventory\n")
-	writeInventory(&b, v.Manifest)
+	writeInventory(&b, v)
 
 	b.WriteString("\nData\n")
 	writeSources(&b, v)
@@ -538,14 +540,162 @@ func writeClan(b *strings.Builder, v View, label string, win clan.Window, winOK 
 	}
 }
 
-func writeInventory(b *strings.Builder, man snapshot.Manifest) {
-	inv, _ := man.Summary["inventory"].(map[string]any)
+func writeInventory(b *strings.Builder, v View) {
+	if v.InventoryDiff != nil {
+		writeInventoryDiff(b, v)
+		return
+	}
+	inv, _ := v.Manifest.Summary["inventory"].(map[string]any)
 	row(b, "Pet quantity", formatAnyCount(inv["petQuantitySum"]))
+	row(b, "Pet rows", formatAnyCount(inv["petRowCount"]))
+	row(b, "Golden", unavailable)
+	row(b, "Rainbow", unavailable)
+	row(b, "Shiny", unavailable)
+	row(b, "Huge", unavailable)
 	rows := inv["rowCount"]
 	if rows == nil {
 		rows = inv["petRowCount"]
 	}
 	row(b, "Inventory rows", formatAnyCount(rows))
+}
+
+func writeInventoryDiff(b *strings.Builder, v View) {
+	d := v.InventoryDiff
+	row(b, "Pet quantity", pairText(d.Aggregates.PetQuantity, v.Color))
+	row(b, "Pet rows", pairText(d.Aggregates.PetRows, v.Color))
+	row(b, "Golden", pairText(d.Aggregates.Golden, v.Color))
+	row(b, "Rainbow", pairText(d.Aggregates.Rainbow, v.Color))
+	row(b, "Shiny", pairText(d.Aggregates.Shiny, v.Color))
+	row(b, "Huge", pairText(d.Aggregates.Huge, v.Color))
+	row(b, "Inventory rows", pairText(d.Aggregates.InventoryRows, v.Color))
+	if d.Status != snapshot.DiffStatusOK {
+		if d.Reason != "" {
+			fmt.Fprintf(b, "  %s\n", oneLine(d.Reason))
+		}
+		return
+	}
+	limit := 5
+	if v.Verbose {
+		limit = 0
+	}
+	writeChangeBlock(b, "Pet changes", speciesLines(d.PetSpeciesChanges), limit)
+	writeChangeBlock(b, "Inventory changes", itemLines(d.ItemChanges), limit)
+	if v.Verbose {
+		writeInventoryDiagnostics(b, d.Diagnostics)
+	}
+}
+
+func pairText(p snapshot.CountPair, color bool) string {
+	if p.Current == "" {
+		return unavailable
+	}
+	amount := FormatCount(p.Current)
+	if p.Delta == "" || p.Status == snapshot.DiffStatusUnavailable {
+		return amount
+	}
+	return amountAndDelta(amount, FormatSigned(p.Delta), color, false)
+}
+
+func writeChangeBlock(b *strings.Builder, title string, lines []string, limit int) {
+	fmt.Fprintf(b, "%s\n", title)
+	if len(lines) == 0 {
+		fmt.Fprintf(b, "  none\n")
+		return
+	}
+	n := len(lines)
+	if limit > 0 && n > limit {
+		n = limit
+	}
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(b, "  %s\n", lines[i])
+	}
+	if n < len(lines) {
+		fmt.Fprintf(b, "  ... %d more changed entries\n", len(lines)-n)
+	}
+}
+
+func speciesLines(rows []snapshot.SpeciesChange) []string {
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		name := row.DisplayName
+		if name == "" {
+			name = row.ID
+		}
+		out = append(out, changeLine(name, row.Delta, row.Classification))
+	}
+	return out
+}
+
+func itemLines(rows []snapshot.ItemChange) []string {
+	kept := make([]snapshot.ItemChange, 0, len(rows))
+	for _, row := range rows {
+		if strings.EqualFold(row.Class, "Pet") || strings.EqualFold(row.Class, "Currency") {
+			continue
+		}
+		kept = append(kept, row)
+	}
+	sort.SliceStable(kept, func(i, j int) bool {
+		cmp := absText(kept[i].Delta).Cmp(absText(kept[j].Delta))
+		if cmp != 0 {
+			return cmp > 0
+		}
+		if kept[i].DisplayName != kept[j].DisplayName {
+			return kept[i].DisplayName < kept[j].DisplayName
+		}
+		if kept[i].ID != kept[j].ID {
+			return kept[i].ID < kept[j].ID
+		}
+		return kept[i].Identity < kept[j].Identity
+	})
+	out := make([]string, 0, len(kept))
+	for _, row := range kept {
+		name := row.DisplayName
+		if name == "" {
+			name = row.ID
+		}
+		if row.Variant != "" && row.Variant != "Regular" {
+			name += "  " + row.Variant
+		}
+		out = append(out, changeLine(name, row.Delta, row.Classification))
+	}
+	return out
+}
+
+func changeLine(name, delta, classif string) string {
+	return fmt.Sprintf("%-22s %s    %s", name, FormatSigned(delta), classif)
+}
+
+func absText(s string) *big.Int {
+	n, ok := clan.ParseExactInt(s)
+	if !ok {
+		return new(big.Int)
+	}
+	return n.Abs(n)
+}
+
+func writeInventoryDiagnostics(b *strings.Builder, d *snapshot.InventoryDiagnostics) {
+	if d == nil {
+		return
+	}
+	if d.PetQuantityDelta != "" && d.EggsOpenedDelta != "" {
+		fmt.Fprintf(b, "Pet quantity and eggs opened\n")
+		row(b, "Pet quantity", FormatSigned(d.PetQuantityDelta))
+		row(b, "Eggs opened", FormatSigned(d.EggsOpenedDelta))
+		row(b, "Difference", FormatSigned(d.PetMinusEggs))
+	}
+	writeVariantDiagnostic(b, "Golden inventory and opened", d.GoldenDelta, d.GoldenOpenedDelta, d.GoldenMinusOpened)
+	writeVariantDiagnostic(b, "Rainbow inventory and opened", d.RainbowDelta, d.RainbowOpenedDelta, d.RainbowMinusOpened)
+	writeVariantDiagnostic(b, "Shiny inventory and opened", d.ShinyDelta, d.ShinyOpenedDelta, d.ShinyMinusOpened)
+}
+
+func writeVariantDiagnostic(b *strings.Builder, title, inventory, opened, gap string) {
+	if inventory == "" || opened == "" {
+		return
+	}
+	fmt.Fprintf(b, "%s\n", title)
+	row(b, "Inventory", FormatSigned(inventory))
+	row(b, "Opened", FormatSigned(opened))
+	row(b, "Difference", FormatSigned(gap))
 }
 
 func formatAnyCount(v any) string {
@@ -757,6 +907,14 @@ func collectWarnings(v View, used string, usedOK bool) []string {
 	}
 	if v.Bundle != nil && v.Bundle.OK && !v.Bundle.Complete {
 		add("ZIP is incomplete; a listed snapshot file was missing.")
+	}
+	if v.InventoryDiff != nil {
+		if v.InventoryDiff.Status != snapshot.DiffStatusOK && v.InventoryDiff.Reason != "" {
+			add("Inventory diff unavailable: " + v.InventoryDiff.Reason)
+		}
+		for _, w := range v.InventoryDiff.Warnings {
+			add("Inventory diff: " + w)
+		}
 	}
 	return out
 }

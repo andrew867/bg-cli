@@ -34,6 +34,7 @@ var PayloadKinds = []string{
 	"profile-json",
 	"extended-profile-json",
 	"inventory-csv",
+	"inventory-diff",
 	"currencies-csv",
 	"clan-json",
 	"clan-battle-json",
@@ -69,6 +70,7 @@ func AllocateStamp(dir, stamp, prefix string) (fullStamp string, collision strin
 			FileName(stamp, coll, prefix, "clan.json"),
 			FileName(stamp, coll, prefix, "clanbattle.json"),
 			FileName(stamp, coll, prefix, "summary.json"),
+			FileName(stamp, coll, prefix, "inventory-diff.json"),
 			manifestName,
 			strings.TrimSuffix(manifestName, "-manifest.json") + ".zip",
 		}

@@ -229,8 +229,15 @@ func TestAccountSnapshotHumanJSONAndZip(t *testing.T) {
 			t.Fatalf("unsafe member %s", f.Name)
 		}
 	}
-	if !names[stamp+"-ps99-manifest.json"] || !names[stamp+"-ps99-inv.json"] || !names[stamp+"-ps99-summary.json"] {
+	if !names[stamp+"-ps99-manifest.json"] || !names[stamp+"-ps99-inv.json"] || !names[stamp+"-ps99-summary.json"] || !names[stamp+"-ps99-inventory-diff.json"] {
 		t.Fatalf("members=%v", names)
+	}
+	diffBytes, err := os.ReadFile(filepath.Join(outDir, stamp+"-ps99-inventory-diff.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(diffBytes), `"status": "unavailable"`) || strings.Contains(string(diffBytes), `"delta"`) {
+		t.Fatalf("first snapshot invented an inventory delta: %s", diffBytes)
 	}
 	if names[stamp+"-ps99.zip"] || names[".env"] || names["config.json"] {
 		t.Fatalf("unexpected members=%v", names)
@@ -462,7 +469,7 @@ func TestAccountSnapshotZipsByDefaultAndShowsLocalRefresh(t *testing.T) {
 		names[f.Name] = true
 	}
 	r.Close()
-	if !names[stamp+"-ps99-manifest.json"] || !names[stamp+"-ps99-inv.json"] {
+	if !names[stamp+"-ps99-manifest.json"] || !names[stamp+"-ps99-inv.json"] || !names[stamp+"-ps99-inventory-diff.json"] {
 		t.Fatalf("members=%v", names)
 	}
 	if names[".env"] || names["config.json"] || names[stamp+"-ps99.zip"] {

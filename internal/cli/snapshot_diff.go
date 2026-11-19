@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -97,6 +98,18 @@ func writeDiffTable(app *App, diff snapshot.DiffResult) error {
 	for _, c := range diff.InventoryByPet {
 		fmt.Fprintf(w, "inventoryByPet\t%s\t%s\t%s\t%s\n", c.ID, c.Previous, c.Current, c.Delta)
 	}
+	if diff.InventoryDiff != nil {
+		fmt.Fprintf(w, "inventoryDiff\t%s\t%s\n", diff.InventoryDiff.Status, diff.InventoryDiff.Reason)
+		for _, s := range diff.InventoryDiff.PetSpeciesChanges {
+			fmt.Fprintf(w, "petSpecies\t%s\t%s\t%s\t%s\t%s\n", s.ID, s.Previous, s.Current, s.Delta, s.Classification)
+		}
+		for _, c := range diff.InventoryDiff.ItemChanges {
+			fmt.Fprintf(w, "inventoryIdentity\t%s\t%s\t%s\t%s\t%s\t%s\n", c.ID, c.Previous, c.Current, c.Delta, c.Variant, c.Classification)
+		}
+		for _, wmsg := range diff.InventoryDiff.Warnings {
+			fmt.Fprintf(w, "inventoryWarning\t%s\n", wmsg)
+		}
+	}
 	for _, c := range diff.Currencies {
 		fmt.Fprintf(w, "currencies\t%s\t%s\t%s\t%s\n", c.ID, c.Previous, c.Current, c.Delta)
 	}
@@ -108,14 +121,14 @@ func writeDiffTable(app *App, diff snapshot.DiffResult) error {
 
 func writeDiffCSV(app *App, diff snapshot.DiffResult) error {
 	cw := csv.NewWriter(app.stdout())
-	_ = cw.Write([]string{"section", "id", "variant", "previous", "current", "delta", "negative"})
+	_ = cw.Write([]string{"section", "id", "variant", "previous", "current", "delta", "negative", "classification"})
 	write := func(section string, rows []snapshot.CounterDelta) {
 		for _, c := range rows {
 			neg := "false"
 			if c.Negative {
 				neg = "true"
 			}
-			_ = cw.Write([]string{section, c.ID, "", c.Previous, c.Current, c.Delta, neg})
+			_ = cw.Write([]string{section, c.ID, "", c.Previous, c.Current, c.Delta, neg, ""})
 		}
 	}
 	write("statistics", diff.Statistics)
@@ -133,7 +146,23 @@ func writeDiffCSV(app *App, diff snapshot.DiffResult) error {
 		if b, ok := row["negative"].(bool); ok && b {
 			neg = "true"
 		}
-		_ = cw.Write([]string{"inventoryByVariant", id, variant, prev, cur, delta, neg})
+		_ = cw.Write([]string{"inventoryByVariant", id, variant, prev, cur, delta, neg, ""})
+	}
+	if diff.InventoryDiff != nil {
+		for _, s := range diff.InventoryDiff.PetSpeciesChanges {
+			neg := "false"
+			if strings.HasPrefix(s.Delta, "-") {
+				neg = "true"
+			}
+			_ = cw.Write([]string{"petSpecies", s.ID, "", s.Previous, s.Current, s.Delta, neg, s.Classification})
+		}
+		for _, c := range diff.InventoryDiff.ItemChanges {
+			neg := "false"
+			if strings.HasPrefix(c.Delta, "-") {
+				neg = "true"
+			}
+			_ = cw.Write([]string{"inventoryIdentity", c.ID, c.Variant, c.Previous, c.Current, c.Delta, neg, c.Classification})
+		}
 	}
 	cw.Flush()
 	return cw.Error()

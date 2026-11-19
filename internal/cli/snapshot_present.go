@@ -15,7 +15,7 @@ import (
 	"github.com/andrew867/bg-cli/internal/snapview"
 )
 
-func (a *App) presentSnapshot(man snapshot.Manifest, sum clan.Summary, priors []clan.Prior, opt snapshotOptions, absDir, manName string) error {
+func (a *App) presentSnapshot(man snapshot.Manifest, sum clan.Summary, priors []clan.Prior, opt snapshotOptions, absDir, manName string, diff *snapshot.InventoryDiff) error {
 	var bundle *snapview.Bundle
 	if opt.Zip {
 		packed := a.packSnapshotZip(absDir, man, opt)
@@ -59,6 +59,7 @@ func (a *App) presentSnapshot(man snapshot.Manifest, sum clan.Summary, priors []
 			Color:             a.snapshotColor(),
 			Bundle:            bundle,
 			Location:          time.Local,
+			InventoryDiff:     diff,
 		})
 		if _, err := io.WriteString(a.stdout(), text); err != nil {
 			return err

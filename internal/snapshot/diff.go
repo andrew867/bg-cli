@@ -42,6 +42,7 @@ type DiffResult struct {
 	PetHatchCounts        []CounterDelta       `json:"petHatchCounts"`
 	InventoryByPet        []CounterDelta       `json:"inventoryByPet"`
 	InventoryByVariant    []map[string]any     `json:"inventoryByVariant"`
+	InventoryDiff         *InventoryDiff       `json:"inventoryDiff,omitempty"`
 	Currencies            []CounterDelta       `json:"currencies"`
 	Reconciliation        ReconciliationReport `json:"reconciliation"`
 	HatchRate             *HatchRateResult     `json:"hatchRate,omitempty"`
@@ -60,6 +61,9 @@ func DiffBundles(from, to *Bundle, opt DiffOptions) (DiffResult, error) {
 			"comparison is offline from saved snapshot files; no API calls were made",
 			"negative deltas are flagged but not automatic errors (upstream reset/correction possible)",
 			"owned inventory changes are not equivalent to lifetime hatch deltas",
+			"inventory identity is class, collection, and canonical raw data; _am and stackKey are not identity",
+			"pet inventory deltas are net quantity changes, not hatch, sale, or trade events",
+			"golden, rainbow, and shiny quantities overlap and must not be summed and compared to pet quantity",
 		},
 		MethodID: "snapshot-diff.v1",
 	}
@@ -131,6 +135,7 @@ func DiffBundles(from, to *Bundle, opt DiffOptions) (DiffResult, error) {
 	toByID, toByVar := AggregatePets(toPets, opt.PetID)
 	res.InventoryByPet = diffNamedMaps(fromByID, toByID, "")
 	res.InventoryByVariant = variantDiffRows(fromByVar, toByVar)
+	res.InventoryDiff = diffInventoriesFromBundles(from, to, fromPV, toPV)
 
 	statDeltas := DiffExactMaps(toPV.Statistics, fromPV.Statistics)
 	eggOpen := LookupCI(statDeltas, "Eggs Opened")

@@ -275,6 +275,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	a.notice("note: independently retrieved views may not share an atomic point-in-time database transaction")
 
 	var clanState clanSnapState
+	var currentInventory json.RawMessage
 	refreshUsed := false
 	for _, view := range views {
 		useRefresh := opt.Flags.refresh && !refreshUsed
@@ -326,6 +327,9 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 					"petQuantitySum": invBuilt.data["petQuantitySum"],
 					"quotaExhausted": invBuilt.data["quotaExhausted"],
 					"snapshotAt":     formatSnapshotAt(invEnv.Freshness),
+				}
+				if raw, ok := invBuilt.data["inventory"].(json.RawMessage); ok {
+					currentInventory = append(json.RawMessage(nil), raw...)
 				}
 			}
 		case "profile":
@@ -412,7 +416,8 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		}
 	}
 
-	sum, priors := a.attachClanSnapshot(ctx, absDir, stamp, collision, opt.Prefix, profileAlias, now, &man, clanState, opt)
+	sum, priors := a.attachClanSnapshot(ctx, absDir, stamp, collision, opt.Prefix, profileAlias, now, &man, clanState, currentInventory, opt)
+	diff := a.writeInventoryDiff(absDir, stamp, collision, opt.Prefix, &man, sum, currentInventory)
 
 	manName := snapshot.FileName(stamp, collision, opt.Prefix, "manifest.json")
 	man.ManifestFile = manName
@@ -437,7 +442,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	}
 	a.notice("snapshot export complete (%s)", manName)
 
-	return a.presentSnapshot(man, sum, priors, opt, absDir, manName)
+	return a.presentSnapshot(man, sum, priors, opt, absDir, manName, diff)
 }
 
 func snapshotWantsZip(cmd *cobra.Command, zip, noZip bool, zipPath string) (bool, error) {

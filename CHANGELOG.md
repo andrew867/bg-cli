@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (none)
+- `account snapshot` writes an exact `inventory-diff.json` for the previous compatible snapshot. A stack's `_am` is quantity, so 100 then 125 is one net change. Pet variants, overlapping trait counts, and an explicit Huge flag are included. The human summary lists net inventory changes and does not infer why an item was added or removed. `account snapshot diff` uses the same comparison offline.
 
 ## [0.2.5] - 2026-11-19
 
