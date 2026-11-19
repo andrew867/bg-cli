@@ -285,14 +285,17 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 		t.Fatalf("user=%s known=%v", sum.UserID, sum.Current.CurrenciesKnown)
 	}
 	console := stdout.String()
-	if !strings.Contains(console, "Pumpkin Tokens") || !strings.Contains(console, "+1,509 since previous    ~18.1k/h    ~301/m") {
+	if !strings.Contains(console, "Pumpkin Tokens") || !strings.Contains(console, "+1,509    ~18.1k/h    ~302/m") {
 		t.Fatalf("console=%s", console)
 	}
-	if !strings.Contains(console, "+600 since previous    ~7.2k/h    ~120/m") || !strings.Contains(console, "Hatch rate") || !strings.Contains(console, "~7.2k/h    ~120/m") {
+	if !strings.Contains(console, "+600    ~7.2k/h    ~120/m") || !strings.Contains(console, "Hatch rate") || !strings.Contains(console, "~7.2k/h    ~120/m") {
 		t.Fatalf("egg rates missing:\n%s", console)
 	}
-	if !strings.Contains(console, "#4    -4 since previous") {
+	if !strings.Contains(console, "#4    +4 places    ~48 places/h") {
 		t.Fatalf("place delta missing:\n%s", console)
+	}
+	if strings.Contains(console, "-4 since") {
+		t.Fatalf("raw place delta shown as the human change:\n%s", console)
 	}
 	if strings.Contains(console, "Other") {
 		t.Fatalf("unexpected currency in console=%s", console)

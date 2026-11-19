@@ -94,11 +94,12 @@ func TestRenderHumanSummary(t *testing.T) {
 		"Profile        main",
 		"User           4092648666",
 		"Session        5h 23m 46s",
+		"Since previous",
 		"Diamonds",
-		"+161,506 since previous",
+		"+161,506",
 		"Pumpkin Tokens",
 		"1.276T",
-		"+136.415B since previous",
+		"+136.415B",
 		"Eggs opened",
 		"Hatch rate",
 		"~",
@@ -107,7 +108,7 @@ func TestRenderHumanSummary(t *testing.T) {
 		"Clan QNE",
 		"#1,343",
 		"76,048",
-		"+6,749 since previous",
+		"+6,749",
 		"Contributor rank",
 		"#2",
 		"Pet quantity",
@@ -129,7 +130,7 @@ func TestRenderHumanSummary(t *testing.T) {
 	if strings.Count(text, eggHour) < 2 || strings.Count(text, eggMinute) < 2 {
 		t.Fatalf("egg line and hatch rate diverged: %s %s\n%s", eggHour, eggMinute, text)
 	}
-	diamond := "+161,506 since previous    " + FormatRatePerHour("161506", elapsed) + "    " + FormatRatePerMinute("161506", elapsed)
+	diamond := "+161,506    " + FormatRatePerHour("161506", elapsed) + "    " + FormatRatePerMinute("161506", elapsed)
 	if !strings.Contains(text, diamond) {
 		t.Fatalf("diamond rates missing %q\n%s", diamond, text)
 	}
@@ -294,4 +295,180 @@ func TestNextRefreshAbsentDoesNotInvent(t *testing.T) {
 	if !strings.Contains(none, "refresh time was not returned") {
 		t.Fatalf("no refresh:\n%s", none)
 	}
+}
+
+func TestWallElapsedStaysSeparateFromPlaytime(t *testing.T) {
+	wall := int64(828)
+	session := int64(12*3600 + 12*60 + 47)
+	now := time.Date(2026, 11, 19, 6, 31, 35, 0, time.UTC)
+	text := Render(View{Summary: clan.Summary{
+		Prefix:     "ps99",
+		Profile:    "main",
+		ExportedAt: now.Format(time.RFC3339),
+		Current: clan.Current{
+			StatisticsKnown: true,
+			Statistics:      map[string]string{"Playtime": "2005372"},
+		},
+		Windows: clan.Windows{
+			Session:  clan.Window{Valid: true, ElapsedSeconds: &session},
+			Previous: clan.Window{Valid: true, ElapsedSeconds: &wall, BaselineFile: "prior.json"},
+		},
+	}, Priors: []clan.Prior{{
+		File: "prior.json", StatsKnown: true, Stats: map[string]string{"Playtime": "2004600"},
+	}}})
+	if !strings.Contains(text, "Since previous 13m 48s") {
+		t.Fatalf("wall elapsed:\n%s", text)
+	}
+	if !strings.Contains(text, "Session        12h 12m 47s") {
+		t.Fatalf("session replaced:\n%s", text)
+	}
+	if !strings.Contains(text, "+12m 52s") {
+		t.Fatalf("playtime delta:\n%s", text)
+	}
+	if strings.Contains(text, "+13m 48s") || strings.Contains(text, "since previous") {
+		t.Fatalf("playtime was normalized to wall elapsed:\n%s", text)
+	}
+}
+
+func TestPlaceImprovementAndClanRates(t *testing.T) {
+	elapsed := int64(3600)
+	place := int64(1255)
+	rank := int64(2)
+	members := int64(50)
+	capacity := int64(50)
+	contributors := int64(36)
+	now := time.Date(2026, 11, 19, 6, 31, 35, 0, time.UTC)
+	finish := now.Add(33*time.Hour + 12*time.Minute)
+	text := Render(View{Summary: clan.Summary{
+		Prefix:     "ps99",
+		ExportedAt: now.Format(time.RFC3339),
+		Current: clan.Current{
+			Clan: clan.ClanCurrent{
+				Tag: "QNE", Name: "QNE",
+				MemberCount: &members, MemberCapacity: &capacity, ContributorCount: &contributors,
+				ActiveBattle: &clan.BattleCurrent{
+					ID: "CozyBattle2026", Title: "CozyBattle2026", FinishTime: finish.Format(time.RFC3339),
+					Place: &place, Points: "89442", UserContribution: "8659", UserContributorRank: &rank,
+				},
+			},
+		},
+		Windows: clan.Windows{Previous: clan.Window{
+			Valid: true, ElapsedSeconds: &elapsed,
+			Clan: &clan.ClanWindow{
+				Place:            &clan.MetricDelta{Baseline: "1323", Current: "1255", Delta: "-68", NetPerHour: "-68"},
+				Points:           &clan.MetricDelta{Delta: "377", NetPerHour: "377"},
+				UserContribution: &clan.MetricDelta{Delta: "100", NetPerHour: "100"},
+			},
+		}},
+	}})
+	for _, want := range []string{
+		"#1,255    +68 places    ~68 places/h",
+		"Clan points",
+		"+377    ~377/h",
+		"Your contribution",
+		"+100    ~100/h",
+		"Share of clan gain",
+		"26.5%",
+		"Members                50/50",
+		"Contributors           36",
+		"Battle remaining       1d 9h 12m",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "-68") {
+		t.Fatalf("raw place delta leaked:\n%s", text)
+	}
+	worse := int64(1280)
+	worseText := Render(View{Summary: clan.Summary{
+		Prefix:     "ps99",
+		ExportedAt: now.Format(time.RFC3339),
+		Current: clan.Current{Clan: clan.ClanCurrent{Tag: "QNE", ActiveBattle: &clan.BattleCurrent{
+			ID: "b", Place: &worse, Points: "1",
+		}}},
+		Windows: clan.Windows{Previous: clan.Window{
+			Valid: true, ElapsedSeconds: &elapsed,
+			Clan: &clan.ClanWindow{Place: &clan.MetricDelta{Delta: "25", NetPerHour: "25"}},
+		}},
+	}})
+	if !strings.Contains(worseText, "#1,280    -25 places    ~-25 places/h") {
+		t.Fatalf("worsening:\n%s", worseText)
+	}
+	if strings.Contains(worseText, "+25 places") {
+		t.Fatalf("raw worsening sign leaked:\n%s", worseText)
+	}
+}
+
+func TestHumanCurrencyRateResetCases(t *testing.T) {
+	a := time.Date(2026, 11, 19, 2, 0, 0, 0, time.UTC)
+	b := a.Add(time.Hour)
+	c := a.Add(2 * time.Hour)
+	base := clan.Prior{
+		File: "a.json", ExportedAt: a, ExportedAtText: a.Format(time.RFC3339),
+		SessionID: "s", Profile: "main", CurrenciesKnown: true,
+		Currencies: map[string]string{"PumpkinTokens": "30000", "Diamonds": "100"},
+	}
+	spend := clan.Build(clan.Input{
+		Now: b, SessionID: "s", Profile: "main", Prefix: "ps99", CurrenciesKnown: true,
+		Currencies: map[string]clan.CurrencyAmount{
+			"PumpkinTokens": {Amount: "2900", DisplayName: "Pumpkin Tokens"},
+			"Diamonds":      {Amount: "150", DisplayName: "Diamonds"},
+		},
+		Priors: []clan.Prior{base},
+	})
+	spendText := Render(View{Summary: spend, Priors: []clan.Prior{base}})
+	if !strings.Contains(spendText, "-27,100 net    spend/reset detected") {
+		t.Fatalf("spend interval:\n%s", spendText)
+	}
+	if strings.Contains(spendText, "/h") && strings.Contains(spendText, "Pumpkin") {
+		// Diamonds still have a rate. The pumpkin line must not.
+	}
+	if strings.Contains(lineOf(spendText, "Pumpkin Tokens"), "/h") || strings.Contains(lineOf(spendText, "Pumpkin Tokens"), "/m") {
+		t.Fatalf("spend line invented a rate:\n%s", spendText)
+	}
+	if !strings.Contains(lineOf(spendText, "Diamonds"), "/h") {
+		t.Fatalf("diamond rate was cleared:\n%s", spendText)
+	}
+	reset := clan.Prior{
+		File: "b.json", ExportedAt: b, ExportedAtText: b.Format(time.RFC3339),
+		SessionID: "s", Profile: "main", CurrenciesKnown: true,
+		Currencies: map[string]string{"PumpkinTokens": "2900", "Diamonds": "150"},
+	}
+	clean := clan.Build(clan.Input{
+		Now: c, SessionID: "s", Profile: "main", Prefix: "ps99", CurrenciesKnown: true,
+		Currencies: map[string]clan.CurrencyAmount{
+			"PumpkinTokens": {Amount: "5000", DisplayName: "Pumpkin Tokens"},
+			"Diamonds":      {Amount: "180", DisplayName: "Diamonds"},
+		},
+		Priors: []clan.Prior{base, reset},
+	})
+	cleanText := Render(View{Summary: clean, Priors: []clan.Prior{base, reset}})
+	pumpkin := lineOf(cleanText, "Pumpkin Tokens")
+	if !strings.Contains(pumpkin, "+2,100") || !strings.Contains(pumpkin, "/h") || strings.Contains(pumpkin, "spend/reset") {
+		t.Fatalf("clean interval:\n%s", cleanText)
+	}
+	if clean.Windows.Session.ChangedCurrencies["PumpkinTokens"].NetPerHour != "" {
+		t.Fatalf("session rate crossed the decrease: %+v", clean.Windows.Session.ChangedCurrencies["PumpkinTokens"])
+	}
+	earn := clan.Build(clan.Input{
+		Now: b, SessionID: "s", Profile: "main", Prefix: "ps99", CurrenciesKnown: true,
+		Currencies: map[string]clan.CurrencyAmount{
+			"PumpkinTokens": {Amount: "31200", DisplayName: "Pumpkin Tokens"},
+		},
+		Priors: []clan.Prior{base},
+	})
+	earnLine := lineOf(Render(View{Summary: earn, Priors: []clan.Prior{base}}), "Pumpkin Tokens")
+	if !strings.Contains(earnLine, "+1,200") || !strings.Contains(earnLine, "~1.2k/h") || strings.Contains(earnLine, "spend/reset") {
+		t.Fatalf("normal earning:\n%s", earnLine)
+	}
+}
+
+func lineOf(text, label string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, label) {
+			return line
+		}
+	}
+	return ""
 }

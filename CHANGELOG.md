@@ -10,10 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Summary windows store clan place with the clan-point fields: current place, delta, and `netPerHour` from the shared baseline. A missing or non-positive place stays unavailable. Place is not compared across battle ids or clan tags.
+- The human summary shows wall-clock time since the previous snapshot, clan-point and contribution rates, place improvement, share of clan-point gain, contributor count, member capacity when the clan document has it, and battle time remaining.
+- A currency or Eggs Opened production rate stops at an observed decrease. The raw delta remains. `rateStatus`, `rateReason`, and `rateResetAt` record the break. A later window does not calculate a rate across that break.
 
 ### Changed
 
-- The human summary shows the change since the previous snapshot, per hour, and per minute on the eggs line and on each shown currency line. Hatch rate shows per minute beside per hour. Rates use actual elapsed seconds, stay `n/a` when the comparison is missing, and are stored on the summary as observation estimates. Exact amounts stay in JSON and CSV.
+- The human summary shows the change since the comparison window, per hour, and per minute on the eggs line and on each shown currency line. Hatch rate shows per minute beside per hour. Rates use actual elapsed seconds, stay `n/a` when the comparison is missing, and are stored on the summary as observation estimates. Exact amounts stay in JSON and CSV.
+- Clan place on the terminal is places gained or lost. The stored delta stays `current - baseline`.
+- Small human rates keep two or three significant digits, so a nonzero rate is not shown as `~0`.
+- `Playtime` stays the upstream counter. It is not rewritten to the wall-clock gap.
 
 ## [0.2.4] - 2026-11-19
 

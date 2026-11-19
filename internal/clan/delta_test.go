@@ -68,7 +68,7 @@ func TestPositiveNegativeUnchangedAndMultipleCurrencies(t *testing.T) {
 		t.Fatalf("currency rate was not marked as an observation estimate: %+v", tok)
 	}
 	spent := w.ChangedCurrencies["Spent"]
-	if spent.Delta != "-60" || spent.NetPerHour != "-120" {
+	if spent.Delta != "-60" || spent.Baseline != "80" || spent.Current != "20" || spent.NetPerHour != "" || spent.RateStatus != "reset" || spent.RateReason != "observed balance decrease" {
 		t.Fatalf("negative delta: %+v", spent)
 	}
 	if _, ok := w.ChangedCurrencies["Diamonds"]; ok {
