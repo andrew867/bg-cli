@@ -78,6 +78,10 @@ func FormatConsole(sum Summary) string {
 				fmt.Fprintf(&b, "%s  %s\n", id, row.Reason)
 				continue
 			}
+			if row.RateStatus != "" {
+				fmt.Fprintf(&b, "%s  %s  %s net  %s\n", id, formatCount(row.Current), formatSigned(row.Delta), row.RateReason)
+				continue
+			}
 			fmt.Fprintf(&b, "%s  %s  %s / %s  %s/h net est.\n",
 				id, formatCount(row.Current), formatSigned(row.Delta), formatElapsed(elapsed), formatRate(row.NetPerHour, row.NetPerHourApprox))
 		}

@@ -102,14 +102,24 @@ func NetPerHour(delta string, elapsedSeconds int64) (string, bool) {
 // The exact form is an integer or a reduced fraction. The approximation is
 // decimal text and is not used for stored balances or deltas.
 func NetPerHourParts(delta string, elapsedSeconds int64) (exact, approx string, ok bool) {
-	if elapsedSeconds <= 0 {
+	return netPerPeriodParts(delta, elapsedSeconds, 3600)
+}
+
+// NetPerMinuteParts is delta / elapsedSeconds * 60, with the same exact
+// fraction and decimal approximation as NetPerHourParts.
+func NetPerMinuteParts(delta string, elapsedSeconds int64) (exact, approx string, ok bool) {
+	return netPerPeriodParts(delta, elapsedSeconds, 60)
+}
+
+func netPerPeriodParts(delta string, elapsedSeconds, periodSeconds int64) (exact, approx string, ok bool) {
+	if elapsedSeconds <= 0 || periodSeconds <= 0 {
 		return "", "", false
 	}
 	d, ok := ParseExactInt(delta)
 	if !ok {
 		return "", "", false
 	}
-	num := new(big.Int).Mul(d, big.NewInt(3600))
+	num := new(big.Int).Mul(d, big.NewInt(periodSeconds))
 	den := big.NewInt(elapsedSeconds)
 	g := new(big.Int).GCD(nil, nil, new(big.Int).Abs(num), den)
 	if g.Sign() == 0 {

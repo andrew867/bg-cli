@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +65,11 @@ func Render(v View) string {
 		session = FormatDuration(sum.Windows.Session.ElapsedSeconds)
 	}
 	fmt.Fprintf(&b, "%-14s %s\n", "Session", session)
+	previous := unavailable
+	if sum.Windows.Previous.Valid {
+		previous = FormatDuration(sum.Windows.Previous.ElapsedSeconds)
+	}
+	fmt.Fprintf(&b, "%-14s %s\n", "Since previous", previous)
 	refresh, reason := NextRefresh(v.Manifest, v.Location)
 	fmt.Fprintf(&b, "%-14s %s\n", "Next refresh", refresh)
 	if reason != "" {
@@ -198,7 +204,7 @@ func displayWindow(w clan.Windows) (string, clan.Window, bool) {
 }
 
 func writeCurrencies(b *strings.Builder, v View, label string, win clan.Window, winOK bool) {
-	lines := currencyLines(v.Summary, win, winOK, v.ShowAllCurrencies, label)
+	lines := currencyLines(v.Summary, v.Priors, win, winOK, v.ShowAllCurrencies, label)
 	if len(lines) == 0 {
 		fmt.Fprintf(b, "  %s\n", unavailable)
 		return
@@ -221,7 +227,7 @@ type moneyLine struct {
 	note   string
 }
 
-func currencyLines(sum clan.Summary, win clan.Window, winOK, showAll bool, label string) []moneyLine {
+func currencyLines(sum clan.Summary, priors []clan.Prior, win clan.Window, winOK, showAll bool, label string) []moneyLine {
 	changed := map[string]clan.CurrencyDelta{}
 	if winOK {
 		changed = win.ChangedCurrencies
@@ -269,7 +275,11 @@ func currencyLines(sum clan.Summary, win clan.Window, winOK, showAll bool, label
 					}
 					line.note = note
 				default:
-					line.delta = FormatSigned(d.Delta) + " since " + label
+					line.delta = changeText(d, label, elapsedSeconds(win))
+				}
+			} else if cur.Amount != "" {
+				if base, ok := baselineCurrency(priors, win.BaselineFile, id); ok && clan.SameAmount(base, cur.Amount) {
+					line.delta = changeText(clan.CurrencyDelta{Delta: "0"}, label, elapsedSeconds(win))
 				}
 			}
 		}
@@ -361,7 +371,16 @@ func writeActivity(b *strings.Builder, v View, label string, win clan.Window, wi
 			}
 		}
 		extra := ""
-		if winOK && baseOK {
+		if spec.label == "Eggs opened" && winOK && win.Eggs != nil {
+			if win.Eggs.Status != "unavailable" && win.Eggs.Delta != "" {
+				extra = changeText(*win.Eggs, label, elapsedSeconds(win))
+				if win.Eggs.RateStatus == "" {
+					eggsDelta = win.Eggs.Delta
+					eggsElapsed = elapsedSeconds(win)
+					eggsOK = true
+				}
+			}
+		} else if winOK && baseOK {
 			if prev, ok := lookupStat(base, spec.keys...); ok {
 				if d, ok := clan.Sub(cur, prev); ok {
 					if spec.duration {
@@ -375,19 +394,19 @@ func writeActivity(b *strings.Builder, v View, label string, win clan.Window, wi
 								sign = "-"
 							}
 							if n.Sign() == 0 {
-								extra = "0 since " + label
+								extra = "0" + sinceSuffix(label)
 							} else {
-								extra = sign + FormatDuration(&s) + " since " + label
+								extra = sign + FormatDuration(&s) + sinceSuffix(label)
 							}
 						}
+					} else if spec.label == "Eggs opened" {
+						extra = changeText(clan.CurrencyDelta{Delta: d}, label, elapsedSeconds(win))
 					} else {
-						extra = FormatSigned(d) + " since " + label
+						extra = FormatSigned(d) + sinceSuffix(label)
 					}
 					if spec.label == "Eggs opened" {
 						eggsDelta = d
-						if win.ElapsedSeconds != nil {
-							eggsElapsed = *win.ElapsedSeconds
-						}
+						eggsElapsed = elapsedSeconds(win)
 						eggsOK = true
 					}
 				}
@@ -402,7 +421,7 @@ func writeActivity(b *strings.Builder, v View, label string, win clan.Window, wi
 	if lookupStatExists(current, "Eggs Opened") {
 		rate := unavailable
 		if eggsOK {
-			rate = FormatRatePerHour(eggsDelta, eggsElapsed)
+			rate = FormatRatePerHour(eggsDelta, eggsElapsed) + "    " + FormatRatePerMinute(eggsDelta, eggsElapsed)
 		}
 		row(b, "Hatch rate", rate)
 	}
@@ -466,7 +485,20 @@ func writeClan(b *strings.Builder, v View, label string, win clan.Window, winOK 
 		title = textOrNA(battle.ID)
 	}
 	row(b, "Battle", title)
-	row(b, "Place", FormatRank(battle.Place))
+	if remain := battleRemaining(battle.FinishTime, v.Summary.ExportedAt); remain != "" {
+		row(b, "Battle remaining", remain)
+	}
+	if members := memberLine(clanNow); members != "" {
+		row(b, "Members", members)
+	}
+	if clanNow.ContributorCount != nil {
+		row(b, "Contributors", FormatCount(strconv.FormatInt(*clanNow.ContributorCount, 10)))
+	}
+	placeText := FormatRank(battle.Place)
+	if winOK && win.Clan != nil && win.Clan.Status != "unavailable" && win.Clan.Place != nil && win.Clan.Place.Status != "unavailable" && win.Clan.Place.Delta != "" {
+		placeText = amountAndDelta(placeText, placeChange(win.Clan.Place.Delta, label, elapsedSeconds(win)), v.Color, false)
+	}
+	row(b, "Place", placeText)
 	points := unavailable
 	if battle.Points != "" {
 		points = FormatCount(battle.Points)
@@ -477,12 +509,16 @@ func writeClan(b *strings.Builder, v View, label string, win clan.Window, winOK 
 		you = FormatCount(battle.UserContribution)
 	}
 	youExtra := ""
+	share := unavailable
 	if winOK && win.Clan != nil && win.Clan.Status != "unavailable" {
 		if win.Clan.Points != nil && win.Clan.Points.Delta != "" && win.Clan.Points.Status != "unavailable" {
-			pointsExtra = FormatSigned(win.Clan.Points.Delta) + " since " + label
+			pointsExtra = metricChange(win.Clan.Points.Delta, label, elapsedSeconds(win))
 		}
 		if win.Clan.UserContribution != nil && win.Clan.UserContribution.Delta != "" && win.Clan.UserContribution.Status != "unavailable" {
-			youExtra = FormatSigned(win.Clan.UserContribution.Delta) + " since " + label
+			youExtra = metricChange(win.Clan.UserContribution.Delta, label, elapsedSeconds(win))
+		}
+		if win.Clan.Points != nil && win.Clan.UserContribution != nil && win.Clan.Points.Status != "unavailable" && win.Clan.UserContribution.Status != "unavailable" {
+			share = FormatShare(win.Clan.UserContribution.Delta, win.Clan.Points.Delta)
 		}
 	}
 	if pointsExtra != "" {
@@ -496,6 +532,7 @@ func writeClan(b *strings.Builder, v View, label string, win clan.Window, winOK 
 		row(b, "Your contribution", you)
 	}
 	row(b, "Contributor rank", FormatRank(battle.UserContributorRank))
+	row(b, "Share of clan gain", share)
 	if winOK && win.Clan != nil && win.Clan.Status == "unavailable" && win.Clan.Reason != "" {
 		fmt.Fprintf(b, "  %s\n", oneLine(win.Clan.Reason))
 	}
@@ -861,6 +898,121 @@ func shortHash(sum string) string {
 		return sum
 	}
 	return sum[:12] + "…"
+}
+
+func elapsedSeconds(win clan.Window) int64 {
+	if win.ElapsedSeconds == nil || *win.ElapsedSeconds <= 0 {
+		return 0
+	}
+	return *win.ElapsedSeconds
+}
+
+func sinceSuffix(label string) string {
+	if label == "" || label == "previous" {
+		return ""
+	}
+	return " since " + label
+}
+
+func changeText(delta clan.CurrencyDelta, label string, elapsed int64) string {
+	change := FormatSigned(delta.Delta)
+	if change == unavailable {
+		return unavailable
+	}
+	if delta.RateStatus != "" {
+		return change + " net" + sinceSuffix(label) + "    " + humanRateNote(delta)
+	}
+	hour := unavailable
+	minute := unavailable
+	if elapsed > 0 {
+		hour = FormatRatePerHour(delta.Delta, elapsed)
+		minute = FormatRatePerMinute(delta.Delta, elapsed)
+	}
+	return change + sinceSuffix(label) + "    " + hour + "    " + minute
+}
+
+func humanRateNote(delta clan.CurrencyDelta) string {
+	switch delta.RateReason {
+	case "observed balance decrease":
+		return "spend/reset detected"
+	case "counter decreased":
+		return "counter decreased, rate reset"
+	default:
+		return "rate n/a"
+	}
+}
+
+func metricChange(delta, label string, elapsed int64) string {
+	change := FormatSigned(delta)
+	if change == unavailable {
+		return unavailable
+	}
+	if elapsed <= 0 {
+		return change + sinceSuffix(label)
+	}
+	return change + sinceSuffix(label) + "    " + FormatRatePerHour(delta, elapsed)
+}
+
+func placeChange(rawDelta, label string, elapsed int64) string {
+	raw, ok := clan.ParseExactInt(rawDelta)
+	if !ok {
+		return unavailable
+	}
+	improvement := new(big.Int).Neg(raw).String()
+	text := FormatSigned(improvement) + " places" + sinceSuffix(label)
+	if elapsed <= 0 {
+		return text
+	}
+	rate := FormatRatePerHour(improvement, elapsed)
+	if rate == unavailable {
+		return text
+	}
+	return text + "    " + strings.TrimSuffix(rate, "/h") + " places/h"
+}
+
+func memberLine(clanNow clan.ClanCurrent) string {
+	if clanNow.MemberCount == nil {
+		return ""
+	}
+	text := FormatCount(strconv.FormatInt(*clanNow.MemberCount, 10))
+	if clanNow.MemberCapacity != nil && *clanNow.MemberCapacity > 0 {
+		text += "/" + FormatCount(strconv.FormatInt(*clanNow.MemberCapacity, 10))
+	}
+	return text
+}
+
+func battleRemaining(finish, now string) string {
+	finish = strings.TrimSpace(finish)
+	if finish == "" {
+		return ""
+	}
+	ft, err1 := time.Parse(time.RFC3339, finish)
+	nt, err2 := time.Parse(time.RFC3339, strings.TrimSpace(now))
+	if err1 != nil || err2 != nil {
+		return unavailable
+	}
+	sec := ft.Unix() - nt.Unix()
+	if sec <= 0 {
+		return "ended"
+	}
+	return FormatSpan(sec)
+}
+
+func baselineCurrency(priors []clan.Prior, file, id string) (string, bool) {
+	if file == "" {
+		return "", false
+	}
+	for _, p := range priors {
+		if p.File != file || !p.CurrenciesKnown {
+			continue
+		}
+		v, ok := p.Currencies[id]
+		if !ok || strings.TrimSpace(v) == "" {
+			return "", false
+		}
+		return v, true
+	}
+	return "", false
 }
 
 func amountAndDelta(amount, delta string, color, badNegative bool) string {

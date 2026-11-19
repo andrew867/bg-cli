@@ -3,6 +3,7 @@ package snapview
 
 import (
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -87,24 +88,198 @@ func FormatDuration(seconds *int64) string {
 // FormatRatePerHour prints an approximate eggs-per-hour rate such as ~47.5k/h.
 // elapsed must be positive. The tilde marks the figure as approximate.
 func FormatRatePerHour(delta string, elapsed int64) string {
-	text, ok := ratePerHour(delta, elapsed)
+	return formatRate(delta, elapsed, 3600, "/h")
+}
+
+// FormatRatePerMinute prints an approximate per-minute rate such as ~791/m.
+// elapsed must be the actual elapsed seconds. The tilde marks the figure as approximate.
+func FormatRatePerMinute(delta string, elapsed int64) string {
+	return formatRate(delta, elapsed, 60, "/m")
+}
+
+func formatRate(delta string, elapsed, period int64, suffix string) string {
+	text, ok := ratePer(delta, elapsed, period)
 	if !ok {
 		return unavailable
 	}
-	return "~" + text + "/h"
+	return "~" + text + suffix
 }
 
-func ratePerHour(delta string, elapsed int64) (string, bool) {
-	if elapsed <= 0 {
+func ratePer(delta string, elapsed, period int64) (string, bool) {
+	if elapsed <= 0 || period <= 0 {
 		return "", false
 	}
 	n, ok := clan.ParseExactInt(delta)
 	if !ok {
 		return "", false
 	}
-	num := new(big.Int).Mul(n, big.NewInt(3600))
-	q := new(big.Int).Quo(num, big.NewInt(elapsed))
-	return formatInt(q, true), true
+	if n.Sign() == 0 {
+		return "0", true
+	}
+	num := new(big.Int).Mul(n, big.NewInt(period))
+	return formatRationalRate(num, big.NewInt(elapsed)), true
+}
+
+// formatRationalRate prints about two or three significant digits.
+// Rounding is display-only. A nonzero rate is not shown as zero.
+func formatRationalRate(num, den *big.Int) string {
+	if den.Sign() == 0 {
+		return "0"
+	}
+	neg := num.Sign() < 0
+	absNum := new(big.Int).Abs(num)
+	absDen := new(big.Int).Abs(den)
+	pow, suf := chooseScale(absNum, absDen)
+	scaledDen := new(big.Int).Mul(absDen, pow10(pow))
+	decimals := decimalsFor(absNum, scaledDen)
+	text := "0"
+	for {
+		rounded, zero := roundDecimal(absNum, scaledDen, decimals)
+		text = rounded
+		if !zero {
+			break
+		}
+		if decimals >= 12 {
+			break
+		}
+		decimals++
+	}
+	if text == "0" {
+		return "0"
+	}
+	if neg {
+		return "-" + text + suf
+	}
+	return text + suf
+}
+
+func chooseScale(num, den *big.Int) (int, string) {
+	for _, g := range []struct {
+		pow int
+		suf string
+	}{
+		{15, "qa"},
+		{12, "t"},
+		{9, "b"},
+		{6, "m"},
+		{3, "k"},
+	} {
+		if num.Cmp(new(big.Int).Mul(den, pow10(g.pow))) >= 0 {
+			return g.pow, g.suf
+		}
+	}
+	return 0, ""
+}
+
+func decimalsFor(num, den *big.Int) int {
+	if cmpWhole(num, den, 1) < 0 || cmpWhole(num, den, 10) < 0 {
+		return 2
+	}
+	if cmpWhole(num, den, 100) < 0 {
+		return 1
+	}
+	return 0
+}
+
+func cmpWhole(num, den *big.Int, whole int64) int {
+	return num.Cmp(new(big.Int).Mul(den, big.NewInt(whole)))
+}
+
+func roundDecimal(num, den *big.Int, decimals int) (string, bool) {
+	if decimals < 0 {
+		decimals = 0
+	}
+	n := new(big.Int).Mul(num, pow10(decimals))
+	q, r := new(big.Int).QuoRem(n, den, new(big.Int))
+	if new(big.Int).Lsh(r, 1).Cmp(den) >= 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	if q.Sign() == 0 {
+		return "0", true
+	}
+	digits := q.String()
+	if decimals == 0 {
+		return withCommas(digits), false
+	}
+	if len(digits) <= decimals {
+		digits = strings.Repeat("0", decimals-len(digits)+1) + digits
+	}
+	whole := digits[:len(digits)-decimals]
+	frac := strings.TrimRight(digits[len(digits)-decimals:], "0")
+	if frac == "" {
+		return withCommas(whole), false
+	}
+	return withCommas(whole) + "." + frac, false
+}
+
+func pow10(n int) *big.Int {
+	if n <= 0 {
+		return big.NewInt(1)
+	}
+	return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
+}
+
+// FormatSpan prints a compact duration with days, such as 1d 9h 12m.
+// Seconds are omitted once the span is at least a day.
+func FormatSpan(seconds int64) string {
+	if seconds < 0 {
+		return unavailable
+	}
+	if seconds == 0 {
+		return "0s"
+	}
+	d := seconds / 86400
+	h := (seconds % 86400) / 3600
+	m := (seconds % 3600) / 60
+	s := seconds % 60
+	var parts []string
+	if d > 0 {
+		parts = append(parts, strconv.FormatInt(d, 10)+"d")
+	}
+	if h > 0 {
+		parts = append(parts, strconv.FormatInt(h, 10)+"h")
+	}
+	if m > 0 {
+		parts = append(parts, strconv.FormatInt(m, 10)+"m")
+	}
+	if s > 0 && d == 0 {
+		parts = append(parts, strconv.FormatInt(s, 10)+"s")
+	}
+	if len(parts) == 0 {
+		return "0s"
+	}
+	return strings.Join(parts, " ")
+}
+
+// FormatShare prints user contribution as a percent of clan-point gain.
+// It is presentation-only. A non-positive clan gain is n/a, not a division.
+func FormatShare(userDelta, clanDelta string) string {
+	user, uOK := clan.ParseExactInt(userDelta)
+	clanGain, cOK := clan.ParseExactInt(clanDelta)
+	if !uOK || !cOK || clanGain.Sign() <= 0 || user.Sign() < 0 {
+		return unavailable
+	}
+	num := new(big.Int).Mul(user, big.NewInt(1000))
+	q, r := new(big.Int).QuoRem(num, clanGain, new(big.Int))
+	if new(big.Int).Lsh(r, 1).Cmp(clanGain) >= 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	if q.Sign() < 0 {
+		q.Abs(q)
+	}
+	digits := q.String()
+	if len(digits) < 2 {
+		digits = strings.Repeat("0", 2-len(digits)) + digits
+	}
+	whole := digits[:len(digits)-1]
+	frac := digits[len(digits)-1:]
+	if whole == "" {
+		whole = "0"
+	}
+	if frac == "0" {
+		return whole + "%"
+	}
+	return whole + "." + frac + "%"
 }
 
 func formatInt(n *big.Int, rate bool) string {

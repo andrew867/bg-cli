@@ -152,6 +152,10 @@ func decodePrior(name string, body []byte, now time.Time) (Prior, string, bool) 
 			p.Points = CanonicalAmount(b.Points)
 			p.PointsOK = true
 		}
+		if place, ok := placeText(b.Place); ok {
+			p.Place = place
+			p.PlaceOK = true
+		}
 		if b.UserContribution != "" {
 			p.UserPoints = CanonicalAmount(b.UserContribution)
 			p.UserPointsOK = true

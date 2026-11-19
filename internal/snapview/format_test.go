@@ -73,11 +73,61 @@ func TestFormatDurationRankAndRate(t *testing.T) {
 	if got := FormatRatePerHour("47500", 3600); got != "~47.5k/h" {
 		t.Fatalf("rate: %s", got)
 	}
-	if got := FormatRatePerHour("10", 0); got != "n/a" {
-		t.Fatalf("zero elapsed: %s", got)
+	if got := FormatRatePerMinute("47500", 3600); got != "~792/m" {
+		t.Fatalf("per minute: %s", got)
 	}
-	if got := FormatRatePerHour("", 3600); got != "n/a" {
-		t.Fatalf("missing eggs: %s", got)
+	if got := FormatRatePerHour("10", 0); got != "n/a" || FormatRatePerMinute("10", 0) != "n/a" {
+		t.Fatal("zero elapsed invented a rate")
+	}
+	if got := FormatRatePerHour("", 3600); got != "n/a" || FormatRatePerMinute("", 3600) != "n/a" {
+		t.Fatal("missing delta invented a rate")
+	}
+}
+
+func TestSmallRatesDoNotRoundToZero(t *testing.T) {
+	cases := []struct {
+		delta   string
+		elapsed int64
+		period  string
+		want    string
+	}{
+		{"5", 3600, "m", "~0.08/m"},
+		{"21", 3000, "m", "~0.42/m"},
+		{"117", 3000, "m", "~2.34/m"},
+		{"2927", 6000, "m", "~29.3/m"},
+		{"44370", 3000, "m", "~887/m"},
+		{"51234", 3600, "h", "~51.2k/h"},
+		{"-5", 3600, "m", "~-0.08/m"},
+		{"0", 3600, "m", "~0/m"},
+		{"1", 1000000000, "m", ""},
+	}
+	for _, tc := range cases {
+		var got string
+		if tc.period == "h" {
+			got = FormatRatePerHour(tc.delta, tc.elapsed)
+		} else {
+			got = FormatRatePerMinute(tc.delta, tc.elapsed)
+		}
+		if tc.want != "" && got != tc.want {
+			t.Fatalf("%s over %d: got %s want %s", tc.delta, tc.elapsed, got, tc.want)
+		}
+		if tc.delta != "0" && (got == "~0/m" || got == "~0/h" || got == "~-0/m" || got == "~-0/h") {
+			t.Fatalf("nonzero rate displayed as zero: %s -> %s", tc.delta, got)
+		}
+	}
+}
+
+func TestFormatShare(t *testing.T) {
+	if got := FormatShare("100", "377"); got != "26.5%" {
+		t.Fatalf("share: %s", got)
+	}
+	if got := FormatShare("0", "377"); got != "0%" {
+		t.Fatalf("zero contribution: %s", got)
+	}
+	for _, tc := range [][2]string{{"100", "0"}, {"100", ""}, {"", "377"}, {"-5", "377"}} {
+		if got := FormatShare(tc[0], tc[1]); got != "n/a" {
+			t.Fatalf("share %s/%s = %s", tc[0], tc[1], got)
+		}
 	}
 }
 

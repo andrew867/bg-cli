@@ -68,7 +68,7 @@ func TestPositiveNegativeUnchangedAndMultipleCurrencies(t *testing.T) {
 		t.Fatalf("currency rate was not marked as an observation estimate: %+v", tok)
 	}
 	spent := w.ChangedCurrencies["Spent"]
-	if spent.Delta != "-60" || spent.NetPerHour != "-120" {
+	if spent.Delta != "-60" || spent.Baseline != "80" || spent.Current != "20" || spent.NetPerHour != "" || spent.RateStatus != "reset" || spent.RateReason != "observed balance decrease" {
 		t.Fatalf("negative delta: %+v", spent)
 	}
 	if _, ok := w.ChangedCurrencies["Diamonds"]; ok {
@@ -275,8 +275,124 @@ func TestBattleIDChangeBlocksClanDeltaOnly(t *testing.T) {
 	if w.Clan == nil || w.Clan.Status != "unavailable" || !contains(w.Clan.Reason, "differs") {
 		t.Fatalf("clan=%+v", w.Clan)
 	}
-	if w.Clan.Points != nil {
-		t.Fatal("cross-battle points were calculated")
+	if w.Clan.Points != nil || w.Clan.Place != nil {
+		t.Fatal("cross-battle points or place were calculated")
+	}
+}
+
+func TestClanPlaceAndEggRatesShareBaseline(t *testing.T) {
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	baseAt := now.Add(-330 * time.Second)
+	place := int64(14)
+	sum := Build(Input{
+		Now: now, Prefix: "ps99", SessionID: "sess",
+		StatisticsKnown: true,
+		Statistics:      map[string]string{"Eggs Opened": "1330"},
+		Clan:            clanPlaced("SYN", "ActiveBattle", "1330", "10", &place),
+		Priors: []Prior{{
+			File: "b-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
+			SessionID: "sess", ClanTag: "SYN", BattleID: "ActiveBattle",
+			Points: "1000", PointsOK: true, Place: "20", PlaceOK: true,
+			UserPoints: "1", UserPointsOK: true,
+			StatsKnown: true, Stats: map[string]string{"Eggs Opened": "1000"},
+		}},
+	})
+	w := sum.Windows.Five
+	if !w.Valid || w.ElapsedSeconds == nil || *w.ElapsedSeconds != 330 {
+		t.Fatalf("window=%+v", w)
+	}
+	if w.Eggs == nil || w.Eggs.Delta != "330" || w.Eggs.Baseline != "1000" || w.Eggs.Current != "1330" {
+		t.Fatalf("eggs=%+v", w.Eggs)
+	}
+	if w.Eggs.NetPerHour != "3600" || w.Eggs.NetPerMinute != "60" || w.Eggs.RateBasis != CurrencyRateBasis || !w.Eggs.Estimated {
+		t.Fatalf("egg rates=%+v", w.Eggs)
+	}
+	if w.Clan == nil || w.Clan.Place == nil || w.Clan.Place.Delta != "-6" || w.Clan.Place.Baseline != "20" || w.Clan.Place.Current != "14" {
+		t.Fatalf("place=%+v", w.Clan)
+	}
+	if w.Clan.Place.NetPerHour != "-720/11" || w.Clan.Points.Baseline != "1000" {
+		t.Fatalf("place did not share the points baseline: %+v", w.Clan)
+	}
+	if w.Eggs.NetPerMinuteApprox != "" {
+		t.Fatalf("integral per-minute stored an approximation: %+v", w.Eggs)
+	}
+}
+
+func TestPlaceIsNotInvented(t *testing.T) {
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	baseAt := now.Add(-5 * time.Minute)
+	zero := int64(0)
+	sum := Build(Input{
+		Now: now, Prefix: "ps99", SessionID: "sess",
+		Clan: clanPlaced("SYN", "ActiveBattle", "90", "9", &zero),
+		Priors: []Prior{{
+			File: "a-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
+			SessionID: "sess", ClanTag: "SYN", BattleID: "ActiveBattle",
+			Points: "10", PointsOK: true, Place: "5", PlaceOK: true,
+		}},
+	})
+	place := sum.Windows.Five.Clan.Place
+	if place == nil || place.Status != "unavailable" || place.Delta != "" || place.Current != "" || place.Reason != "absent current place" {
+		t.Fatalf("zero place was treated as a rank: %+v", place)
+	}
+	current := int64(4)
+	missingPrior := Build(Input{
+		Now: now, Prefix: "ps99", SessionID: "sess",
+		StatisticsKnown: true,
+		Statistics:      map[string]string{"Eggs Opened": "10"},
+		Clan:            clanPlaced("SYN", "ActiveBattle", "90", "9", &current),
+		Priors: []Prior{{
+			File: "a-ps99-summary.json", ExportedAt: baseAt, ExportedAtText: baseAt.Format(time.RFC3339),
+			SessionID: "sess", ClanTag: "SYN", BattleID: "ActiveBattle",
+			Points: "10", PointsOK: true,
+		}},
+	})
+	got := missingPrior.Windows.Five.Clan.Place
+	if got == nil || got.Delta != "" || got.Current != "4" || got.Reason != "absent prior place" {
+		t.Fatalf("missing prior place invented a delta: %+v", got)
+	}
+	eggs := missingPrior.Windows.Five.Eggs
+	if eggs == nil || eggs.Delta != "" || eggs.NetPerHour != "" || eggs.NetPerMinute != "" || eggs.Reason != "absent prior eggs opened" {
+		t.Fatalf("missing eggs invented a rate: %+v", eggs)
+	}
+}
+
+func TestScanReadsPositivePlaceOnly(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	place := int64(9)
+	zero := int64(0)
+	writeSummaryFile(t, dir, "2026-11-18-110000-ps99-summary.json", Summary{
+		SchemaVersion: SchemaVersion,
+		ExportedAt:    now.Add(-time.Hour).Format(time.RFC3339),
+		SessionID:     "sess",
+		Current: Current{Clan: ClanCurrent{Tag: "SYN", ActiveBattle: &BattleCurrent{
+			ID: "ActiveBattle", Points: "10", Place: &place,
+		}}},
+	})
+	writeSummaryFile(t, dir, "2026-11-18-113000-ps99-summary.json", Summary{
+		SchemaVersion: SchemaVersion,
+		ExportedAt:    now.Add(-30 * time.Minute).Format(time.RFC3339),
+		SessionID:     "sess",
+		Current: Current{Clan: ClanCurrent{Tag: "SYN", ActiveBattle: &BattleCurrent{
+			ID: "ActiveBattle", Points: "11", Place: &zero,
+		}}},
+	})
+	scanned, err := Scan(dir, "ps99", now, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var positive, absent bool
+	for _, p := range scanned.Priors {
+		switch p.File {
+		case "2026-11-18-110000-ps99-summary.json":
+			positive = p.PlaceOK && p.Place == "9"
+		case "2026-11-18-113000-ps99-summary.json":
+			absent = !p.PlaceOK && p.Place == ""
+		}
+	}
+	if !positive || !absent {
+		t.Fatalf("priors=%+v", scanned.Priors)
 	}
 }
 
@@ -697,6 +813,23 @@ func TestExtractAccountID(t *testing.T) {
 
 func clanWith(id, points, user string) ClanCurrent {
 	return ClanCurrent{ActiveBattle: &BattleCurrent{ID: id, Points: points, UserContribution: user}}
+}
+
+func clanPlaced(tag, id, points, user string, place *int64) ClanCurrent {
+	c := clanTagged(tag, id, points, user)
+	c.ActiveBattle.Place = place
+	return c
+}
+
+func writeSummaryFile(t *testing.T, dir, name string, sum Summary) {
+	t.Helper()
+	raw, err := json.Marshal(sum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func clanTagged(tag, id, points, user string) ClanCurrent {

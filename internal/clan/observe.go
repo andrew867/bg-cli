@@ -11,6 +11,7 @@ type ClanCurrent struct {
 	Tag              string         `json:"tag,omitempty"`
 	Name             string         `json:"name,omitempty"`
 	MemberCount      *int64         `json:"memberCount,omitempty"`
+	MemberCapacity   *int64         `json:"memberCapacity,omitempty"`
 	ContributorCount *int64         `json:"contributorCount,omitempty"`
 	ActiveBattle     *BattleCurrent `json:"activeBattle,omitempty"`
 	Reason           string         `json:"reason,omitempty"`
@@ -166,6 +167,9 @@ func applyClanIdentity(out *ClanCurrent, clanRaw json.RawMessage) {
 			n := int64(len(arr))
 			out.MemberCount = &n
 		}
+	}
+	if cap, ok := exactInt(top["MemberCapacity"]); ok && cap > 0 {
+		out.MemberCapacity = &cap
 	}
 }
 
