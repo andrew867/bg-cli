@@ -22,7 +22,7 @@ type clanSnapState struct {
 	ExtendedFetched bool
 }
 
-func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, prefix, profile string, now time.Time, man *snapshot.Manifest, st clanSnapState, opt snapshotOptions) {
+func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, prefix, profile string, now time.Time, man *snapshot.Manifest, st clanSnapState, opt snapshotOptions) (clan.Summary, []clan.Prior) {
 	userID, userOK := a.configuredPS99UserID(opt.UserID)
 	var warnings []string
 	if !userOK {
@@ -59,6 +59,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	tag, _, _ := clan.ResolveClanTag(opt.ClanTag, discovered, a.configuredPS99ClanTag())
 
 	currencies, currenciesKnown := clan.CurrenciesFromProfile(st.ProfileBody)
+	statistics, statisticsKnown := clan.StatisticsFromProfile(st.ProfileBody)
 	telemetry := map[string]any{}
 
 	var clanRaw json.RawMessage
@@ -210,6 +211,8 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		SessionID:       sessionID,
 		Currencies:      currencies,
 		CurrenciesKnown: currenciesKnown,
+		Statistics:      statistics,
+		StatisticsKnown: statisticsKnown,
 		Clan:            observed,
 		Priors:          scanned.Priors,
 		Warnings:        warnings,
@@ -237,7 +240,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	man.Summary["clanTelemetry"] = telemetry
 	man.Summary["clan"] = sum.Current.Clan
 	man.Summary["windows"] = sum.Windows
-	fmt.Fprint(a.stderr(), clan.FormatConsole(sum))
+	return sum, scanned.Priors
 }
 
 func publicSource(endpoint string, pr publicResult, now time.Time) *output.Source {

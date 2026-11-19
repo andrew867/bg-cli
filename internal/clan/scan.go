@@ -127,6 +127,16 @@ func decodePrior(name string, body []byte, now time.Time) (Prior, string, bool) 
 		ClanTag:         sum.Current.Clan.Tag,
 		CurrenciesKnown: sum.Current.CurrenciesKnown,
 		Currencies:      map[string]string{},
+		StatsKnown:      sum.Current.StatisticsKnown,
+		Stats:           map[string]string{},
+	}
+	if p.StatsKnown {
+		for k, v := range sum.Current.Statistics {
+			if strings.TrimSpace(v) == "" {
+				continue
+			}
+			p.Stats[k] = strings.TrimSpace(v)
+		}
 	}
 	if p.CurrenciesKnown {
 		for id, cur := range sum.Current.Currencies {
