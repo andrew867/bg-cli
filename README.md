@@ -56,7 +56,7 @@ Provide the client secret through the masked prompt, stdin, or the `BG_CLI_CLIEN
 bg-cli doctor
 bg-cli account quota --profile main --pretty
 bg-cli account snapshot --profile main --dir . --prefix ps99 --note "baseline"
-bg-cli account snapshot --profile main --dir . --prefix ps99 --zip
+bg-cli account snapshot --profile main --dir . --prefix ps99 --no-zip
 bg-cli account snapshot --profile main --dir . --prefix ps99 --output json
 bg-cli clan show --tag SYN
 bg-cli clan battle

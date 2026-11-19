@@ -42,15 +42,17 @@ written only while a battle is active.
 
 JSON and CSV files are the canonical record. The terminal summary is a
 presentation of that record. --output json or --json prints a parseable
-summary on stdout instead. --zip bundles only this snapshot's manifest
-artifacts. It does not include tokens, API keys, or local config, and it
-still contains account telemetry and inventory. Within this ZIP writer,
-entry timestamps and modes are normalized so source mtimes do not change
-the bundle. --zip-path does not replace a file that already exists.
+summary on stdout instead. A ZIP of this snapshot's manifest artifacts is
+written by default. It does not include tokens, API keys, or local config,
+and it still contains account telemetry and inventory. --no-zip skips the
+archive. Within this ZIP writer, entry timestamps and modes are normalized
+so source mtimes do not change the bundle. --zip-path does not replace a
+file that already exists. The human summary shows the next eligible account
+refresh time in the local timezone when the API returned one.
 
 Examples:
   bg-cli account snapshot --profile main --dir . --prefix ps99
-  bg-cli account snapshot --profile main --dir . --prefix ps99 --zip
+  bg-cli account snapshot --profile main --dir . --prefix ps99 --no-zip
   bg-cli account snapshot --profile main --dir . --prefix ps99 --output json`,
 	}
 	cmd.AddCommand(newAccountSnapshotExportCmd(app))
@@ -59,9 +61,13 @@ Examples:
 	// Default RunE when invoked as `account snapshot` (no subcommand) → export.
 	var af accountFlags
 	var outDir, prefix, note, include, clanTag, userID, sessionID, zipPath string
-	var joinRAP, allViews, newSession, requireClan, zip, showAll, verbose, jsonOut bool
+	var joinRAP, allViews, newSession, requireClan, zip, noZip, showAll, verbose, jsonOut bool
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		machine, err := snapshotMachineJSON(c, app.Flags.Output, jsonOut)
+		if err != nil {
+			return err
+		}
+		wantZip, err := snapshotWantsZip(c, zip, noZip, zipPath)
 		if err != nil {
 			return err
 		}
@@ -69,7 +75,7 @@ Examples:
 			Flags: af, Dir: outDir, Prefix: prefix, JoinRAP: joinRAP, Note: note,
 			AllViews: allViews, Include: include, ClanTag: clanTag, UserID: userID,
 			NewSession: newSession, SessionID: sessionID, RequireClan: requireClan,
-			Zip: zip, ZipPath: zipPath, ShowAllCurrencies: showAll, Verbose: verbose,
+			Zip: wantZip, ZipPath: zipPath, ShowAllCurrencies: showAll, Verbose: verbose,
 			MachineJSON: machine,
 		})
 	}
@@ -86,7 +92,8 @@ Examples:
 	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account (cannot be combined with --session-id)")
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
-	cmd.Flags().BoolVar(&zip, "zip", false, "write a ZIP of this snapshot's manifest artifacts (no tokens or config)")
+	cmd.Flags().BoolVar(&zip, "zip", true, "write a ZIP of this snapshot's manifest artifacts (default; no tokens or config)")
+	cmd.Flags().BoolVar(&noZip, "no-zip", false, "do not write the snapshot ZIP")
 	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "print absolute paths in the human summary")
@@ -97,7 +104,7 @@ Examples:
 func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	var af accountFlags
 	var outDir, prefix, note, include, clanTag, userID, sessionID, zipPath string
-	var joinRAP, allViews, newSession, requireClan, zip, showAll, verbose, jsonOut bool
+	var joinRAP, allViews, newSession, requireClan, zip, noZip, showAll, verbose, jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "Write a dated snapshot (same as account snapshot)",
@@ -106,11 +113,15 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			wantZip, err := snapshotWantsZip(c, zip, noZip, zipPath)
+			if err != nil {
+				return err
+			}
 			return app.runAccountSnapshot(c.Context(), snapshotOptions{
 				Flags: af, Dir: outDir, Prefix: prefix, JoinRAP: joinRAP, Note: note,
 				AllViews: allViews, Include: include, ClanTag: clanTag, UserID: userID,
 				NewSession: newSession, SessionID: sessionID, RequireClan: requireClan,
-				Zip: zip, ZipPath: zipPath, ShowAllCurrencies: showAll, Verbose: verbose,
+				Zip: wantZip, ZipPath: zipPath, ShowAllCurrencies: showAll, Verbose: verbose,
 				MachineJSON: machine,
 			})
 		},
@@ -128,7 +139,8 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account (cannot be combined with --session-id)")
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
-	cmd.Flags().BoolVar(&zip, "zip", false, "write a ZIP of this snapshot's manifest artifacts (no tokens or config)")
+	cmd.Flags().BoolVar(&zip, "zip", true, "write a ZIP of this snapshot's manifest artifacts (default; no tokens or config)")
+	cmd.Flags().BoolVar(&noZip, "no-zip", false, "do not write the snapshot ZIP")
 	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "print absolute paths in the human summary")
@@ -426,6 +438,20 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	a.notice("snapshot export complete (%s)", manName)
 
 	return a.presentSnapshot(man, sum, priors, opt, absDir, manName)
+}
+
+func snapshotWantsZip(cmd *cobra.Command, zip, noZip bool, zipPath string) (bool, error) {
+	if noZip && strings.TrimSpace(zipPath) != "" {
+		return false, &ExitError{Code: exitcode.Usage, Msg: "--zip-path cannot be combined with --no-zip\n  bg-cli account snapshot --no-zip\n  bg-cli account snapshot --zip-path out.zip"}
+	}
+	changedZip := cmd != nil && cmd.Flags().Changed("zip")
+	if noZip && changedZip && zip {
+		return false, &ExitError{Code: exitcode.Usage, Msg: "use either --zip or --no-zip\n  bg-cli account snapshot\n  bg-cli account snapshot --no-zip"}
+	}
+	if noZip {
+		return false, nil
+	}
+	return zip, nil
 }
 
 func snapshotMachineJSON(cmd *cobra.Command, outputMode string, jsonFlag bool) (bool, error) {

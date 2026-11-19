@@ -1,6 +1,7 @@
 package snapview
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -18,7 +19,7 @@ const (
 	ansiRed    = "\x1b[31m"
 )
 
-// Bundle is how a ZIP turned out. Nil means --zip was not requested.
+// Bundle is how a ZIP turned out. Nil means a ZIP was not written.
 type Bundle struct {
 	OK          bool
 	Error       string
@@ -43,6 +44,7 @@ type View struct {
 	Verbose           bool
 	Color             bool
 	Bundle            *Bundle
+	Location          *time.Location
 }
 
 // Render writes the default terminal summary. Colour is applied only when
@@ -62,6 +64,11 @@ func Render(v View) string {
 		session = FormatDuration(sum.Windows.Session.ElapsedSeconds)
 	}
 	fmt.Fprintf(&b, "%-14s %s\n", "Session", session)
+	refresh, reason := NextRefresh(v.Manifest, v.Location)
+	fmt.Fprintf(&b, "%-14s %s\n", "Next refresh", refresh)
+	if reason != "" {
+		fmt.Fprintf(&b, "  %s\n", reason)
+	}
 
 	label, win, winOK := displayWindow(sum.Windows)
 	b.WriteString("\nAccount\n")
@@ -104,6 +111,64 @@ func capturedAt(exported string) string {
 		return unavailable
 	}
 	return exported
+}
+
+// NextRefresh formats nextRefreshEligibleAt from refresh objects already
+// stored on the snapshot. It does not invent a time from resetsAt or the clock.
+// The reason is empty when a local time is shown.
+func NextRefresh(man snapshot.Manifest, loc *time.Location) (shown, reason string) {
+	raw, why := nextRefreshRaw(man)
+	if raw == "" {
+		if why == "" {
+			why = "refresh time was not returned"
+		}
+		return unavailable, why
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return unavailable, "next refresh time could not be read"
+	}
+	return FormatLocalClock(t, loc), ""
+}
+
+func nextRefreshRaw(man snapshot.Manifest) (string, string) {
+	var fallback string
+	saw := false
+	bad := false
+	for _, f := range man.Files {
+		blob := strings.TrimSpace(string(f.Refresh))
+		if blob == "" || blob == "null" {
+			continue
+		}
+		saw = true
+		var body struct {
+			Next *string `json:"nextRefreshEligibleAt"`
+		}
+		if err := json.Unmarshal(f.Refresh, &body); err != nil {
+			bad = true
+			continue
+		}
+		if body.Next == nil || strings.TrimSpace(*body.Next) == "" {
+			continue
+		}
+		raw := strings.TrimSpace(*body.Next)
+		if f.View == "inventory" || f.Kind == "inventory-json" {
+			return raw, ""
+		}
+		if fallback == "" {
+			fallback = raw
+		}
+	}
+	if fallback != "" {
+		return fallback, ""
+	}
+	if bad {
+		return "", "next refresh time could not be read"
+	}
+	if !saw {
+		return "", "refresh time was not returned"
+	}
+	return "", "next refresh time was not returned"
 }
 
 func textOrNA(s string) string {

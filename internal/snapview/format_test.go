@@ -3,6 +3,7 @@ package snapview
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFormatCountAndSigned(t *testing.T) {
@@ -77,5 +78,16 @@ func TestFormatDurationRankAndRate(t *testing.T) {
 	}
 	if got := FormatRatePerHour("", 3600); got != "n/a" {
 		t.Fatalf("missing eggs: %s", got)
+	}
+}
+
+func TestFormatLocalClock(t *testing.T) {
+	instant := time.Date(2026, 11, 6, 12, 5, 0, 0, time.UTC)
+	loc := time.FixedZone("LOC", -3*3600-30*60)
+	if got := FormatLocalClock(instant, loc); got != "2026-11-06 08:35:00 LOC" {
+		t.Fatalf("local: %s", got)
+	}
+	if got := FormatLocalClock(instant, time.UTC); got != "2026-11-06 12:05:00 UTC" {
+		t.Fatalf("utc: %s", got)
 	}
 }

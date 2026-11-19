@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/andrew867/bg-cli/internal/clan"
 	"github.com/andrew867/bg-cli/internal/exitcode"
@@ -57,6 +58,7 @@ func (a *App) presentSnapshot(man snapshot.Manifest, sum clan.Summary, priors []
 			Verbose:           opt.Verbose,
 			Color:             a.snapshotColor(),
 			Bundle:            bundle,
+			Location:          time.Local,
 		})
 		if _, err := io.WriteString(a.stdout(), text); err != nil {
 			return err
