@@ -38,6 +38,8 @@ type Summary struct {
 type Current struct {
 	CurrenciesKnown bool                      `json:"currenciesKnown"`
 	Currencies      map[string]CurrencyAmount `json:"currencies"`
+	StatisticsKnown bool                      `json:"statisticsKnown,omitempty"`
+	Statistics      map[string]string         `json:"statistics,omitempty"`
 	Clan            ClanCurrent               `json:"clan"`
 }
 
@@ -119,6 +121,8 @@ type Prior struct {
 	UserPointsOK    bool
 	CurrenciesKnown bool
 	Currencies      map[string]string
+	StatsKnown      bool
+	Stats           map[string]string
 }
 
 // Input is the current snapshot plus priors already scanned from summary files.
@@ -133,6 +137,8 @@ type Input struct {
 	SessionID       string
 	Currencies      map[string]CurrencyAmount
 	CurrenciesKnown bool
+	Statistics      map[string]string
+	StatisticsKnown bool
 	Clan            ClanCurrent
 	Priors          []Prior
 	Warnings        []string
@@ -181,6 +187,8 @@ func Build(in Input) Summary {
 		Current: Current{
 			CurrenciesKnown: in.CurrenciesKnown,
 			Currencies:      in.Currencies,
+			StatisticsKnown: in.StatisticsKnown,
+			Statistics:      in.Statistics,
 			Clan:            in.Clan,
 		},
 		Warnings: append([]string(nil), in.Warnings...),

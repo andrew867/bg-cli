@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (none)
+- `account snapshot` prints a human summary by default. JSON and CSV files stay canonical. `--output json` and `--json` print the machine-readable summary. `--show-all-currencies` lists every currency in the human summary. `--zip` writes a bundle of that snapshot's manifest artifacts and leaves out tokens, keys, and local config. The archive still contains account telemetry and inventory. ZIP entry timestamps and modes are normalized so the same artifacts keep a stable bundle when source timestamps change. `--zip-path` refuses to replace a file that already exists. A rank of zero prints as `n/a`.
 
 ## [0.2.1] - 2026-11-18
 

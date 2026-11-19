@@ -108,7 +108,11 @@ Clan points and currencies share one prior `*-{prefix}-summary.json` per window 
 
 `--user-id` selects the player for contribution and rank. Otherwise `profiles.<alias>.ps99UserId` in `config.json` is used. When neither is set, clan totals are kept and contribution and rank are omitted. `--clan-tag` overrides tag discovery. When the flag is omitted, the tag is taken from the profile or extended profile, then from `profiles.<alias>.ps99ClanTag`. Snapshot reads of the clan and active battle bypass the local public cache. A failed clan or active-battle request is a warning and does not fail the snapshot; `--require-clan` makes that failure fatal. The summary file itself is still required. There is no separate historic clan-battle route; `Battles` on the clan document is that record. `clans battle` remains the sampled `GET /v1/clans/battles/:battleId` command.
 
-Same-second runs get a `-0001` collision suffix. The manifest lists payload files with exact byte sizes and SHA-256 digests (it does not self-reference its own digest). Optional `--note` stores experiment context. Stdout stays a JSON summary. A short clan and changed-currency view is printed to stderr. Unchanged currencies are left out of that view.
+Same-second runs get a `-0001` collision suffix. The manifest lists payload files with exact byte sizes and SHA-256 digests (it does not self-reference its own digest). Optional `--note` stores experiment context.
+
+JSON and CSV files are the canonical snapshot. The default terminal output is a human summary of that record: account, activity, clan, inventory, data-source status, warnings, and file names. It does not add API calls. `--output json` or `--json` prints a parseable JSON summary on stdout; progress stays on stderr. `--show-all-currencies` lists every currency in the human summary. The files always keep the full set. Deltas are labeled with the window they came from (`previous`, `5m`, `30m`, `1h`, or `session`). A missing baseline is a warning. Unknown values are `n/a`, not zero.
+
+`--zip` writes `<stamp>-<prefix>.zip` beside the snapshot. `--zip-path` chooses another destination in the output directory, or an absolute path, and refuses to overwrite a file that already exists. The generated name is chosen by the same collision allocation as the snapshot files, so a previous `*-ps99.zip` shifts the next snapshot instead of being replaced. The ZIP is built from the manifest's artifact list after those files are finalized. It does not include itself, tokens, API keys, cookies, credential files, or local config. It does include the account telemetry and inventory that the snapshot wrote. Within the current ZIP implementation, member order and archive metadata are normalized, so a change to a source file's modification time or ordinary permissions does not change the bundle. That does not promise identical bytes under a future Go Deflate implementation. The terminal reports the bundle name, size, and a shortened SHA-256. The full digest is in `--json` output. A ZIP failure does not delete the snapshot files. The manifest does not record the ZIP's own hash.
 
 `account snapshot diff --from OLD_MANIFEST --to NEW_MANIFEST` is fully offline: no auth, no network, no quota. It diffs Statistics, PurchasedEggs, PetHatchCount, Pet inventory variants, and currencies; optional `--egg` / `--pet` / `--egg-price` / `--currency` / `--future-eggs` / `--batch-size` enable observed hatch-rate, reconciliation, and cost/timing analysis. Observed rates are not official game odds.
 
@@ -117,6 +121,8 @@ Export examples:
 ```bash
 bg-cli account quota --profile main --pretty
 bg-cli account snapshot --profile main --dir . --prefix ps99 --note "Lucky Eggs VII"
+bg-cli account snapshot --profile main --dir . --prefix ps99 --zip
+bg-cli account snapshot --profile main --dir . --prefix ps99 --output json
 bg-cli account snapshot --profile main --dir D:\snaps --join-rap --excel
 bg-cli account snapshot diff --from old-manifest.json --to new-manifest.json --egg "Masquerade Egg" --pet "Butler Penguin" --egg-price 50000 --currency HalloweenGamesCoins --future-eggs 10000 --pretty
 bg-cli account inventory --profile main --output csv --join-rap --excel > inventory.csv

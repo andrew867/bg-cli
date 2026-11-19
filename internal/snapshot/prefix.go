@@ -59,6 +59,7 @@ func AllocateStamp(dir, stamp, prefix string) (fullStamp string, collision strin
 		if i > 0 {
 			coll = fmt.Sprintf("%04d", i)
 		}
+		manifestName := FileName(stamp, coll, prefix, "manifest.json")
 		names := []string{
 			FileName(stamp, coll, prefix, "inv.json"),
 			FileName(stamp, coll, prefix, "prof.json"),
@@ -68,7 +69,8 @@ func AllocateStamp(dir, stamp, prefix string) (fullStamp string, collision strin
 			FileName(stamp, coll, prefix, "clan.json"),
 			FileName(stamp, coll, prefix, "clanbattle.json"),
 			FileName(stamp, coll, prefix, "summary.json"),
-			FileName(stamp, coll, prefix, "manifest.json"),
+			manifestName,
+			strings.TrimSuffix(manifestName, "-manifest.json") + ".zip",
 		}
 		conflict := false
 		for _, n := range names {

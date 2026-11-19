@@ -272,8 +272,15 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 	if sum.UserID != "1001" || !sum.Current.CurrenciesKnown {
 		t.Fatalf("user=%s known=%v", sum.UserID, sum.Current.CurrenciesKnown)
 	}
-	if !strings.Contains(stderr.String(), "PumpkinTokens") || strings.Contains(stderr.String(), "Diamonds") {
-		t.Fatalf("console=%s", stderr.String())
+	console := stdout.String()
+	if !strings.Contains(console, "Pumpkin Tokens") || !strings.Contains(console, "+1,509 since previous") {
+		t.Fatalf("console=%s", console)
+	}
+	if strings.Contains(console, "Other") {
+		t.Fatalf("unexpected currency in console=%s", console)
+	}
+	if strings.Contains(stderr.String(), "Changed currencies") {
+		t.Fatalf("human table leaked to stderr:\n%s", stderr.String())
 	}
 	clanFile := filepath.Join(outDir, stamp+"-ps99-clan.json")
 	clanBytes, err := os.ReadFile(clanFile)
