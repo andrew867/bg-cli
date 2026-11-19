@@ -209,3 +209,40 @@ func TestMachineBundleFailureIsVisible(t *testing.T) {
 		t.Fatalf("failed zip looked complete:\n%s", text)
 	}
 }
+
+func TestNextRefreshUsesLocalZone(t *testing.T) {
+	loc := time.FixedZone("LOC", -3*3600-30*60)
+	text := Render(View{
+		Summary:  clan.Summary{Prefix: "ps99", ExportedAt: "2026-11-06T15:45:30Z"},
+		Location: loc,
+		Manifest: snapshot.Manifest{Files: []snapshot.FileRecord{
+			{Kind: "profile-json", Refresh: []byte(`{"resetsAt":"2026-11-07T00:00:00.000Z","nextRefreshEligibleAt":"2026-11-06T12:10:00.000Z"}`)},
+			{Kind: "inventory-json", Refresh: []byte(`{"resetsAt":"2026-11-07T00:00:00.000Z","nextRefreshEligibleAt":"2026-11-06T12:05:00.000Z"}`)},
+		}},
+	})
+	if !strings.Contains(text, "Next refresh   2026-11-06 08:35:00 LOC") {
+		t.Fatalf("refresh line:\n%s", text)
+	}
+	if strings.Contains(text, "12:05:00") || strings.Contains(text, "12:10:00") || strings.Contains(text, "2026-11-07") {
+		t.Fatalf("raw or resetsAt time leaked:\n%s", text)
+	}
+}
+
+func TestNextRefreshAbsentDoesNotInvent(t *testing.T) {
+	text := Render(View{
+		Summary: clan.Summary{Prefix: "ps99", ExportedAt: "2026-11-06T15:45:30Z"},
+		Manifest: snapshot.Manifest{Files: []snapshot.FileRecord{
+			{Kind: "profile-json", Refresh: []byte(`{"resetsAt":"2026-11-07T00:00:00.000Z","quotaExhausted":false}`)},
+		}},
+	})
+	if !strings.Contains(text, "Next refresh   n/a") || !strings.Contains(text, "next refresh time was not returned") {
+		t.Fatalf("missing reason:\n%s", text)
+	}
+	if strings.Contains(text, "2026-11-07") {
+		t.Fatalf("invented resetsAt:\n%s", text)
+	}
+	none := Render(View{Summary: clan.Summary{Prefix: "ps99"}})
+	if !strings.Contains(none, "refresh time was not returned") {
+		t.Fatalf("no refresh:\n%s", none)
+	}
+}

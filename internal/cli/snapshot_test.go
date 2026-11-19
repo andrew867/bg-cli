@@ -435,6 +435,79 @@ func assertNoZipTemp(t *testing.T, dir string) {
 	}
 }
 
+func TestAccountSnapshotZipsByDefaultAndShowsLocalRefresh(t *testing.T) {
+	deps, closeSrv := snapshotFixtureDeps(t)
+	defer closeSrv()
+	outDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outDir, ".env"), []byte("BG_CLI_CLIENT_SECRET=nope"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "config.json"), []byte(`{"token":"nope"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	deps.Stdout, deps.Stderr = &stdout, &stderr
+	code := Execute(deps, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99"})
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	stamp := time.Date(2026, 11, 6, 15, 45, 30, 0, time.UTC).In(time.Local).Format("2006-01-02-150405")
+	zipPath := filepath.Join(outDir, stamp+"-ps99.zip")
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		t.Fatalf("default zip missing: %v names=%v", err, listNames(t, outDir))
+	}
+	names := map[string]bool{}
+	for _, f := range r.File {
+		names[f.Name] = true
+	}
+	r.Close()
+	if !names[stamp+"-ps99-manifest.json"] || !names[stamp+"-ps99-inv.json"] {
+		t.Fatalf("members=%v", names)
+	}
+	if names[".env"] || names["config.json"] || names[stamp+"-ps99.zip"] {
+		t.Fatalf("unexpected members=%v", names)
+	}
+	want := time.Date(2026, 11, 6, 12, 5, 0, 0, time.UTC).In(time.Local).Format("2006-01-02 15:04:05 MST")
+	if !strings.Contains(stdout.String(), "Next refresh") || !strings.Contains(stdout.String(), want) {
+		t.Fatalf("local refresh %q missing\n%s", want, stdout.String())
+	}
+	if strings.Contains(stdout.String(), "12:05:00.000Z") || strings.Contains(stdout.String(), "nextRefreshEligibleAt") {
+		t.Fatalf("raw refresh dumped:\n%s", stdout.String())
+	}
+}
+
+func TestAccountSnapshotNoZip(t *testing.T) {
+	deps, closeSrv := snapshotFixtureDeps(t)
+	defer closeSrv()
+	outDir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	deps.Stdout, deps.Stderr = &stdout, &stderr
+	code := Execute(deps, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99", "--no-zip"})
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	stamp := time.Date(2026, 11, 6, 15, 45, 30, 0, time.UTC).In(time.Local).Format("2006-01-02-150405")
+	if _, err := os.Stat(filepath.Join(outDir, stamp+"-ps99-manifest.json")); err != nil {
+		t.Fatalf("snapshot files missing: %v", err)
+	}
+	for _, name := range listNames(t, outDir) {
+		if strings.HasSuffix(name, ".zip") || strings.HasPrefix(name, ".bg-cli-zip-") {
+			t.Fatalf("zip written despite --no-zip: %s", name)
+		}
+	}
+	if strings.Contains(stdout.String(), "sha256") || strings.Contains(stdout.String(), "Bundle") {
+		t.Fatalf("bundle section without a zip:\n%s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(deps, []string{"account", "snapshot", "--zip", "--no-zip", "--dir", t.TempDir()})
+	if code != exitcode.Usage {
+		t.Fatalf("both flags exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
 func listNames(t *testing.T, dir string) []string {
 	t.Helper()
 	ents, _ := os.ReadDir(dir)

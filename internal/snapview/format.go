@@ -4,11 +4,21 @@ package snapview
 import (
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/andrew867/bg-cli/internal/clan"
 )
 
 const unavailable = "n/a"
+
+// FormatLocalClock prints t in loc as 2006-01-02 15:04:05 MST.
+// A nil location uses the local computer timezone.
+func FormatLocalClock(t time.Time, loc *time.Location) string {
+	if loc == nil {
+		loc = time.Local
+	}
+	return t.In(loc).Format("2006-01-02 15:04:05 MST")
+}
 
 // FormatCount prints an exact integer with thousands separators.
 // Values of at least one billion may use K, M, B, T, or Qa.
