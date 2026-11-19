@@ -130,6 +130,28 @@ func TestFilterInventory(t *testing.T) {
 	if err != nil || empty.RowCount != 0 {
 		t.Fatalf("rows=%d err=%v", empty.RowCount, err)
 	}
+	if !strings.Contains(string(empty.Filtered), `"items":[]`) {
+		t.Fatalf("a real inventory filtered to nothing became %s", empty.Filtered)
+	}
+}
+
+func TestFilterInventoryDoesNotInventEmptyItems(t *testing.T) {
+	for _, raw := range []string{`{"fetchedAt":"2026-11-06T15:45:30Z"}`, `{"items":null,"fetchedAt":"2026-11-06T15:45:30Z"}`} {
+		res, err := FilterInventory(json.RawMessage(raw), "", "", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(res.Filtered), `"items":[]`) {
+			t.Fatalf("absent items rewritten as empty: %s", res.Filtered)
+		}
+	}
+	empty, err := FilterInventory(json.RawMessage(`{"items":[]}`), "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(empty.Filtered), `"items":[]`) {
+		t.Fatalf("empty array was not preserved: %s", empty.Filtered)
+	}
 }
 
 func TestUnauthorizedMappingFixture(t *testing.T) {

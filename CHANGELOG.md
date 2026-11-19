@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (none)
+- `account snapshot` writes an exact `inventory-diff.json` for the previous compatible snapshot. A stack's `_am` is quantity, so 100 then 125 is one net change. Pet variants and overlapping trait counts are included. Huge is an explicit `huge` boolean, or the normalized `category` when that boolean is absent, and only when every pet row is classified. A missing `items` array is not an empty inventory. The derived diff is not an Inventory source. The human summary lists net inventory changes and does not infer why an item was added or removed. `account snapshot diff` uses the same comparison offline. `--verbose` shows the full inventory changes, diagnostics, and absolute paths.
 
 ## [0.2.5] - 2026-11-19
 

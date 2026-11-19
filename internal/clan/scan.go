@@ -146,6 +146,10 @@ func decodePrior(name string, body []byte, now time.Time) (Prior, string, bool) 
 			p.Currencies[id] = CanonicalAmount(cur.Amount)
 		}
 	}
+	if sum.Current.Inventory != nil && sum.Current.Inventory.Known {
+		cp := *sum.Current.Inventory
+		p.Inventory = &cp
+	}
 	if b := sum.Current.Clan.ActiveBattle; b != nil && b.ID != "" {
 		p.BattleID = b.ID
 		if b.Points != "" {

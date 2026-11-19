@@ -96,7 +96,7 @@ Examples:
 	cmd.Flags().BoolVar(&noZip, "no-zip", false, "do not write the snapshot ZIP")
 	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "print absolute paths in the human summary")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "show full inventory changes, diagnostics, and absolute paths")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the machine-readable JSON summary on stdout")
 	return cmd
 }
@@ -143,7 +143,7 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&noZip, "no-zip", false, "do not write the snapshot ZIP")
 	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "print absolute paths in the human summary")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "show full inventory changes, diagnostics, and absolute paths")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the machine-readable JSON summary on stdout")
 	return cmd
 }
@@ -275,6 +275,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	a.notice("note: independently retrieved views may not share an atomic point-in-time database transaction")
 
 	var clanState clanSnapState
+	var currentInventory json.RawMessage
 	refreshUsed := false
 	for _, view := range views {
 		useRefresh := opt.Flags.refresh && !refreshUsed
@@ -326,6 +327,9 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 					"petQuantitySum": invBuilt.data["petQuantitySum"],
 					"quotaExhausted": invBuilt.data["quotaExhausted"],
 					"snapshotAt":     formatSnapshotAt(invEnv.Freshness),
+				}
+				if raw, ok := invBuilt.data["inventory"].(json.RawMessage); ok {
+					currentInventory = append(json.RawMessage(nil), raw...)
 				}
 			}
 		case "profile":
@@ -412,7 +416,8 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		}
 	}
 
-	sum, priors := a.attachClanSnapshot(ctx, absDir, stamp, collision, opt.Prefix, profileAlias, now, &man, clanState, opt)
+	sum, priors := a.attachClanSnapshot(ctx, absDir, stamp, collision, opt.Prefix, profileAlias, now, &man, clanState, currentInventory, opt)
+	diff := a.writeInventoryDiff(absDir, stamp, collision, opt.Prefix, &man, sum, currentInventory)
 
 	manName := snapshot.FileName(stamp, collision, opt.Prefix, "manifest.json")
 	man.ManifestFile = manName
@@ -437,7 +442,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	}
 	a.notice("snapshot export complete (%s)", manName)
 
-	return a.presentSnapshot(man, sum, priors, opt, absDir, manName)
+	return a.presentSnapshot(man, sum, priors, opt, absDir, manName, diff)
 }
 
 func snapshotWantsZip(cmd *cobra.Command, zip, noZip bool, zipPath string) (bool, error) {

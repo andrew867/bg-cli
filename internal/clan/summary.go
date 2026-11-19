@@ -43,6 +43,7 @@ type Current struct {
 	StatisticsKnown bool                      `json:"statisticsKnown,omitempty"`
 	Statistics      map[string]string         `json:"statistics,omitempty"`
 	Clan            ClanCurrent               `json:"clan"`
+	Inventory       *InventoryState           `json:"inventory,omitempty"`
 }
 
 // Windows holds one shared baseline per interval.
@@ -69,6 +70,44 @@ type Window struct {
 	ChangedCurrencies    map[string]CurrencyDelta `json:"changedCurrencies,omitempty"`
 	Eggs                 *CurrencyDelta           `json:"eggs,omitempty"`
 	Clan                 *ClanWindow              `json:"clan,omitempty"`
+	Inventory            *InventoryWindow         `json:"inventory,omitempty"`
+}
+
+// InventoryState is the current pet and inventory totals stored on a summary.
+// Older summaries omit it. Quantities are exact integer text. Huge is omitted
+// unless HugeKnown is true; a missing huge classification is not stored as zero.
+type InventoryState struct {
+	Known         bool   `json:"known"`
+	PetQuantity   string `json:"petQuantity,omitempty"`
+	PetRows       string `json:"petRows,omitempty"`
+	Golden        string `json:"golden,omitempty"`
+	Rainbow       string `json:"rainbow,omitempty"`
+	Shiny         string `json:"shiny,omitempty"`
+	Huge          string `json:"huge,omitempty"`
+	HugeKnown     bool   `json:"hugeKnown,omitempty"`
+	InventoryRows string `json:"inventoryRows,omitempty"`
+	ObservedAt    string `json:"observedAt,omitempty"`
+}
+
+// InventoryWindow is the aggregate pet-count delta for one summary window.
+// It has no production rate. A decrease is a real negative delta.
+type InventoryWindow struct {
+	PetQuantity   *InventoryCount `json:"petQuantity,omitempty"`
+	PetRows       *InventoryCount `json:"petRows,omitempty"`
+	Golden        *InventoryCount `json:"golden,omitempty"`
+	Rainbow       *InventoryCount `json:"rainbow,omitempty"`
+	Shiny         *InventoryCount `json:"shiny,omitempty"`
+	Huge          *InventoryCount `json:"huge,omitempty"`
+	InventoryRows *InventoryCount `json:"inventoryRows,omitempty"`
+}
+
+// InventoryCount is an exact aggregate comparison without a rate.
+type InventoryCount struct {
+	Status   string `json:"status,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	Baseline string `json:"baseline,omitempty"`
+	Current  string `json:"current,omitempty"`
+	Delta    string `json:"delta,omitempty"`
 }
 
 // CurrencyDelta is one currency whose balance changed, or an unavailable comparison.
@@ -137,6 +176,7 @@ type Prior struct {
 	Currencies      map[string]string
 	StatsKnown      bool
 	Stats           map[string]string
+	Inventory       *InventoryState
 }
 
 // Input is the current snapshot plus priors already scanned from summary files.
@@ -154,6 +194,7 @@ type Input struct {
 	Statistics      map[string]string
 	StatisticsKnown bool
 	Clan            ClanCurrent
+	Inventory       *InventoryState
 	Priors          []Prior
 	Warnings        []string
 }
@@ -204,6 +245,7 @@ func Build(in Input) Summary {
 			StatisticsKnown: in.StatisticsKnown,
 			Statistics:      in.Statistics,
 			Clan:            in.Clan,
+			Inventory:       in.Inventory,
 		},
 		Warnings: append([]string(nil), in.Warnings...),
 	}
@@ -274,7 +316,72 @@ func buildWindow(in Input, session, nowText string, requested *int64, kind int) 
 	}
 	w.Clan = diffClan(base, in.Clan, elapsed, strings.TrimSpace(in.UserID))
 	w.Eggs = diffEggs(base, mids, in.Statistics, in.StatisticsKnown, elapsed, nowText)
+	w.Inventory = inventoryWindow(base.Inventory, in.Inventory)
 	return w
+}
+
+func inventoryWindow(base, cur *InventoryState) *InventoryWindow {
+	baseKnown := base != nil && base.Known
+	curKnown := cur != nil && cur.Known
+	if !baseKnown && !curKnown {
+		return nil
+	}
+	baseQty, curQty := "", ""
+	baseRows, curRows := "", ""
+	baseGold, curGold := "", ""
+	baseRain, curRain := "", ""
+	baseShiny, curShiny := "", ""
+	baseInv, curInv := "", ""
+	if baseKnown {
+		baseQty, baseRows = base.PetQuantity, base.PetRows
+		baseGold, baseRain, baseShiny = base.Golden, base.Rainbow, base.Shiny
+		baseInv = base.InventoryRows
+	}
+	if curKnown {
+		curQty, curRows = cur.PetQuantity, cur.PetRows
+		curGold, curRain, curShiny = cur.Golden, cur.Rainbow, cur.Shiny
+		curInv = cur.InventoryRows
+	}
+	return &InventoryWindow{
+		PetQuantity:   plainInventoryCount(baseQty, curQty, baseKnown, curKnown),
+		PetRows:       plainInventoryCount(baseRows, curRows, baseKnown, curKnown),
+		Golden:        plainInventoryCount(baseGold, curGold, baseKnown, curKnown),
+		Rainbow:       plainInventoryCount(baseRain, curRain, baseKnown, curKnown),
+		Shiny:         plainInventoryCount(baseShiny, curShiny, baseKnown, curKnown),
+		Huge:          hugeInventoryCount(base, cur),
+		InventoryRows: plainInventoryCount(baseInv, curInv, baseKnown, curKnown),
+	}
+}
+
+func plainInventoryCount(baseline, current string, baseKnown, curKnown bool) *InventoryCount {
+	switch {
+	case baseKnown && curKnown:
+		delta, ok := Sub(current, baseline)
+		if !ok {
+			return &InventoryCount{Status: "unavailable", Reason: "inventory aggregate is not an exact integer", Baseline: baseline, Current: current}
+		}
+		return &InventoryCount{Baseline: baseline, Current: current, Delta: delta}
+	case !baseKnown:
+		return &InventoryCount{Status: "unavailable", Reason: "baseline inventory aggregates are absent", Current: current}
+	default:
+		return &InventoryCount{Status: "unavailable", Reason: "current inventory aggregates are absent", Baseline: baseline}
+	}
+}
+
+func hugeInventoryCount(base, cur *InventoryState) *InventoryCount {
+	baseKnown := base != nil && base.Known && base.HugeKnown
+	curKnown := cur != nil && cur.Known && cur.HugeKnown
+	if baseKnown && curKnown {
+		return plainInventoryCount(base.Huge, cur.Huge, true, true)
+	}
+	out := &InventoryCount{Status: "unavailable", Reason: "huge classification is absent"}
+	if baseKnown {
+		out.Baseline = base.Huge
+	}
+	if curKnown {
+		out.Current = cur.Huge
+	}
+	return out
 }
 
 func selectBaseline(priors []Prior, now time.Time, session, accountID, profile string, requested *int64, kind int) (Prior, bool) {

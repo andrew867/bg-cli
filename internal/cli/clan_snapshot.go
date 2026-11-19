@@ -22,7 +22,7 @@ type clanSnapState struct {
 	ExtendedFetched bool
 }
 
-func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, prefix, profile string, now time.Time, man *snapshot.Manifest, st clanSnapState, opt snapshotOptions) (clan.Summary, []clan.Prior) {
+func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, prefix, profile string, now time.Time, man *snapshot.Manifest, st clanSnapState, currentInv json.RawMessage, opt snapshotOptions) (clan.Summary, []clan.Prior) {
 	userID, userOK := a.configuredPS99UserID(opt.UserID)
 	var warnings []string
 	if !userOK {
@@ -200,6 +200,21 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			sessionID = clan.NewSessionID(prefix, stamp)
 		}
 	}
+	var invState *clan.InventoryState
+	if measured := snapshot.MeasureInventory(currentInv); measured.OK {
+		invState = &clan.InventoryState{
+			Known:         true,
+			PetQuantity:   measured.PetQuantity,
+			PetRows:       measured.PetRows,
+			Golden:        measured.Golden,
+			Rainbow:       measured.Rainbow,
+			Shiny:         measured.Shiny,
+			Huge:          measured.Huge,
+			HugeKnown:     measured.HugeKnown,
+			InventoryRows: measured.InventoryRows,
+			ObservedAt:    now.Format(time.RFC3339),
+		}
+	}
 	sum := clan.Build(clan.Input{
 		Now:             now,
 		LocalStamp:      stamp,
@@ -214,6 +229,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		Statistics:      statistics,
 		StatisticsKnown: statisticsKnown,
 		Clan:            observed,
+		Inventory:       invState,
 		Priors:          scanned.Priors,
 		Warnings:        warnings,
 	})
