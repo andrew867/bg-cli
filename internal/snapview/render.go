@@ -198,7 +198,7 @@ func displayWindow(w clan.Windows) (string, clan.Window, bool) {
 }
 
 func writeCurrencies(b *strings.Builder, v View, label string, win clan.Window, winOK bool) {
-	lines := currencyLines(v.Summary, win, winOK, v.ShowAllCurrencies, label)
+	lines := currencyLines(v.Summary, v.Priors, win, winOK, v.ShowAllCurrencies, label)
 	if len(lines) == 0 {
 		fmt.Fprintf(b, "  %s\n", unavailable)
 		return
@@ -221,7 +221,7 @@ type moneyLine struct {
 	note   string
 }
 
-func currencyLines(sum clan.Summary, win clan.Window, winOK, showAll bool, label string) []moneyLine {
+func currencyLines(sum clan.Summary, priors []clan.Prior, win clan.Window, winOK, showAll bool, label string) []moneyLine {
 	changed := map[string]clan.CurrencyDelta{}
 	if winOK {
 		changed = win.ChangedCurrencies
@@ -269,7 +269,11 @@ func currencyLines(sum clan.Summary, win clan.Window, winOK, showAll bool, label
 					}
 					line.note = note
 				default:
-					line.delta = FormatSigned(d.Delta) + " since " + label
+					line.delta = sinceRates(d.Delta, label, elapsedSeconds(win))
+				}
+			} else if cur.Amount != "" {
+				if base, ok := baselineCurrency(priors, win.BaselineFile, id); ok && clan.SameAmount(base, cur.Amount) {
+					line.delta = sinceRates("0", label, elapsedSeconds(win))
 				}
 			}
 		}
@@ -361,7 +365,14 @@ func writeActivity(b *strings.Builder, v View, label string, win clan.Window, wi
 			}
 		}
 		extra := ""
-		if winOK && baseOK {
+		if spec.label == "Eggs opened" && winOK && win.Eggs != nil {
+			if win.Eggs.Status != "unavailable" && win.Eggs.Delta != "" {
+				extra = sinceRates(win.Eggs.Delta, label, elapsedSeconds(win))
+				eggsDelta = win.Eggs.Delta
+				eggsElapsed = elapsedSeconds(win)
+				eggsOK = true
+			}
+		} else if winOK && baseOK {
 			if prev, ok := lookupStat(base, spec.keys...); ok {
 				if d, ok := clan.Sub(cur, prev); ok {
 					if spec.duration {
@@ -380,14 +391,14 @@ func writeActivity(b *strings.Builder, v View, label string, win clan.Window, wi
 								extra = sign + FormatDuration(&s) + " since " + label
 							}
 						}
+					} else if spec.label == "Eggs opened" {
+						extra = sinceRates(d, label, elapsedSeconds(win))
 					} else {
 						extra = FormatSigned(d) + " since " + label
 					}
 					if spec.label == "Eggs opened" {
 						eggsDelta = d
-						if win.ElapsedSeconds != nil {
-							eggsElapsed = *win.ElapsedSeconds
-						}
+						eggsElapsed = elapsedSeconds(win)
 						eggsOK = true
 					}
 				}
@@ -402,7 +413,7 @@ func writeActivity(b *strings.Builder, v View, label string, win clan.Window, wi
 	if lookupStatExists(current, "Eggs Opened") {
 		rate := unavailable
 		if eggsOK {
-			rate = FormatRatePerHour(eggsDelta, eggsElapsed)
+			rate = FormatRatePerHour(eggsDelta, eggsElapsed) + "    " + FormatRatePerMinute(eggsDelta, eggsElapsed)
 		}
 		row(b, "Hatch rate", rate)
 	}
@@ -466,7 +477,11 @@ func writeClan(b *strings.Builder, v View, label string, win clan.Window, winOK 
 		title = textOrNA(battle.ID)
 	}
 	row(b, "Battle", title)
-	row(b, "Place", FormatRank(battle.Place))
+	placeText := FormatRank(battle.Place)
+	if winOK && win.Clan != nil && win.Clan.Status != "unavailable" && win.Clan.Place != nil && win.Clan.Place.Status != "unavailable" && win.Clan.Place.Delta != "" {
+		placeText = amountAndDelta(placeText, FormatSigned(win.Clan.Place.Delta)+" since "+label, v.Color, false)
+	}
+	row(b, "Place", placeText)
 	points := unavailable
 	if battle.Points != "" {
 		points = FormatCount(battle.Points)
@@ -861,6 +876,44 @@ func shortHash(sum string) string {
 		return sum
 	}
 	return sum[:12] + "…"
+}
+
+func elapsedSeconds(win clan.Window) int64 {
+	if win.ElapsedSeconds == nil || *win.ElapsedSeconds <= 0 {
+		return 0
+	}
+	return *win.ElapsedSeconds
+}
+
+func sinceRates(delta, label string, elapsed int64) string {
+	change := FormatSigned(delta)
+	if change == unavailable {
+		return unavailable
+	}
+	hour := unavailable
+	minute := unavailable
+	if elapsed > 0 {
+		hour = FormatRatePerHour(delta, elapsed)
+		minute = FormatRatePerMinute(delta, elapsed)
+	}
+	return change + " since " + label + "    " + hour + "    " + minute
+}
+
+func baselineCurrency(priors []clan.Prior, file, id string) (string, bool) {
+	if file == "" {
+		return "", false
+	}
+	for _, p := range priors {
+		if p.File != file || !p.CurrenciesKnown {
+			continue
+		}
+		v, ok := p.Currencies[id]
+		if !ok || strings.TrimSpace(v) == "" {
+			return "", false
+		}
+		return v, true
+	}
+	return "", false
 }
 
 func amountAndDelta(amount, delta string, color, badNegative bool) string {

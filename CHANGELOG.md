@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (none)
+- Summary windows store clan place with the clan-point fields: current place, delta, and `netPerHour` from the shared baseline. A missing or non-positive place stays unavailable. Place is not compared across battle ids or clan tags.
+
+### Changed
+
+- The human summary shows the change since the previous snapshot, per hour, and per minute on the eggs line and on each shown currency line. Hatch rate shows per minute beside per hour. Rates use actual elapsed seconds, stay `n/a` when the comparison is missing, and are stored on the summary as observation estimates. Exact amounts stay in JSON and CSV.
 
 ## [0.2.4] - 2026-11-19
 

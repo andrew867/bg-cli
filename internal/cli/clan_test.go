@@ -165,7 +165,7 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile := []byte(`{"status":"ok","data":{"Clan":"SYN","Currency":{"Diamonds":{"id":"Diamonds","_am":10,"displayName":"Diamonds"},"PumpkinTokens":{"id":"PumpkinTokens","_am":6009,"displayName":"Pumpkin Tokens"},"PumpkinTycoonCoins":{"id":"PumpkinTycoonCoins","_am":960976550608}}}}`)
+	profile := []byte(`{"status":"ok","data":{"Clan":"SYN","Statistics":{"Eggs Opened":1600},"Currency":{"Diamonds":{"id":"Diamonds","_am":10,"displayName":"Diamonds"},"PumpkinTokens":{"id":"PumpkinTokens","_am":6009,"displayName":"Pumpkin Tokens"},"PumpkinTycoonCoins":{"id":"PumpkinTycoonCoins","_am":960976550608}}}}`)
 	start := strconv.FormatInt(fixed.Add(-time.Hour).Unix(), 10)
 	finish := strconv.FormatInt(fixed.Add(time.Hour).Unix(), 10)
 	battle := []byte(`{"status":"ok","data":{"configName":"ActiveBattle","configData":{"Title":"Live","StartTime":` + start + `,"FinishTime":` + finish + `,"Enabled":null}}}`)
@@ -199,6 +199,7 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 
 	outDir := t.TempDir()
 	priorAt := fixed.Add(-5 * time.Minute)
+	priorPlace := int64(8)
 	prior := clan.Summary{
 		SchemaVersion: clan.SchemaVersion,
 		ExportedAt:    priorAt.Format(time.RFC3339),
@@ -211,7 +212,9 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 				"PumpkinTokens":      {Amount: "4500", DisplayName: "Pumpkin Tokens"},
 				"PumpkinTycoonCoins": {Amount: "970000000000", DisplayName: "Pumpkin Tycoon Coins"},
 			},
-			Clan: clan.ClanCurrent{Tag: "SYN", ActiveBattle: &clan.BattleCurrent{ID: "ActiveBattle", Points: "1000", UserContribution: "400"}},
+			StatisticsKnown: true,
+			Statistics:      map[string]string{"Eggs Opened": "1000"},
+			Clan:            clan.ClanCurrent{Tag: "SYN", ActiveBattle: &clan.BattleCurrent{ID: "ActiveBattle", Points: "1000", UserContribution: "400", Place: &priorPlace}},
 		},
 	}
 	raw, _ := json.Marshal(prior)
@@ -254,8 +257,17 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 	if !w.Valid || w.ChangedCurrencies["PumpkinTokens"].Baseline != "4500" || w.ChangedCurrencies["PumpkinTokens"].Delta != "1509" {
 		t.Fatalf("5m=%+v tokens=%+v", w, w.ChangedCurrencies["PumpkinTokens"])
 	}
-	if w.ChangedCurrencies["PumpkinTokens"].NetPerHour != "18108" {
-		t.Fatalf("netPerHour=%s", w.ChangedCurrencies["PumpkinTokens"].NetPerHour)
+	if w.ChangedCurrencies["PumpkinTokens"].NetPerHour != "18108" || w.ChangedCurrencies["PumpkinTokens"].NetPerMinute != "1509/5" {
+		t.Fatalf("rates hour=%s minute=%s", w.ChangedCurrencies["PumpkinTokens"].NetPerHour, w.ChangedCurrencies["PumpkinTokens"].NetPerMinute)
+	}
+	if w.ChangedCurrencies["PumpkinTokens"].RateBasis != clan.CurrencyRateBasis || !w.ChangedCurrencies["PumpkinTokens"].Estimated {
+		t.Fatalf("currency rate basis: %+v", w.ChangedCurrencies["PumpkinTokens"])
+	}
+	if w.Clan == nil || w.Clan.Place == nil || w.Clan.Place.Baseline != "8" || w.Clan.Place.Current != "4" || w.Clan.Place.Delta != "-4" || w.Clan.Place.NetPerHour != "-48" {
+		t.Fatalf("place=%+v", w.Clan)
+	}
+	if w.Eggs == nil || w.Eggs.Delta != "600" || w.Eggs.NetPerHour != "7200" || w.Eggs.NetPerMinute != "120" || w.Eggs.RateBasis != clan.CurrencyRateBasis || !w.Eggs.Estimated {
+		t.Fatalf("eggs=%+v", w.Eggs)
 	}
 	if _, ok := w.ChangedCurrencies["Diamonds"]; ok {
 		t.Fatal("unchanged currency included")
@@ -273,8 +285,14 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 		t.Fatalf("user=%s known=%v", sum.UserID, sum.Current.CurrenciesKnown)
 	}
 	console := stdout.String()
-	if !strings.Contains(console, "Pumpkin Tokens") || !strings.Contains(console, "+1,509 since previous") {
+	if !strings.Contains(console, "Pumpkin Tokens") || !strings.Contains(console, "+1,509 since previous    ~18.1k/h    ~301/m") {
 		t.Fatalf("console=%s", console)
+	}
+	if !strings.Contains(console, "+600 since previous    ~7.2k/h    ~120/m") || !strings.Contains(console, "Hatch rate") || !strings.Contains(console, "~7.2k/h    ~120/m") {
+		t.Fatalf("egg rates missing:\n%s", console)
+	}
+	if !strings.Contains(console, "#4    -4 since previous") {
+		t.Fatalf("place delta missing:\n%s", console)
 	}
 	if strings.Contains(console, "Other") {
 		t.Fatalf("unexpected currency in console=%s", console)

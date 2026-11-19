@@ -124,6 +124,15 @@ func TestRenderHumanSummary(t *testing.T) {
 			t.Fatalf("missing %q\n%s", want, text)
 		}
 	}
+	eggHour := FormatRatePerHour("199084", elapsed)
+	eggMinute := FormatRatePerMinute("199084", elapsed)
+	if strings.Count(text, eggHour) < 2 || strings.Count(text, eggMinute) < 2 {
+		t.Fatalf("egg line and hatch rate diverged: %s %s\n%s", eggHour, eggMinute, text)
+	}
+	diamond := "+161,506 since previous    " + FormatRatePerHour("161506", elapsed) + "    " + FormatRatePerMinute("161506", elapsed)
+	if !strings.Contains(text, diamond) {
+		t.Fatalf("diamond rates missing %q\n%s", diamond, text)
+	}
 	if strings.Contains(text, "Other Coins") {
 		t.Fatalf("unchanged non-preferred currency leaked:\n%s", text)
 	}
@@ -194,6 +203,46 @@ func TestRenderDoesNotInventClanOrZeroActivity(t *testing.T) {
 	}
 	if !strings.Contains(text, "unavailable") {
 		t.Fatalf("missing unavailable:\n%s", text)
+	}
+}
+
+func TestRenderRatesStayUnavailable(t *testing.T) {
+	elapsed := int64(300)
+	place := int64(4)
+	text := Render(View{
+		Summary: clan.Summary{
+			Prefix:     "ps99",
+			ExportedAt: "2026-11-18T20:12:34Z",
+			Current: clan.Current{
+				CurrenciesKnown: true,
+				Currencies: map[string]clan.CurrencyAmount{
+					"Diamonds": {Amount: "5", DisplayName: "Diamonds"},
+				},
+				StatisticsKnown: true,
+				Statistics:      map[string]string{"Eggs Opened": "10"},
+				Clan: clan.ClanCurrent{Tag: "QNE", ActiveBattle: &clan.BattleCurrent{
+					ID: "battle", Place: &place, Points: "10",
+				}},
+			},
+			Windows: clan.Windows{Previous: clan.Window{
+				Valid:          true,
+				ElapsedSeconds: &elapsed,
+				Eggs:           &clan.CurrencyDelta{Status: "unavailable", Reason: "absent prior eggs opened"},
+				ChangedCurrencies: map[string]clan.CurrencyDelta{
+					"Diamonds": {Status: "unavailable", Reason: "newly observed"},
+				},
+				Clan: &clan.ClanWindow{Place: &clan.MetricDelta{Status: "unavailable", Reason: "absent prior place"}},
+			}},
+		},
+	})
+	if strings.Contains(text, "~0/") || strings.Contains(text, "0 since") || strings.Contains(text, "+0") {
+		t.Fatalf("invented a zero change:\n%s", text)
+	}
+	if !strings.Contains(text, "Hatch rate") || !strings.Contains(text, "n/a") || !strings.Contains(text, "newly observed") {
+		t.Fatalf("missing unavailable:\n%s", text)
+	}
+	if !strings.Contains(text, "#4") || strings.Contains(text, "#4    ") {
+		t.Fatalf("place delta invented:\n%s", text)
 	}
 }
 

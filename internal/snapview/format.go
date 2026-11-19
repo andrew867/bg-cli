@@ -87,22 +87,32 @@ func FormatDuration(seconds *int64) string {
 // FormatRatePerHour prints an approximate eggs-per-hour rate such as ~47.5k/h.
 // elapsed must be positive. The tilde marks the figure as approximate.
 func FormatRatePerHour(delta string, elapsed int64) string {
-	text, ok := ratePerHour(delta, elapsed)
+	return formatRate(delta, elapsed, 3600, "/h")
+}
+
+// FormatRatePerMinute prints an approximate per-minute rate such as ~791/m.
+// elapsed must be the actual elapsed seconds. The tilde marks the figure as approximate.
+func FormatRatePerMinute(delta string, elapsed int64) string {
+	return formatRate(delta, elapsed, 60, "/m")
+}
+
+func formatRate(delta string, elapsed, period int64, suffix string) string {
+	text, ok := ratePer(delta, elapsed, period)
 	if !ok {
 		return unavailable
 	}
-	return "~" + text + "/h"
+	return "~" + text + suffix
 }
 
-func ratePerHour(delta string, elapsed int64) (string, bool) {
-	if elapsed <= 0 {
+func ratePer(delta string, elapsed, period int64) (string, bool) {
+	if elapsed <= 0 || period <= 0 {
 		return "", false
 	}
 	n, ok := clan.ParseExactInt(delta)
 	if !ok {
 		return "", false
 	}
-	num := new(big.Int).Mul(n, big.NewInt(3600))
+	num := new(big.Int).Mul(n, big.NewInt(period))
 	q := new(big.Int).Quo(num, big.NewInt(elapsed))
 	return formatInt(q, true), true
 }

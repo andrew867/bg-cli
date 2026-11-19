@@ -73,11 +73,14 @@ func TestFormatDurationRankAndRate(t *testing.T) {
 	if got := FormatRatePerHour("47500", 3600); got != "~47.5k/h" {
 		t.Fatalf("rate: %s", got)
 	}
-	if got := FormatRatePerHour("10", 0); got != "n/a" {
-		t.Fatalf("zero elapsed: %s", got)
+	if got := FormatRatePerMinute("47500", 3600); got != "~791/m" {
+		t.Fatalf("per minute: %s", got)
 	}
-	if got := FormatRatePerHour("", 3600); got != "n/a" {
-		t.Fatalf("missing eggs: %s", got)
+	if got := FormatRatePerHour("10", 0); got != "n/a" || FormatRatePerMinute("10", 0) != "n/a" {
+		t.Fatal("zero elapsed invented a rate")
+	}
+	if got := FormatRatePerHour("", 3600); got != "n/a" || FormatRatePerMinute("", 3600) != "n/a" {
+		t.Fatal("missing delta invented a rate")
 	}
 }
 

@@ -2,6 +2,7 @@ package clan
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -65,6 +66,7 @@ type Window struct {
 	CurrenciesStatus     string                   `json:"currenciesStatus,omitempty"`
 	CurrenciesReason     string                   `json:"currenciesReason,omitempty"`
 	ChangedCurrencies    map[string]CurrencyDelta `json:"changedCurrencies,omitempty"`
+	Eggs                 *CurrencyDelta           `json:"eggs,omitempty"`
 	Clan                 *ClanWindow              `json:"clan,omitempty"`
 }
 
@@ -72,24 +74,27 @@ type Window struct {
 // A numeric rate is an observation estimate: profile currency comes from a
 // cached player snapshot, not a continuous production counter.
 type CurrencyDelta struct {
-	Status           string `json:"status,omitempty"`
-	Reason           string `json:"reason,omitempty"`
-	Baseline         string `json:"baseline,omitempty"`
-	Current          string `json:"current,omitempty"`
-	Delta            string `json:"delta,omitempty"`
-	NetPerHour       string `json:"netPerHour,omitempty"`
-	NetPerHourApprox string `json:"netPerHourApprox,omitempty"`
-	RateBasis        string `json:"rateBasis,omitempty"`
-	Estimated        bool   `json:"estimated,omitempty"`
+	Status             string `json:"status,omitempty"`
+	Reason             string `json:"reason,omitempty"`
+	Baseline           string `json:"baseline,omitempty"`
+	Current            string `json:"current,omitempty"`
+	Delta              string `json:"delta,omitempty"`
+	NetPerHour         string `json:"netPerHour,omitempty"`
+	NetPerHourApprox   string `json:"netPerHourApprox,omitempty"`
+	NetPerMinute       string `json:"netPerMinute,omitempty"`
+	NetPerMinuteApprox string `json:"netPerMinuteApprox,omitempty"`
+	RateBasis          string `json:"rateBasis,omitempty"`
+	Estimated          bool   `json:"estimated,omitempty"`
 }
 
-// ClanWindow is the clan-point and contribution delta for the shared baseline.
+// ClanWindow is the clan-point, place, and contribution delta for the shared baseline.
 type ClanWindow struct {
 	BattleID         string       `json:"battleId,omitempty"`
 	BaselineBattleID string       `json:"baselineBattleId,omitempty"`
 	Status           string       `json:"status,omitempty"`
 	Reason           string       `json:"reason,omitempty"`
 	Points           *MetricDelta `json:"points,omitempty"`
+	Place            *MetricDelta `json:"place,omitempty"`
 	UserContribution *MetricDelta `json:"userContribution,omitempty"`
 }
 
@@ -117,6 +122,8 @@ type Prior struct {
 	BattleID        string
 	Points          string
 	PointsOK        bool
+	Place           string
+	PlaceOK         bool
 	UserPoints      string
 	UserPointsOK    bool
 	CurrenciesKnown bool
@@ -258,6 +265,7 @@ func buildWindow(in Input, session, nowText string, requested *int64, kind int) 
 		w.CurrenciesReason = "current currency list is unknown"
 	}
 	w.Clan = diffClan(base, in.Clan, elapsed, strings.TrimSpace(in.UserID))
+	w.Eggs = diffEggs(base, in.Statistics, in.StatisticsKnown, elapsed)
 	return w
 }
 
@@ -380,7 +388,7 @@ func diffCurrencies(base map[string]string, current map[string]CurrencyAmount, e
 }
 
 func diffClan(base Prior, clan ClanCurrent, elapsed int64, userID string) *ClanWindow {
-	curID, curPoints, curPointsOK, curUser, curUserOK := currentBattle(clan)
+	curID, curPoints, curPointsOK, curPlace, curPlaceOK, curUser, curUserOK := currentBattle(clan)
 	out := &ClanWindow{BattleID: curID, BaselineBattleID: base.BattleID}
 	if curID == "" || base.BattleID == "" || curID != base.BattleID {
 		out.Status = "unavailable"
@@ -402,6 +410,7 @@ func diffClan(base Prior, clan ClanCurrent, elapsed int64, userID string) *ClanW
 		return out
 	}
 	out.Points = metric(base.Points, base.PointsOK, curPoints, curPointsOK, elapsed, "clan battle points")
+	out.Place = placeMetric(base.Place, base.PlaceOK, curPlace, curPlaceOK, elapsed)
 	out.UserContribution = userContribution(base, curUser, curUserOK, elapsed, userID)
 	return out
 }
@@ -434,12 +443,90 @@ func userContribution(base Prior, cur string, curOK bool, elapsed int64, userID 
 	}
 }
 
-func currentBattle(clan ClanCurrent) (id, points string, pointsOK bool, user string, userOK bool) {
+func currentBattle(clan ClanCurrent) (id, points string, pointsOK bool, place string, placeOK bool, user string, userOK bool) {
 	if clan.ActiveBattle == nil {
-		return "", "", false, "", false
+		return "", "", false, "", false, "", false
 	}
 	b := clan.ActiveBattle
-	return b.ID, b.Points, b.Points != "", b.UserContribution, b.UserContribution != ""
+	place, placeOK = placeText(b.Place)
+	return b.ID, b.Points, b.Points != "", place, placeOK, b.UserContribution, b.UserContribution != ""
+}
+
+// placeText accepts a positive 1-based place. Zero and negative values are
+// not a place, so they are not stored as a baseline.
+func placeText(n *int64) (string, bool) {
+	if n == nil || *n <= 0 {
+		return "", false
+	}
+	return strconv.FormatInt(*n, 10), true
+}
+
+func placeMetric(base string, baseOK bool, cur string, curOK bool, elapsed int64) *MetricDelta {
+	d := metric(base, baseOK, cur, curOK, elapsed, "clan battle place")
+	if d.Status != "unavailable" {
+		return d
+	}
+	switch d.Reason {
+	case "clan battle place are absent":
+		d.Reason = "clan battle place is absent"
+	case "absent prior point":
+		d.Reason = "absent prior place"
+	case "absent current point":
+		d.Reason = "absent current place"
+	}
+	return d
+}
+
+func diffEggs(base Prior, current map[string]string, known bool, elapsed int64) *CurrencyDelta {
+	cur, curOK := statAmount(current, known, "Eggs Opened")
+	prev, prevOK := statAmount(base.Stats, base.StatsKnown, "Eggs Opened")
+	if !curOK && !prevOK {
+		return nil
+	}
+	d := &CurrencyDelta{}
+	if prevOK {
+		d.Baseline = prev
+	}
+	if curOK {
+		d.Current = cur
+	}
+	if !prevOK || !curOK {
+		d.Status = "unavailable"
+		switch {
+		case !prevOK && !curOK:
+			d.Reason = "eggs opened are absent"
+		case !prevOK:
+			d.Reason = "absent prior eggs opened"
+		default:
+			d.Reason = "absent current eggs opened"
+		}
+		return d
+	}
+	delta, ok := Sub(cur, prev)
+	if !ok {
+		d.Status = "unavailable"
+		d.Reason = "amount is not an exact integer"
+		return d
+	}
+	d.Delta = delta
+	if !setCurrencyRate(d, delta, elapsed) {
+		d.Status = "unavailable"
+		d.Reason = "elapsed time is not positive"
+		return d
+	}
+	return d
+}
+
+func statAmount(m map[string]string, known bool, key string) (string, bool) {
+	if !known || len(m) == 0 {
+		return "", false
+	}
+	for k, v := range m {
+		if strings.EqualFold(strings.TrimSpace(k), key) && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v), true
+		}
+	}
+	return "", false
 }
 
 func metric(base string, baseOK bool, cur string, curOK bool, elapsed int64, name string) *MetricDelta {
@@ -478,13 +565,21 @@ func metric(base string, baseOK bool, cur string, curOK bool, elapsed int64, nam
 }
 
 func setCurrencyRate(d *CurrencyDelta, delta string, elapsed int64) bool {
-	exact, approx, ok := NetPerHourParts(delta, elapsed)
+	hourExact, hourApprox, ok := NetPerHourParts(delta, elapsed)
 	if !ok {
 		return false
 	}
-	d.NetPerHour = exact
-	if approx != exact {
-		d.NetPerHourApprox = approx
+	minuteExact, minuteApprox, ok := NetPerMinuteParts(delta, elapsed)
+	if !ok {
+		return false
+	}
+	d.NetPerHour = hourExact
+	if hourApprox != hourExact {
+		d.NetPerHourApprox = hourApprox
+	}
+	d.NetPerMinute = minuteExact
+	if minuteApprox != minuteExact {
+		d.NetPerMinuteApprox = minuteApprox
 	}
 	d.RateBasis = CurrencyRateBasis
 	d.Estimated = true
