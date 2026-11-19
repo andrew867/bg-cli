@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (none)
+
+## [0.2.4] - 2026-11-19
+
 ### Changed
 
 - `account snapshot` writes a ZIP by default. `--no-zip` skips it. The archive is still only that snapshot's manifest artifacts and still excludes tokens and local config.
