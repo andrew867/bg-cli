@@ -2,11 +2,16 @@ package snapshot
 
 import (
 	"archive/zip"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestZipPacksManifestMembersOnly(t *testing.T) {
@@ -123,6 +128,149 @@ func TestZipRenameFailureLeavesNoFinalArchive(t *testing.T) {
 	for _, ent := range ents {
 		if strings.HasPrefix(ent.Name(), ".bg-cli-zip-") || strings.HasSuffix(ent.Name(), ".tmp") {
 			t.Fatalf("temp left behind: %s", ent.Name())
+		}
+	}
+}
+
+func TestZipBytesIgnoreSourceMetadata(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.json")
+	b := filepath.Join(dir, "b.json")
+	bodyA := []byte(`{"eggs":42}`)
+	bodyB := []byte("beta-bytes")
+	if err := os.WriteFile(a, bodyA, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, bodyB, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(1999, 3, 4, 5, 6, 8, 0, time.UTC)
+	if err := os.Chtimes(a, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(b, old.Add(48*time.Hour), old.Add(48*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	pack := func(name string) ([]byte, string) {
+		t.Helper()
+		dest := filepath.Join(dir, name)
+		members := []ZipMember{
+			{Name: "b.json", Path: b},
+			{Name: "a.json", Path: a},
+		}
+		rep, err := Pack(dest, members, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(dest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(got)
+		if hex.EncodeToString(sum[:]) != rep.SHA256 {
+			t.Fatalf("report sha=%s file sha=%s", rep.SHA256, hex.EncodeToString(sum[:]))
+		}
+		if bytes.Contains(got, []byte(dir)) {
+			t.Fatal("archive contains the source directory path")
+		}
+		assertZipMembers(t, dest, map[string][]byte{"a.json": bodyA, "b.json": bodyB})
+		return got, rep.SHA256
+	}
+
+	first, sha1 := pack("one.zip")
+
+	later := time.Date(2024, 12, 31, 23, 59, 58, 0, time.UTC)
+	if err := os.Chtimes(a, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(b, later.Add(-72*time.Hour), later.Add(-72*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(a, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(b, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	second, sha2 := pack("two.zip")
+	if !bytes.Equal(first, second) {
+		t.Fatalf("zip bytes differ (%d vs %d) after mtime and mode changes", len(first), len(second))
+	}
+	if sha1 != sha2 {
+		t.Fatalf("sha256 %s vs %s", sha1, sha2)
+	}
+}
+
+func TestZipRefusesExistingDestination(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "snap-inv.json")
+	if err := os.WriteFile(src, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(dir, "existing.zip")
+	const sentinel = "not-a-real-zip"
+	if err := os.WriteFile(dest, []byte(sentinel), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Pack(dest, []ZipMember{{Name: "snap-inv.json", Path: src}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "ZIP destination already exists:") {
+		t.Fatalf("err=%v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != sentinel {
+		t.Fatalf("destination changed: %q", got)
+	}
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ent := range ents {
+		if strings.HasPrefix(ent.Name(), ".bg-cli-zip-") || strings.HasSuffix(ent.Name(), ".tmp") {
+			t.Fatalf("temp left behind: %s", ent.Name())
+		}
+	}
+}
+
+func assertZipMembers(t *testing.T, path string, want map[string][]byte) {
+	t.Helper()
+	r, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if len(r.File) != len(want) {
+		t.Fatalf("members=%d want %d", len(r.File), len(want))
+	}
+	for _, f := range r.File {
+		body, ok := want[f.Name]
+		if !ok {
+			t.Fatalf("unexpected member %s", f.Name)
+		}
+		if !f.Modified.Equal(zipEntryTime) {
+			t.Fatalf("member %s time %s", f.Name, f.Modified)
+		}
+		if f.Mode().Perm() != zipEntryMode {
+			t.Fatalf("member %s mode %o", f.Name, f.Mode().Perm())
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(rc)
+		closeErr := rc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if closeErr != nil {
+			t.Fatal(closeErr)
+		}
+		if !bytes.Equal(got, body) {
+			t.Fatalf("member %s bytes %q", f.Name, got)
 		}
 	}
 }

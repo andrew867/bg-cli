@@ -273,6 +273,168 @@ func TestAccountSnapshotHumanJSONAndZip(t *testing.T) {
 	}
 }
 
+func TestAccountSnapshotZipPathRefusesExisting(t *testing.T) {
+	deps, closeSrv := snapshotFixtureDeps(t)
+	defer closeSrv()
+	outDir := t.TempDir()
+	dest := filepath.Join(outDir, "existing.zip")
+	const sentinel = "not-a-real-zip"
+	if err := os.WriteFile(dest, []byte(sentinel), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	deps.Stdout, deps.Stderr = &stdout, &stderr
+	code := Execute(deps, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99", "--zip", "--zip-path", "existing.zip"})
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "ZIP destination already exists") {
+		t.Fatalf("human summary hid the ZIP failure:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "ZIP destination already exists") {
+		t.Fatalf("stderr=%s", stderr.String())
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != sentinel {
+		t.Fatalf("destination replaced: %q", got)
+	}
+	stamp := time.Date(2026, 11, 6, 15, 45, 30, 0, time.UTC).In(time.Local).Format("2006-01-02-150405")
+	if _, err := os.Stat(filepath.Join(outDir, stamp+"-ps99-manifest.json")); err != nil {
+		t.Fatalf("snapshot files missing: %v names=%v", err, listNames(t, outDir))
+	}
+	assertNoZipTemp(t, outDir)
+
+	jsonDir := t.TempDir()
+	jsonDest := filepath.Join(jsonDir, "existing.zip")
+	if err := os.WriteFile(jsonDest, []byte(sentinel), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	deps.Stdout, deps.Stderr = &stdout, &stderr
+	code = Execute(deps, []string{"--output", "json", "account", "snapshot", "--profile", "main", "--dir", jsonDir, "--prefix", "ps99", "--zip", "--zip-path", "existing.zip"})
+	if code != 0 {
+		t.Fatalf("json exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	var env struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			OK  bool `json:"ok"`
+			Zip struct {
+				OK    bool   `json:"ok"`
+				Error string `json:"error"`
+			} `json:"zip"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout.String())
+	}
+	if !env.OK || !env.Data.OK || env.Data.Zip.OK || !strings.Contains(env.Data.Zip.Error, "ZIP destination already exists") {
+		t.Fatalf("envelope=%+v", env)
+	}
+	got, err = os.ReadFile(jsonDest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != sentinel {
+		t.Fatalf("json run replaced destination: %q", got)
+	}
+	assertNoZipTemp(t, jsonDir)
+}
+
+func TestAccountSnapshotZipCollisionSkipsExistingArchive(t *testing.T) {
+	deps, closeSrv := snapshotFixtureDeps(t)
+	defer closeSrv()
+	outDir := t.TempDir()
+	stamp := time.Date(2026, 11, 6, 15, 45, 30, 0, time.UTC).In(time.Local).Format("2006-01-02-150405")
+	planted := filepath.Join(outDir, stamp+"-ps99.zip")
+	const sentinel = "sentinel-zip"
+	if err := os.WriteFile(planted, []byte(sentinel), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	deps.Stdout, deps.Stderr = &stdout, &stderr
+	code := Execute(deps, []string{"account", "snapshot", "--profile", "main", "--dir", outDir, "--prefix", "ps99", "--zip"})
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	got, err := os.ReadFile(planted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != sentinel {
+		t.Fatalf("default zip was replaced: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, stamp+"-ps99-manifest.json")); !os.IsNotExist(err) {
+		t.Fatalf("collision suffix was not used: %v", listNames(t, outDir))
+	}
+	if _, err := os.Stat(filepath.Join(outDir, stamp+"-0001-ps99-manifest.json")); err != nil {
+		t.Fatalf("shifted snapshot missing: %v names=%v", err, listNames(t, outDir))
+	}
+	next := filepath.Join(outDir, stamp+"-0001-ps99.zip")
+	r, err := zip.OpenReader(next)
+	if err != nil {
+		t.Fatalf("shifted zip: %v names=%v", err, listNames(t, outDir))
+	}
+	r.Close()
+	if strings.Contains(stdout.String(), "ZIP failed") || strings.Contains(stdout.String(), "already exists") {
+		t.Fatalf("collision looked like a ZIP failure:\n%s", stdout.String())
+	}
+}
+
+func snapshotFixtureDeps(t *testing.T) (Deps, func()) {
+	t.Helper()
+	store := auth.NewMemoryStore()
+	setupProfile(t, store, auth.DefaultScopes)
+	invBody, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-inventory-ok.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	profBody, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-profile-ok.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	extBody, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-extended-profile-ok.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/inventory":
+			_, _ = w.Write(invBody)
+		case "/v1/account/profile":
+			_, _ = w.Write(profBody)
+		case "/v1/account/extendedProfile":
+			_, _ = w.Write(extBody)
+		case "/api/activeClanBattle":
+			_, _ = w.Write(inactiveClanBattleBody)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	fixed := time.Date(2026, 11, 6, 15, 45, 30, 0, time.UTC)
+	return Deps{
+		TokenStore: store, BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Clock: output.FixedClock{T: fixed}, IsTTY: func() bool { return false },
+	}, srv.Close
+}
+
+func assertNoZipTemp(t *testing.T, dir string) {
+	t.Helper()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ent := range ents {
+		if strings.HasPrefix(ent.Name(), ".bg-cli-zip-") || strings.HasSuffix(ent.Name(), ".tmp") {
+			t.Fatalf("temp left behind: %s", ent.Name())
+		}
+	}
+}
+
 func listNames(t *testing.T, dir string) []string {
 	t.Helper()
 	ents, _ := os.ReadDir(dir)

@@ -51,11 +51,23 @@ func TestFormatDurationRankAndRate(t *testing.T) {
 		t.Fatalf("missing duration: %s", got)
 	}
 	rank := int64(1343)
+	one := int64(1)
+	zero := int64(0)
+	neg := int64(-1)
 	if got := FormatRank(&rank); got != "#1,343" {
 		t.Fatalf("rank: %s", got)
 	}
+	if got := FormatRank(&one); got != "#1" {
+		t.Fatalf("one: %s", got)
+	}
 	if got := FormatRank(nil); got != "n/a" {
 		t.Fatalf("nil rank: %s", got)
+	}
+	if got := FormatRank(&zero); got != "n/a" {
+		t.Fatalf("zero rank: %s", got)
+	}
+	if got := FormatRank(&neg); got != "n/a" {
+		t.Fatalf("negative rank: %s", got)
 	}
 	if got := FormatRatePerHour("47500", 3600); got != "~47.5k/h" {
 		t.Fatalf("rate: %s", got)

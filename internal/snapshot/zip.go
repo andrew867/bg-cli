@@ -10,7 +10,16 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
+
+// zipEntryTime is the conventional DOS lower bound. Every member uses this
+// instant so a source mtime cannot change the archive bytes.
+var zipEntryTime = time.Date(1980, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+// zipEntryMode is the portable regular-file mode stored for every member.
+// Source permissions, including the executable bit, are not copied.
+const zipEntryMode os.FileMode = 0o644
 
 // ZipMember is one file the packager may put at the root of a snapshot ZIP.
 type ZipMember struct {
@@ -144,6 +153,10 @@ func ValidateZipPath(path string) error {
 // Pack writes members into dest atomically. The archive is verified before
 // the final name is published. rename may be nil. A failed rename leaves no
 // final file and removes the temporary archive.
+//
+// An existing dest is an error. Pack does not replace it.
+// Member headers use a fixed timestamp and mode, so identical names and
+// bytes produce identical archive bytes within this implementation.
 func Pack(dest string, members []ZipMember, rename func(oldPath, newPath string) error) (ZipReport, error) {
 	if len(members) == 0 {
 		return ZipReport{}, fmt.Errorf("no snapshot artifacts to pack")
@@ -171,6 +184,12 @@ func Pack(dest string, members []ZipMember, rename func(oldPath, newPath string)
 	}
 	sort.Slice(members, func(i, j int) bool { return members[i].Name < members[j].Name })
 	sort.Strings(names)
+
+	if _, err := os.Lstat(dest); err == nil {
+		return ZipReport{}, fmt.Errorf("ZIP destination already exists: %s", dest)
+	} else if !os.IsNotExist(err) {
+		return ZipReport{}, err
+	}
 
 	dir := filepath.Dir(dest)
 	tmp, err := os.CreateTemp(dir, ".bg-cli-zip-*.tmp")
@@ -235,13 +254,14 @@ func writeZip(w io.Writer, members []ZipMember) error {
 			_ = zw.Close()
 			return fmt.Errorf("refusing to pack %s", m.Name)
 		}
-		hdr, err := zip.FileInfoHeader(info)
-		if err != nil {
-			_ = zw.Close()
-			return err
+		hdr := &zip.FileHeader{
+			Name:    m.Name,
+			Method:  zip.Deflate,
+			Comment: "",
 		}
-		hdr.Name = m.Name
-		hdr.Method = zip.Deflate
+		hdr.SetModTime(zipEntryTime)
+		hdr.SetMode(zipEntryMode)
+		hdr.Extra = nil
 		entry, err := zw.CreateHeader(hdr)
 		if err != nil {
 			_ = zw.Close()

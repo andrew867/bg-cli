@@ -44,7 +44,9 @@ JSON and CSV files are the canonical record. The terminal summary is a
 presentation of that record. --output json or --json prints a parseable
 summary on stdout instead. --zip bundles only this snapshot's manifest
 artifacts. It does not include tokens, API keys, or local config, and it
-still contains account telemetry and inventory.
+still contains account telemetry and inventory. Within this ZIP writer,
+entry timestamps and modes are normalized so source mtimes do not change
+the bundle. --zip-path does not replace a file that already exists.
 
 Examples:
   bg-cli account snapshot --profile main --dir . --prefix ps99
@@ -85,7 +87,7 @@ Examples:
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
 	cmd.Flags().BoolVar(&zip, "zip", false, "write a ZIP of this snapshot's manifest artifacts (no tokens or config)")
-	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination (default: <stamp>-<prefix>.zip in --dir)")
+	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "print absolute paths in the human summary")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the machine-readable JSON summary on stdout")
@@ -127,7 +129,7 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
 	cmd.Flags().BoolVar(&zip, "zip", false, "write a ZIP of this snapshot's manifest artifacts (no tokens or config)")
-	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination (default: <stamp>-<prefix>.zip in --dir)")
+	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "print absolute paths in the human summary")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the machine-readable JSON summary on stdout")

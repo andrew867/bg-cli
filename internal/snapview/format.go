@@ -42,12 +42,10 @@ func FormatSigned(s string) string {
 	return sign + formatInt(n, false)
 }
 
-// FormatRank prints a 1-based place as #1,343. A missing rank is n/a.
+// FormatRank prints a 1-based place as #1,343.
+// A missing, zero, or negative rank is n/a.
 func FormatRank(n *int64) string {
-	if n == nil {
-		return unavailable
-	}
-	if *n < 0 {
+	if n == nil || *n <= 0 {
 		return unavailable
 	}
 	return "#" + withCommas(new(big.Int).SetInt64(*n).String())
