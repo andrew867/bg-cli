@@ -62,7 +62,9 @@ func (a *App) writeInventoryDiff(absDir, stamp, collision, prefix string, man *s
 		a.notice("inventory diff write failed: %s", rec.Error)
 		return &diff
 	}
-	rec.View = "inventory"
+	// The diff is derived. It is not an Inventory source, so it has no view.
+	// inv.json and inventory.csv keep View "inventory".
+	rec.View = ""
 	rec.ContentStatus = snapshot.ContentOK
 	man.Files = append(man.Files, rec)
 	return &diff

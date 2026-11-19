@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -196,8 +197,11 @@ func inventoryItems(inventory json.RawMessage) ([]map[string]json.RawMessage, er
 		return nil, fmt.Errorf("inventory CSV: %w", err)
 	}
 	rawItems, ok := root["items"]
-	if !ok {
-		return nil, fmt.Errorf("inventory CSV: missing items array")
+	trimmed := bytes.TrimSpace(rawItems)
+	if !ok || len(trimmed) == 0 || string(trimmed) == "null" {
+		// Missing items is not an empty inventory for the diff. The CSV is
+		// only the row listing, so it is a header with no invented rows.
+		return []map[string]json.RawMessage{}, nil
 	}
 	var items []json.RawMessage
 	if err := json.Unmarshal(rawItems, &items); err != nil {

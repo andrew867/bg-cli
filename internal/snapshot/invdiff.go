@@ -27,13 +27,15 @@ const (
 
 // IdentityExcludedFields are stripped before a stable identity is formed.
 // _am and count are quantities. stackKey embeds that quantity, so it is not
-// an identity. The remaining names are market or display metadata. A change
-// to only those fields is not an inventory change. Unknown rawData fields,
-// including createdAt, stay in the identity.
+// an identity. category classifies Huge and is not an identity. The remaining
+// names are market or display metadata. A change to only those fields is not
+// an inventory change. Unknown rawData fields, including createdAt, stay in
+// the identity.
 var IdentityExcludedFields = []string{
 	"_am",
 	"count",
 	"stackKey",
+	"category",
 	"rap",
 	"rapApproximate",
 	"exists",
@@ -46,7 +48,7 @@ var IdentityExcludedFields = []string{
 
 func excludedIdentityField(key string) bool {
 	switch key {
-	case "_am", "count", "stackKey", "rap", "rapApproximate", "exists", "icon", "goldenIcon", "displayName", "rarity", "rarityNumber":
+	case "_am", "count", "stackKey", "category", "rap", "rapApproximate", "exists", "icon", "goldenIcon", "displayName", "rarity", "rarityNumber":
 		return true
 	default:
 		return false
@@ -172,7 +174,8 @@ type InventoryDiffOptions struct {
 }
 
 // InventoryMeasure is the current inventory's stored aggregate.
-// Huge is set only when at least one pet row has an explicit huge boolean.
+// Huge is set only when every pet row has a reliable classification.
+// An empty pet inventory is Huge 0. A missing items array is not measured.
 type InventoryMeasure struct {
 	OK            bool
 	Reason        string
@@ -624,6 +627,7 @@ func newInventoryIndex() *inventoryIndex {
 		shiny:         new(big.Int),
 		huge:          new(big.Int),
 		inventoryRows: new(big.Int),
+		hugeKnown:     true,
 	}
 }
 
@@ -638,8 +642,9 @@ func indexInventory(inv json.RawMessage, side string) (*inventoryIndex, string) 
 	}
 	idx := newInventoryIndex()
 	itemsRaw, ok := root["items"]
-	if !ok || len(bytes.TrimSpace(itemsRaw)) == 0 || string(bytes.TrimSpace(itemsRaw)) == "null" {
-		return idx, ""
+	trimmedItems := bytes.TrimSpace(itemsRaw)
+	if !ok || len(trimmedItems) == 0 || string(trimmedItems) == "null" {
+		return nil, side + " inventory items are absent"
 	}
 	var items []json.RawMessage
 	if err := json.Unmarshal(itemsRaw, &items); err != nil {
@@ -658,13 +663,16 @@ func (idx *inventoryIndex) add(raw json.RawMessage) {
 		idx.warnings = append(idx.warnings, "skipped a row because its identity could not be normalized")
 		return
 	}
+	classHint := jsonTokenString(item["class"])
 	class, collection, id, display, identity, src, err := buildIdentity(item)
 	if err != nil || identity == "" {
+		idx.unclassifiedPet(classHint)
 		idx.warnings = append(idx.warnings, "skipped a row because its identity could not be normalized")
 		return
 	}
 	qty, ok := itemQuantity(item, src)
 	if !ok {
+		idx.unclassifiedPet(class)
 		label := id
 		if label == "" {
 			label = class
@@ -675,7 +683,8 @@ func (idx *inventoryIndex) add(raw json.RawMessage) {
 		idx.warnings = append(idx.warnings, "skipped a row whose quantity is not an exact integer: "+label)
 		return
 	}
-	huge := hugeFlag(item, src)
+	rawObj, _, _ := asObject(item["rawData"])
+	huge := classifyHuge(item, rawObj)
 	variant := output.DeriveItemVariant(item)
 	if prev, exists := idx.items[identity]; exists {
 		prev.qty.Add(prev.qty, qty)
@@ -712,11 +721,18 @@ func (idx *inventoryIndex) add(raw json.RawMessage) {
 	if variant.Shiny {
 		idx.shiny.Add(idx.shiny, qty)
 	}
-	if huge != nil {
-		idx.hugeKnown = true
-		if *huge {
-			idx.huge.Add(idx.huge, qty)
-		}
+	if huge == nil {
+		idx.hugeKnown = false
+		return
+	}
+	if *huge {
+		idx.huge.Add(idx.huge, qty)
+	}
+}
+
+func (idx *inventoryIndex) unclassifiedPet(class string) {
+	if strings.EqualFold(class, "Pet") {
+		idx.hugeKnown = false
 	}
 }
 
@@ -922,14 +938,49 @@ func exactQuantity(raw json.RawMessage) (*big.Int, bool) {
 	return new(big.Int).Set(e.Int), true
 }
 
-func hugeFlag(item, raw map[string]json.RawMessage) *bool {
+// classifyHuge reports whether one pet is Huge.
+// An explicit huge boolean wins. Otherwise a normalized category of "Huge"
+// is true and any other nonempty category is false. A missing category is
+// unknown. Id and display name are never consulted.
+func classifyHuge(item, raw map[string]json.RawMessage) *bool {
 	if b, ok := explicitBool(raw["huge"]); ok {
 		return &b
 	}
 	if b, ok := explicitBool(item["huge"]); ok {
 		return &b
 	}
+	if cat, ok := normalizedCategory(item, raw); ok {
+		v := cat == "Huge"
+		return &v
+	}
 	return nil
+}
+
+func normalizedCategory(item, raw map[string]json.RawMessage) (string, bool) {
+	for _, candidate := range []json.RawMessage{item["category"], raw["category"]} {
+		text, ok := jsonStringField(candidate)
+		if !ok {
+			continue
+		}
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue
+		}
+		return text, true
+	}
+	return "", false
+}
+
+func jsonStringField(raw json.RawMessage) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" || raw[0] != '"' {
+		return "", false
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return "", false
+	}
+	return text, true
 }
 
 func explicitBool(raw json.RawMessage) (bool, bool) {

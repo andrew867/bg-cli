@@ -3,6 +3,7 @@ package snapshot
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -126,21 +127,183 @@ func TestUniquePetsStayDistinctAndHugeUsesQuantity(t *testing.T) {
 
 func TestHugeNameIsNotClassification(t *testing.T) {
 	cur := itemsJSON(`{"class":"Pet","id":"Huge Not Huge","count":4,"displayName":"Huge Not Huge","rawData":{"id":"Huge Not Huge"}}`)
+	measured := MeasureInventory(cur)
+	if measured.HugeKnown || measured.Huge != "" || measured.PetQuantity != "4" {
+		t.Fatalf("name inferred huge: %+v", measured)
+	}
 	d := DiffInventories(itemsJSON(), cur, InventoryDiffOptions{})
 	if d.Aggregates.PetQuantity.Delta != "4" {
 		t.Fatalf("pets %s", d.Aggregates.PetQuantity.Delta)
 	}
-	if d.Aggregates.Huge.Status != DiffStatusUnavailable || d.Aggregates.Huge.Current != "" || d.Aggregates.Huge.Delta != "" || d.Aggregates.Huge.Previous != "" {
+	if d.Aggregates.Huge.Status != DiffStatusUnavailable || d.Aggregates.Huge.Current != "" || d.Aggregates.Huge.Delta != "" || d.Aggregates.Huge.Previous != "0" {
 		t.Fatalf("name inferred huge: %+v", d.Aggregates.Huge)
 	}
-	prev := itemsJSON(`{"class":"Pet","id":"Plain","count":1,"rawData":{"id":"Plain","huge":false}}`)
+	prev := itemsJSON(`{"class":"Pet","id":"Plain","count":1,"category":"Uncategorized","rawData":{"id":"Plain","huge":false}}`)
 	flagged := itemsJSON(
-		`{"class":"Pet","id":"Huge Not Huge","count":4,"rawData":{"id":"Huge Not Huge"}}`,
+		`{"class":"Pet","id":"Huge Not Huge","count":4,"category":"Uncategorized","rawData":{"id":"Huge Not Huge"}}`,
 		`{"class":"Pet","id":"Real","count":3,"rawData":{"id":"Real","huge":true}}`,
 	)
 	both := DiffInventories(prev, flagged, InventoryDiffOptions{})
-	if both.Aggregates.Huge.Previous != "0" || both.Aggregates.Huge.Current != "3" || both.Aggregates.Huge.Delta != "3" {
+	if both.Aggregates.Huge.Previous != "0" || both.Aggregates.Huge.Current != "3" || both.Aggregates.Huge.Delta != "3" || both.Aggregates.Huge.Status != "" {
 		t.Fatalf("huge quantity %+v", both.Aggregates.Huge)
+	}
+}
+
+func TestHugeCategoryMatchesRealInventory(t *testing.T) {
+	cur := itemsJSON(
+		`{"class":"Pet","id":"Huge Guard Elephant","count":1,"category":"Huge","displayName":"Huge Guard Elephant","rawData":{"id":"Huge Guard Elephant","category":"Huge"}}`,
+		`{"class":"Pet","id":"Orchard Pony","count":100,"category":"Uncategorized","displayName":"Orchard Pony","rawData":{"id":"Orchard Pony","category":"Uncategorized"}}`,
+	)
+	m := MeasureInventory(cur)
+	if !m.OK || !m.HugeKnown || m.Huge != "1" || m.PetQuantity != "101" {
+		t.Fatalf("real shape %+v", m)
+	}
+	d := DiffInventories(itemsJSON(), cur, InventoryDiffOptions{})
+	if d.Aggregates.Huge.Previous != "0" || d.Aggregates.Huge.Current != "1" || d.Aggregates.Huge.Delta != "1" || d.Aggregates.Huge.Status != "" {
+		t.Fatalf("huge pair %+v", d.Aggregates.Huge)
+	}
+	named := itemsJSON(`{"class":"Pet","id":"Huge Guard Elephant","count":4,"category":"Uncategorized","displayName":"Huge Guard Elephant","rawData":{"id":"Huge Guard Elephant"}}`)
+	nm := MeasureInventory(named)
+	if !nm.OK || !nm.HugeKnown || nm.Huge != "0" || nm.PetQuantity != "4" {
+		t.Fatalf("name fallback %+v", nm)
+	}
+	forced := itemsJSON(`{"class":"Pet","id":"Huge Guard Elephant","count":2,"category":"Huge","rawData":{"id":"Huge Guard Elephant","category":"Huge","huge":false}}`)
+	fm := MeasureInventory(forced)
+	if !fm.HugeKnown || fm.Huge != "0" {
+		t.Fatalf("boolean should win %+v", fm)
+	}
+	rawOnly := itemsJSON(`{"class":"Pet","id":"Huge Guard Elephant","count":3,"rawData":{"id":"Huge Guard Elephant","category":" Huge "}}`)
+	rm := MeasureInventory(rawOnly)
+	if !rm.HugeKnown || rm.Huge != "3" {
+		t.Fatalf("raw category %+v", rm)
+	}
+	if ch, ok := findItem(DiffInventories(itemsJSON(), rawOnly, InventoryDiffOptions{}), "Huge Guard Elephant"); !ok || ch.Huge == nil || !*ch.Huge || strings.Contains(ch.Identity, "category") {
+		t.Fatalf("identity kept category %+v", ch)
+	}
+}
+
+func TestOneUnclassifiedPetMakesHugeUnavailable(t *testing.T) {
+	cur := itemsJSON(
+		`{"class":"Pet","id":"Huge Guard Elephant","count":1,"category":"Huge","rawData":{"id":"Huge Guard Elephant"}}`,
+		`{"class":"Pet","id":"Orchard Pony","count":100,"category":"Uncategorized","rawData":{"id":"Orchard Pony"}}`,
+		`{"class":"Pet","id":"Plain","count":1,"rawData":{"id":"Plain"}}`,
+	)
+	m := MeasureInventory(cur)
+	if m.HugeKnown || m.Huge != "" || m.PetQuantity != "102" {
+		t.Fatalf("partial huge %+v", m)
+	}
+	d := DiffInventories(itemsJSON(), cur, InventoryDiffOptions{})
+	h := d.Aggregates.Huge
+	if h.Status != DiffStatusUnavailable || h.Current != "" || h.Delta != "" || h.Previous != "0" {
+		t.Fatalf("aggregate %+v", h)
+	}
+}
+
+func TestHugeRealCategoryCensus(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`{"items":[`)
+	for i := 0; i < 33; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `{"class":"Pet","id":"Huge Pet %d","count":1,"category":"Huge","rawData":{"id":"Huge Pet %d"}}`, i, i)
+	}
+	for i := 0; i < 1481; i++ {
+		b.WriteByte(',')
+		fmt.Fprintf(&b, `{"class":"Pet","id":"Pet %d","count":1,"category":"Uncategorized","rawData":{"id":"Pet %d"}}`, i, i)
+	}
+	b.WriteString(`]}`)
+	m := MeasureInventory(json.RawMessage(b.String()))
+	if !m.OK || !m.HugeKnown || m.Huge != "33" || m.PetRows != "1514" || m.PetQuantity != "1514" {
+		t.Fatalf("%+v", m)
+	}
+}
+
+func TestCategoryIsNotIdentity(t *testing.T) {
+	prev := itemsJSON(`{"class":"Pet","id":"Pony","count":1,"category":"Huge","rawData":{"id":"Pony","createdAt":"A","category":"Huge"}}`)
+	cur := itemsJSON(`{"class":"Pet","id":"Pony","count":1,"category":"Uncategorized","rawData":{"category":"Uncategorized","createdAt":"A","id":"Pony"}}`)
+	d := DiffInventories(prev, cur, InventoryDiffOptions{})
+	if d.Status != DiffStatusOK || len(d.ItemChanges) != 0 || len(d.PetSpeciesChanges) != 0 {
+		t.Fatalf("category-only change %+v", d.ItemChanges)
+	}
+	if d.Aggregates.Huge.Previous != "1" || d.Aggregates.Huge.Current != "0" || d.Aggregates.Huge.Delta != "-1" {
+		t.Fatalf("huge %+v", d.Aggregates.Huge)
+	}
+	noRawPrev := itemsJSON(`{"class":"Pet","id":"Pony","count":4,"category":"Huge"}`)
+	noRawCur := itemsJSON(`{"class":"Pet","id":"Pony","count":6,"category":"Uncategorized"}`)
+	again := DiffInventories(noRawPrev, noRawCur, InventoryDiffOptions{})
+	if len(again.ItemChanges) != 1 || again.ItemChanges[0].Delta != "2" || again.ItemChanges[0].Classification != ClassNetInventoryChange {
+		t.Fatalf("no-rawData path %+v", again.ItemChanges)
+	}
+	if strings.Contains(again.ItemChanges[0].Identity, "category") {
+		t.Fatalf("category leaked %s", again.ItemChanges[0].Identity)
+	}
+}
+
+func TestEmptyPetInventoryHugeIsZero(t *testing.T) {
+	empty := MeasureInventory(itemsJSON())
+	if !empty.OK || !empty.HugeKnown || empty.Huge != "0" || empty.PetQuantity != "0" {
+		t.Fatalf("empty %+v", empty)
+	}
+	fruit := MeasureInventory(itemsJSON(`{"class":"Fruit","id":"Apple","count":2,"rawData":{"id":"Apple"}}`))
+	if !fruit.OK || !fruit.HugeKnown || fruit.Huge != "0" || fruit.PetQuantity != "0" {
+		t.Fatalf("fruit %+v", fruit)
+	}
+	d := DiffInventories(itemsJSON(), itemsJSON(), InventoryDiffOptions{})
+	if d.Status != DiffStatusOK || d.Aggregates.Huge.Previous != "0" || d.Aggregates.Huge.Current != "0" || d.Aggregates.Huge.Delta != "0" {
+		t.Fatalf("%+v", d.Aggregates.Huge)
+	}
+}
+
+func TestMissingItemsAreNotAnEmptyInventory(t *testing.T) {
+	pets := itemsJSON(`{"class":"Pet","id":"Orchard Pony","count":100,"category":"Uncategorized","rawData":{"id":"Orchard Pony"}}`)
+	cases := []struct {
+		name   string
+		prev   json.RawMessage
+		cur    json.RawMessage
+		reason string
+		kept   string
+	}{
+		{"previous items absent", json.RawMessage(`{}`), pets, "previous inventory items are absent", "100"},
+		{"previous items null", json.RawMessage(`{"items":null}`), pets, "previous inventory items are absent", "100"},
+		{"current items absent", pets, json.RawMessage(`{}`), "current inventory items are absent", ""},
+		{"current items null", pets, json.RawMessage(`{"items":null}`), "current inventory items are absent", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := DiffInventories(tc.prev, tc.cur, InventoryDiffOptions{})
+			if d.Status != DiffStatusUnavailable || d.Reason != tc.reason {
+				t.Fatalf("status %s %s", d.Status, d.Reason)
+			}
+			if len(d.ItemChanges) != 0 || len(d.PetSpeciesChanges) != 0 || d.Counts != nil {
+				t.Fatalf("invented changes %+v", d.ItemChanges)
+			}
+			p := d.Aggregates.PetQuantity
+			if p.Delta != "" || p.Previous != "" || p.Current != tc.kept || p.Status != DiffStatusUnavailable {
+				t.Fatalf("pet quantity %+v", p)
+			}
+			if strings.Contains(p.Current+p.Previous+p.Delta, "0") && tc.kept == "" {
+				t.Fatalf("invented zero %+v", p)
+			}
+		})
+	}
+	removed := DiffInventories(pets, itemsJSON(), InventoryDiffOptions{})
+	if removed.Status != DiffStatusOK {
+		t.Fatalf("empty array %s %s", removed.Status, removed.Reason)
+	}
+	ch, ok := findItem(removed, "Orchard Pony")
+	if !ok || ch.Classification != ClassRemovedFromInventory || ch.Delta != "-100" {
+		t.Fatalf("empty array should be a real removal %+v", ch)
+	}
+	zero := MeasureInventory(json.RawMessage(`{"items":[]}`))
+	if !zero.OK || zero.PetQuantity != "0" || !zero.HugeKnown || zero.Huge != "0" {
+		t.Fatalf("empty array %+v", zero)
+	}
+	for _, raw := range []string{`{}`, `{"items":null}`} {
+		absent := MeasureInventory(json.RawMessage(raw))
+		if absent.OK || absent.PetQuantity != "" || absent.Huge != "" || absent.Reason != "current inventory items are absent" {
+			t.Fatalf("%s %+v", raw, absent)
+		}
 	}
 }
 

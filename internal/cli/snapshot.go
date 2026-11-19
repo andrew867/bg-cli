@@ -96,7 +96,7 @@ Examples:
 	cmd.Flags().BoolVar(&noZip, "no-zip", false, "do not write the snapshot ZIP")
 	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "print absolute paths in the human summary")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "show full inventory changes, diagnostics, and absolute paths")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the machine-readable JSON summary on stdout")
 	return cmd
 }
@@ -143,7 +143,7 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&noZip, "no-zip", false, "do not write the snapshot ZIP")
 	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "print absolute paths in the human summary")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "show full inventory changes, diagnostics, and absolute paths")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the machine-readable JSON summary on stdout")
 	return cmd
 }

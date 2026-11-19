@@ -94,6 +94,19 @@ func TestWriteCurrenciesCSVExcelBOM(t *testing.T) {
 	}
 }
 
+func TestWriteInventoryCSVMissingItemsIsHeaderOnly(t *testing.T) {
+	for _, raw := range []string{`{"fetchedAt":"2026-11-06T15:45:30Z"}`, `{"items":null}`, `{"items":[]}`} {
+		var buf bytes.Buffer
+		if err := WriteInventoryCSV(&buf, json.RawMessage(raw), InventoryCSVOptions{}); err != nil {
+			t.Fatalf("%s: %v", raw, err)
+		}
+		lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+		if len(lines) != 1 || !strings.HasPrefix(lines[0], "class,id,count,") {
+			t.Fatalf("%s wrote rows:\n%s", raw, buf.String())
+		}
+	}
+}
+
 func TestWriteQuotaCSV(t *testing.T) {
 	var buf bytes.Buffer
 	err := WriteQuotaCSV(&buf, map[string]any{

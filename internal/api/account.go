@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -129,6 +130,16 @@ func accumulateInventoryStats(items []json.RawMessage) (rowCount int, quantitySu
 // FilterInventory applies exact case-insensitive class/id filters.
 // quantitySum is distinct from rowCount and preserves exact integer text via json.Number.
 func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) (InventoryFilterResult, error) {
+	if inventoryItemsAbsent(data) {
+		// A missing or null items field is not an empty inventory.
+		return InventoryFilterResult{
+			Filtered:       append(json.RawMessage(nil), bytes.TrimSpace(data)...),
+			RowCount:       0,
+			QuantitySum:    "0",
+			PetQuantitySum: "0",
+			PetRowCount:    0,
+		}, nil
+	}
 	var inv InventoryData
 	if err := json.Unmarshal(data, &inv); err != nil {
 		return InventoryFilterResult{QuantitySum: "0", PetQuantitySum: "0"}, err
@@ -170,6 +181,21 @@ func FilterInventory(data json.RawMessage, class, id string, equippedOnly bool) 
 		PetRowCount:    petRows,
 		PetQuantitySum: petQty,
 	}, nil
+}
+
+// inventoryItemsAbsent reports a payload that has no items array.
+// {"items":[]} is present and empty. A missing field and JSON null are not.
+func inventoryItemsAbsent(data json.RawMessage) bool {
+	var root map[string]json.RawMessage
+	if json.Unmarshal(bytes.TrimSpace(data), &root) != nil || root == nil {
+		return false
+	}
+	raw, ok := root["items"]
+	if !ok {
+		return true
+	}
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) == 0 || string(trimmed) == "null"
 }
 
 // SnapshotFromInventory returns fetchedAt/cached without inventing values.
