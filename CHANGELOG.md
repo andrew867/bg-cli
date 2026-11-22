@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (none)
 
+## [0.2.8] - 2026-11-22
+
 ### Fixed
 
 - Each profile uses only its own access token. The same `clientId` does not borrow another alias's bearer, including when the Roblox id matches or the token is expired. An old `credentialProfile` value is ignored. `GET /v1/account/*` returns only the player who authorized that token. Unless the account profile includes an identity field, login trusts the consent screen and stores the new token on the profile you named. It does not retarget an alias onto a different Roblox account. `auth login --profile alt1` creates that profile when it does not exist yet and uses the shared developer app. If saving the profile fails after a reauth, the previous access token is put back.
