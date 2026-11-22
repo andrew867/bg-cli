@@ -29,12 +29,16 @@ func (a *App) writeInventoryDiff(absDir, stamp, collision, prefix, fileProfile s
 		}
 	default:
 		loaded := snapshot.LoadPreviousInventory(snapshot.PreviousRequest{
-			Dir:         absDir,
-			SummaryFile: win.BaselineFile,
-			Prefix:      prefix,
-			SessionID:   sum.SessionID,
-			AccountID:   sum.AccountID,
-			Profile:     sum.Profile,
+			Dir:             absDir,
+			SummaryFile:     win.BaselineFile,
+			Prefix:          prefix,
+			SessionID:       sum.SessionID,
+			AccountID:       sum.AccountID,
+			LinkedAccountID: sum.LinkedAccountID,
+			UserID:          sum.UserID,
+			PS99UserID:      sum.PS99UserID,
+			CredentialEpoch: sum.CredentialEpoch,
+			Profile:         sum.Profile,
 		})
 		if loaded.Reason != "" {
 			opt.UnavailableReason = loaded.Reason

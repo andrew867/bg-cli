@@ -44,6 +44,10 @@ type Manifest struct {
 	LocalTimezone   string         `json:"localTimezone"`
 	ExportedAt      string         `json:"exportedAt"`
 	Profile         string         `json:"profile,omitempty"`
+	ProfileAlias    string         `json:"profileAlias,omitempty"`
+	LinkedAccountID string         `json:"linkedAccountId,omitempty"`
+	PS99UserID      string         `json:"ps99UserId,omitempty"`
+	CredentialEpoch string         `json:"credentialEpoch,omitempty"`
 	OutputDir       string         `json:"outputDir"`
 	Prefix          string         `json:"prefix"`
 	Refresh         bool           `json:"refresh"`

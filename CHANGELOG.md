@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (none)
 
+### Fixed
+
+- Each profile uses only its own access token. The same `clientId` does not borrow another alias's bearer, including when the Roblox id matches or the token is expired. An old `credentialProfile` value is ignored. `GET /v1/account/*` returns only the player who authorized that token. Unless the account profile includes an identity field, login trusts the consent screen and stores the new token on the profile you named. It does not retarget an alias onto a different Roblox account. `auth login --profile alt1` creates that profile when it does not exist yet and uses the shared developer app. If saving the profile fails after a reauth, the previous access token is put back.
+- `--user-id` is the contribution and rank target. It is not account history, including when `ps99UserId` is empty. A matching credential epoch keeps the previous, session, finite windows, and inventory diff. `userId` is identity only for a summary that has neither `credentialEpoch` nor `ps99UserId`. A linked-account id, username, or display name is accepted only as a JSON string. A user id is a positive decimal integer.
+
+### Changed
+
+- Snapshot summaries and manifests add `profileAlias`, `linkedAccountId`, `ps99UserId`, and `credentialEpoch`. A linked-account id from the provider is identity. A PS99 user id is metadata. When that linked id is absent, history requires the same credential epoch. Summaries that both omit the epoch stay readable. A new OAuth grant starts a new lineage. Old `accountId` values are left as stored and are not treated as linked-account ids.
+- `clientId` and `redirectUri` are the developer app. `auth login` stores them on the shared `oauth` config and reuses that complete pair for another profile, so `auth login --profile alt1` does not ask for them again. Passing only one of `--client-id` or `--redirect-uri` does not mix it with an older value. The access token stays on that profile.
+
 ## [0.2.7] - 2026-11-22
 
 ### Fixed

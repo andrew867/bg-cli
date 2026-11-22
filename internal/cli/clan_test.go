@@ -205,6 +205,8 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 		ExportedAt:    priorAt.Format(time.RFC3339),
 		SessionID:     "ps99-session",
 		Profile:       "main",
+		UserID:        "1001",
+		PS99UserID:    "1001",
 		Current: clan.Current{
 			CurrenciesKnown: true,
 			Currencies: map[string]clan.CurrencyAmount{
@@ -698,8 +700,144 @@ func TestProfilePS99UserIDSuppliesContribution(t *testing.T) {
 		t.Fatalf("exit %d stderr=%s", code, stderr.String())
 	}
 	sum := readSummary(t, dir, fixed)
-	if sum.UserID != "1001" || sum.Current.Clan.ActiveBattle == nil || sum.Current.Clan.ActiveBattle.UserContribution != "12" {
+	if sum.UserID != "1001" || sum.PS99UserID != "1001" || sum.Current.Clan.ActiveBattle == nil || sum.Current.Clan.ActiveBattle.UserContribution != "12" {
 		t.Fatalf("profile user id was not used: %+v", sum.Current.Clan.ActiveBattle)
+	}
+}
+
+func TestUserIDOverrideKeepsAccountHistory(t *testing.T) {
+	store := auth.NewMemoryStore()
+	t.Setenv("BG_CLI_CONFIG_DIR", t.TempDir())
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias: "main", ClientID: "cid", Scopes: auth.DefaultScopes,
+				IssuedAt:        time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+				ExpiresAt:       time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+				PS99UserID:      "111",
+				CredentialEpoch: "epoch-a",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("main", "synthetic_test_access_token_do_not_use"); err != nil {
+		t.Fatal(err)
+	}
+	first := time.Date(2026, 11, 22, 15, 0, 0, 0, time.UTC)
+	second := first.Add(time.Minute)
+	inv, ext := accountFixtureBytes(t)
+	start := strconv.FormatInt(first.Add(-time.Hour).Unix(), 10)
+	finish := strconv.FormatInt(second.Add(time.Hour).Unix(), 10)
+	profile := []byte(`{"status":"ok","data":{"Clan":"SYN","Currency":{"Diamonds":{"id":"Diamonds","_am":1}}}}`)
+	battle := []byte(`{"status":"ok","data":{"configName":"ActiveBattle","configData":{"Title":"Live","StartTime":` + start + `,"FinishTime":` + finish + `}}}`)
+	clanBody := []byte(`{"status":"ok","data":{"Name":"Synthetic","Battles":{"ActiveBattle":{"BattleID":"ActiveBattle","Points":80,"PointContributions":[{"UserID":111,"Points":4},{"UserID":999999,"Points":7}]}}}}`)
+	srv := accountAndClanServer(t, inv, profile, ext, clanBody, battle, 200, 200)
+	defer srv.Close()
+	dir := t.TempDir()
+	run := func(clock time.Time, extra ...string) {
+		t.Helper()
+		args := append([]string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99", "--no-zip"}, extra...)
+		var stdout, stderr bytes.Buffer
+		code := Execute(Deps{
+			Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+			BaseURL: srv.URL, HTTPClient: srv.Client(),
+			Clock: output.FixedClock{T: clock},
+		}, args)
+		if code != 0 {
+			t.Fatalf("exit %d stderr=%s", code, stderr.String())
+		}
+	}
+	run(first)
+	run(second, "--user-id", "999999")
+
+	one := readSummary(t, dir, first)
+	two := readSummary(t, dir, second)
+	if one.UserID != "111" || one.PS99UserID != "111" || one.CredentialEpoch != "epoch-a" {
+		t.Fatalf("first summary user %q ps99 %q epoch %q", one.UserID, one.PS99UserID, one.CredentialEpoch)
+	}
+	if two.UserID != "999999" || two.PS99UserID != "111" || two.CredentialEpoch != "epoch-a" {
+		t.Fatalf("second summary user %q ps99 %q epoch %q", two.UserID, two.PS99UserID, two.CredentialEpoch)
+	}
+	if two.Current.Clan.ActiveBattle == nil || two.Current.Clan.ActiveBattle.UserContribution != "7" {
+		t.Fatalf("contribution target %+v", two.Current.Clan.ActiveBattle)
+	}
+	if !two.Windows.Previous.Valid {
+		t.Fatalf("history split: %s", two.Windows.Previous.Reason)
+	}
+	for _, clock := range []time.Time{first, second} {
+		man := readManifest(t, dir, clock)
+		if man.PS99UserID != "111" {
+			t.Fatalf("manifest ps99UserId %q", man.PS99UserID)
+		}
+		if id, _ := man.Summary["ps99UserId"].(string); id != "111" {
+			t.Fatalf("manifest summary ps99UserId %#v", man.Summary["ps99UserId"])
+		}
+	}
+}
+
+func TestUserIDDoesNotBecomeOwnerWhenPS99IsEmpty(t *testing.T) {
+	store := auth.NewMemoryStore()
+	t.Setenv("BG_CLI_CONFIG_DIR", t.TempDir())
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias: "main", ClientID: "cid", Scopes: auth.DefaultScopes,
+				IssuedAt:        time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+				ExpiresAt:       time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+				CredentialEpoch: "epoch-a",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("main", "synthetic_test_access_token_do_not_use"); err != nil {
+		t.Fatal(err)
+	}
+	first := time.Date(2026, 11, 22, 15, 0, 0, 0, time.UTC)
+	second := first.Add(time.Minute)
+	inv, ext := accountFixtureBytes(t)
+	profile := []byte(`{"status":"ok","data":{"Currency":{"Diamonds":{"id":"Diamonds","_am":1}}}}`)
+	srv := accountAndClanServer(t, inv, profile, ext, nil, inactiveClanBattleBody, 404, 200)
+	defer srv.Close()
+	dir := t.TempDir()
+	run := func(clock time.Time, user string) {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := Execute(Deps{
+			Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+			BaseURL: srv.URL, HTTPClient: srv.Client(),
+			Clock: output.FixedClock{T: clock},
+		}, []string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99", "--no-zip", "--user-id", user})
+		if code != 0 {
+			t.Fatalf("exit %d stderr=%s", code, stderr.String())
+		}
+	}
+	run(first, "111")
+	run(second, "222")
+	one := readSummary(t, dir, first)
+	two := readSummary(t, dir, second)
+	if one.PS99UserID != "" || two.PS99UserID != "" {
+		t.Fatalf("contribution stored as owner %q %q", one.PS99UserID, two.PS99UserID)
+	}
+	if one.UserID != "111" || two.UserID != "222" || one.CredentialEpoch != "epoch-a" || two.CredentialEpoch != "epoch-a" {
+		t.Fatalf("ids one=%s/%s two=%s/%s", one.UserID, one.CredentialEpoch, two.UserID, two.CredentialEpoch)
+	}
+	if one.SessionID == "" || one.SessionID != two.SessionID || !two.Windows.Previous.Valid {
+		t.Fatalf("history split session %q/%q previous %+v", one.SessionID, two.SessionID, two.Windows.Previous)
+	}
+	diffBody, err := os.ReadFile(filepath.Join(dir, stampName(second)+"-ps99-inventory-diff.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var diff snapshot.InventoryDiff
+	if err := json.Unmarshal(diffBody, &diff); err != nil {
+		t.Fatal(err)
+	}
+	if diff.Status != snapshot.DiffStatusOK || diff.Baseline == nil || !strings.Contains(diff.Baseline.File, stampName(first)) {
+		t.Fatalf("inventory baseline %+v %s", diff.Baseline, diff.Reason)
 	}
 }
 

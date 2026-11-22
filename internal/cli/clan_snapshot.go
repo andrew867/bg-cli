@@ -23,7 +23,17 @@ type clanSnapState struct {
 }
 
 func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, prefix, profile string, now time.Time, man *snapshot.Manifest, st clanSnapState, currentInv json.RawMessage, opt snapshotOptions) (clan.Summary, []clan.Prior) {
-	userID, userOK := a.configuredPS99UserID(opt.UserID)
+	accountUserID := ""
+	linkedID := ""
+	credentialEpoch := ""
+	if meta, ok, err := a.profileMetadata(); err == nil && ok {
+		accountUserID = strings.TrimSpace(meta.PS99UserID)
+		linkedID = strings.TrimSpace(meta.LinkedAccountID)
+		credentialEpoch = strings.TrimSpace(meta.CredentialEpoch)
+	}
+	// --user-id selects the battle contribution row. It is not the account owner,
+	// including when the profile has no ps99UserId.
+	userID, userOK := clan.ResolveUserID(opt.UserID, accountUserID)
 	var warnings []string
 	if !userOK {
 		msg := "player user id is not configured; contribution and rank omitted"
@@ -195,7 +205,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			sessionID += "-" + collision
 		}
 	default:
-		sessionID = clan.MatchingSession(scanned.Priors, accountID, profile)
+		sessionID = clan.MatchingSession(scanned.Priors, clan.NewHistoryIdentity(linkedID, accountUserID, userID, credentialEpoch, accountID, profile))
 		if sessionID == "" {
 			sessionID = clan.NewSessionID(prefix, stamp)
 		}
@@ -222,7 +232,10 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		Prefix:          prefix,
 		Profile:         profile,
 		AccountID:       accountID,
+		LinkedAccountID: linkedID,
 		UserID:          userID,
+		PS99UserID:      accountUserID,
+		CredentialEpoch: credentialEpoch,
 		SessionID:       sessionID,
 		Currencies:      currencies,
 		CurrenciesKnown: currenciesKnown,
@@ -250,8 +263,22 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	if sum.AccountID != "" {
 		man.Summary["accountId"] = sum.AccountID
 	}
+	if sum.ProfileAlias != "" {
+		man.Summary["profileAlias"] = sum.ProfileAlias
+	}
+	if sum.LinkedAccountID != "" {
+		man.Summary["linkedAccountId"] = sum.LinkedAccountID
+	}
 	if sum.UserID != "" {
 		man.Summary["userId"] = sum.UserID
+	}
+	if sum.PS99UserID != "" {
+		man.Summary["ps99UserId"] = sum.PS99UserID
+		man.PS99UserID = sum.PS99UserID
+	}
+	if sum.CredentialEpoch != "" {
+		man.Summary["credentialEpoch"] = sum.CredentialEpoch
+		man.CredentialEpoch = sum.CredentialEpoch
 	}
 	man.Summary["clanTelemetry"] = telemetry
 	man.Summary["clan"] = sum.Current.Clan

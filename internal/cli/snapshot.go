@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,6 +39,19 @@ Same-second collisions get a -0002 style suffix. Use snapshot diff / validate of
 When config.json has more than one profile, default file names include that
 profile alias, for example 2026-11-22-120000-alt1-ps99-inv.json. One profile
 keeps the current names. --zip-path is used exactly as given.
+
+GET /v1/account/* returns the Roblox account that authorized this profile's
+token. Another alias's token is not sent, including when the client id or
+the Roblox id matches. The snapshot stops before any file is written when
+this profile has no usable token. Log in that profile. File names keep the
+alias. History uses a provider-verified linkedAccountId when both snapshots
+have one. A known ps99UserId that disagrees is inconsistent. Otherwise a
+snapshot that has a credentialEpoch continues that same epoch, and userId
+is not part of the decision. userId is the contribution target, including
+when ps99UserId is empty. Older summaries use userId as the owner only when
+both credentialEpoch and ps99UserId are absent. A different account is not
+used as a baseline.
+--user-id selects the battle contribution row and does not change ps99UserId.
 
 Every snapshot also writes summary.json. That file is the history record for
 clan points and currencies. Later snapshots read prior *-prefix-summary.json
@@ -93,7 +107,7 @@ Examples:
 	cmd.Flags().BoolVar(&allViews, "all-views", false, "capture all seven authenticated account views (includes trades/booth/mail)")
 	cmd.Flags().StringVar(&include, "include", "", "comma-separated views (inventory,profile,extendedProfile,itemIndex,trades,booth,mail) or all")
 	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag to read; otherwise taken from the profile, then config ps99ClanTag")
-	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (otherwise config ps99UserId; omitted when unset)")
+	cmd.Flags().StringVar(&userID, "user-id", "", "battle contribution and rank user id (default: this profile's ps99UserId; does not change the account id)")
 	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account (cannot be combined with --session-id)")
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
@@ -140,7 +154,7 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&allViews, "all-views", false, "capture all seven authenticated account views")
 	cmd.Flags().StringVar(&include, "include", "", "comma-separated views or all")
 	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag to read; otherwise taken from the profile, then config ps99ClanTag")
-	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (otherwise config ps99UserId; omitted when unset)")
+	cmd.Flags().StringVar(&userID, "user-id", "", "battle contribution and rank user id (default: this profile's ps99UserId; does not change the account id)")
 	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account (cannot be combined with --session-id)")
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
@@ -203,6 +217,27 @@ type snapshotOptions struct {
 	FileProfile string
 }
 
+func snapshotLinkedID(a *App) string {
+	if meta, ok, err := a.profileMetadata(); err == nil && ok {
+		return strings.TrimSpace(meta.LinkedAccountID)
+	}
+	return ""
+}
+
+func snapshotPS99ID(a *App) string {
+	if id, ok := a.configuredPS99UserID(""); ok {
+		return id
+	}
+	return ""
+}
+
+func snapshotCredentialEpoch(a *App) string {
+	if meta, ok, err := a.profileMetadata(); err == nil && ok {
+		return strings.TrimSpace(meta.CredentialEpoch)
+	}
+	return ""
+}
+
 func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error {
 	if err := a.confirmRefresh(opt.Flags, "account snapshot"); err != nil {
 		return err
@@ -215,6 +250,9 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		if err := clan.ValidateSessionID(opt.SessionID); err != nil {
 			return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
 		}
+	}
+	if err := a.sharedAccountPayloadError(); err != nil {
+		return err
 	}
 	if err := snapshot.ValidatePrefix(opt.Prefix); err != nil {
 		return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
@@ -275,6 +313,10 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		LocalTimezone:   now.Location().String(),
 		ExportedAt:      now.Format(time.RFC3339),
 		Profile:         profileAlias,
+		ProfileAlias:    profileAlias,
+		LinkedAccountID: snapshotLinkedID(a),
+		PS99UserID:      snapshotPS99ID(a),
+		CredentialEpoch: snapshotCredentialEpoch(a),
 		OutputDir:       absDir,
 		Prefix:          opt.Prefix,
 		Refresh:         opt.Flags.refresh,
@@ -357,6 +399,11 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 			profName := opt.artifact(stamp, collision, "prof.json")
 			curName := opt.artifact(stamp, collision, "currencies.csv")
 			if profErr != nil {
+				var idErr *config.IdentityError
+				if errors.As(profErr, &idErr) {
+					a.discardPartialSnapshot(absDir, &man)
+					return idErr
+				}
 				man.OK = false
 				a.notice("profile fetch failed: %v", profErr)
 				man.Files = append(man.Files,
@@ -500,6 +547,19 @@ func snapshotMachineJSON(cmd *cobra.Command, outputMode string, jsonFlag bool) (
 
 func failRec(name, kind string, err error) snapshot.FileRecord {
 	return snapshot.FileRecord{Name: name, RelPath: name, Kind: kind, OK: false, Error: err.Error()}
+}
+
+func (a *App) discardPartialSnapshot(absDir string, man *snapshot.Manifest) {
+	if man == nil {
+		return
+	}
+	for _, f := range man.Files {
+		name := strings.TrimSpace(f.Name)
+		if name == "" || strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
+			continue
+		}
+		_ = os.Remove(filepath.Join(absDir, name))
+	}
 }
 
 func failViewRec(name, kind, view string, err error, cs snapshot.ContentStatus) snapshot.FileRecord {
@@ -663,6 +723,11 @@ func (a *App) snapshotProfile(ctx context.Context, opt snapshotOptions) (output.
 	}
 	if err := mapAccountHTTP(res); err != nil {
 		return output.Envelope{}, nil, nil, err
+	}
+	if meta, ok, merr := a.profileMetadata(); merr == nil && ok {
+		if err := config.UpstreamConflict(meta, res.Data); err != nil {
+			return output.Envelope{}, nil, nil, err
+		}
 	}
 	source := a.accountSource(res)
 	source.Endpoint = "/v1/account/profile"

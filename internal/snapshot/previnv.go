@@ -5,18 +5,24 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/andrew867/bg-cli/internal/clan"
 )
 
 // PreviousRequest selects the inventory that belongs to one prior summary.
 // The summary file is the history system's baseline, not the lexically
 // previous inv.json. Every opened path stays inside Dir.
 type PreviousRequest struct {
-	Dir         string
-	SummaryFile string
-	Prefix      string
-	SessionID   string
-	AccountID   string
-	Profile     string
+	Dir             string
+	SummaryFile     string
+	Prefix          string
+	SessionID       string
+	AccountID       string
+	LinkedAccountID string
+	UserID          string
+	PS99UserID      string
+	CredentialEpoch string
+	Profile         string
 }
 
 // PreviousInventory is a prior inventory payload located through its summary
@@ -39,7 +45,12 @@ type summaryHead struct {
 	SessionID       string `json:"sessionId"`
 	Prefix          string `json:"prefix"`
 	Profile         string `json:"profile"`
+	ProfileAlias    string `json:"profileAlias"`
 	AccountID       string `json:"accountId"`
+	LinkedAccountID string `json:"linkedAccountId"`
+	UserID          string `json:"userId"`
+	PS99UserID      string `json:"ps99UserId"`
+	CredentialEpoch string `json:"credentialEpoch"`
 	Current         struct {
 		StatisticsKnown bool              `json:"statisticsKnown"`
 		Statistics      map[string]string `json:"statistics"`
@@ -65,8 +76,8 @@ func LoadPreviousInventory(req PreviousRequest) PreviousInventory {
 	if strings.TrimSpace(head.SessionID) == "" {
 		return PreviousInventory{Reason: "previous summary is missing sessionId"}
 	}
-	if !sameSnapshotAccount(req.AccountID, req.Profile, req.SessionID, head.AccountID, head.Profile, head.SessionID) {
-		return PreviousInventory{Reason: "previous snapshot is a different account or session"}
+	if ok, reason := sameSnapshotAccount(req, head); !ok {
+		return PreviousInventory{Reason: reason}
 	}
 	if strings.TrimSpace(head.LocalStamp) == "" {
 		return PreviousInventory{Reason: "previous summary is missing localStamp"}
@@ -91,10 +102,6 @@ func LoadPreviousInventory(req PreviousRequest) PreviousInventory {
 	var man Manifest
 	if err := json.Unmarshal(manBody, &man); err != nil {
 		out.Reason = "previous manifest is malformed"
-		return out
-	}
-	if man.Profile != "" && req.Profile != "" && !strings.EqualFold(man.Profile, req.Profile) {
-		out.Reason = "previous snapshot is a different account or session"
 		return out
 	}
 	var invName string
@@ -151,19 +158,22 @@ func summarySchemaOK(v string) bool {
 	return v == "1" || strings.HasPrefix(v, "1.")
 }
 
-func sameSnapshotAccount(expectAccount, expectProfile, expectSession, gotAccount, gotProfile, gotSession string) bool {
-	ea, ga := strings.TrimSpace(expectAccount), strings.TrimSpace(gotAccount)
-	if ea != "" && ga != "" && !strings.EqualFold(ea, ga) {
-		return false
+func sameSnapshotAccount(req PreviousRequest, head summaryHead) (bool, string) {
+	if strings.TrimSpace(req.SessionID) != "" && strings.TrimSpace(head.SessionID) != "" && req.SessionID != head.SessionID {
+		return false, "previous snapshot is a different account or session"
 	}
-	ep, gp := strings.TrimSpace(expectProfile), strings.TrimSpace(gotProfile)
-	if ep != "" && gp != "" && !strings.EqualFold(ep, gp) {
-		return false
+	profile := strings.TrimSpace(head.ProfileAlias)
+	if profile == "" {
+		profile = head.Profile
 	}
-	if strings.TrimSpace(expectSession) != "" && strings.TrimSpace(gotSession) != "" && expectSession != gotSession {
-		return false
+	ok, reason := clan.CompareHistory(
+		clan.NewHistoryIdentity(req.LinkedAccountID, req.PS99UserID, req.UserID, req.CredentialEpoch, req.AccountID, req.Profile),
+		clan.NewHistoryIdentity(head.LinkedAccountID, head.PS99UserID, head.UserID, head.CredentialEpoch, head.AccountID, profile),
+	)
+	if !ok {
+		return false, reason
 	}
-	return true
+	return true, ""
 }
 
 func readSnapshotFile(dir, name string) ([]byte, error) {

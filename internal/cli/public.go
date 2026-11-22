@@ -78,8 +78,9 @@ func (a *App) getPublic(ctx context.Context, path string, query url.Values, limi
 	if err != nil {
 		return publicResult{RequestURL: rawURL}, err
 	}
-	if !bypassCache && !a.Flags.NoCache {
-		maxAge := cache.ParseMaxAge(res.Headers.Get("Cache-Control"))
+	cc := res.Headers.Get("Cache-Control")
+	if !bypassCache && !a.Flags.NoCache && !cache.Refuses(rawURL, cc) {
+		maxAge := cache.ParseMaxAge(cc)
 		_ = store.Put(rawURL, res.HTTPStatus, res.Body, res.Headers.Get("Content-Type"), maxAge, now)
 	}
 	return publicResult{Res: res, FromLocalCache: false, RequestURL: rawURL}, nil

@@ -29,7 +29,10 @@ bg-cli auth login \
   --profile main \
   --client-id YOUR_CLIENT_ID \
   --redirect-uri http://127.0.0.1:8765/callback
+bg-cli auth login --profile alt1
 ```
+
+The first login stores the client id and redirect URI on the shared `oauth` object. A later `auth login --profile alt1` uses that developer app and does not ask for those values again. The access token from the second login is stored only under `alt1`.
 
 Optional flags:
 
@@ -72,7 +75,7 @@ bg-cli auth logout --profile main
 
 Access tokens are valid for 30 days. There is no refresh-token endpoint. When a token expires or is revoked, account commands exit with code 8 and login must be repeated.
 
-Running `auth login` again for an existing profile replaces the token, client id, scopes, and expiry. It keeps `accountId`, `ps99UserId`, and `ps99ClanTag`. Those fields are not part of the OAuth response, and a reauthorization does not erase them. Reauthorizing an existing profile assumes it still represents the same game account. To authorize a different account, use a new profile alias or log out that profile first so stored account identity metadata is not carried forward.
+Running `auth login` again for an existing profile replaces the token, client id, scopes, expiry, and credential epoch. It keeps `accountId`, `ps99UserId`, `ps99ClanTag`, and a linked-account id already stored. Those fields are not part of the OAuth token response. The new epoch starts a new snapshot lineage unless a provider-verified linked-account id says this is the same account. That stops a mistaken consent click from being diffed against the previous history. To authorize a different account, use a new profile alias.
 
 ## Stored account identity
 
@@ -97,7 +100,7 @@ bg-cli auth profile unset --profile main --clan-tag
 }
 ```
 
-`ps99UserId` is the PS99 user id used for battle contribution and rank. `--user-id` overrides it. `ps99ClanTag` is the clan tag for `GET /api/clan/{tag}`. `clan show` uses `--tag`, then the stored tag, and only then the account documents. A stored tag does not require an access token. `account snapshot` still prefers a tag on the profile or extended profile, then `ps99ClanTag`. `--clan-tag` overrides that snapshot order. `auth status` prints the three fields.
+`ps99UserId` is owner metadata. Snapshot history uses it when it is known, and a disagreement is inconsistent. `--user-id` selects the battle contribution and rank row stored as `userId`. It does not replace `ps99UserId`, and an empty `ps99UserId` does not make the contribution id the owner. When the flag is omitted, contribution uses the stored id. `ps99ClanTag` is the clan tag for `GET /api/clan/{tag}`. `clan show` uses `--tag`, then the stored tag, and only then the account documents. A stored tag does not require an access token. `account snapshot` still prefers a tag on the profile or extended profile, then `ps99ClanTag`. `--clan-tag` overrides that snapshot order. `auth status` prints the three fields.
 
 ## Multiple accounts
 
@@ -110,27 +113,44 @@ bg-cli account inventory --profile alt1
 
 One token never grants private access to another Roblox player. A second login is how you authorize a different player.
 
-## Same OAuth client, second alias
+## One grant, one Roblox account
 
-The keyring entry belongs to the OAuth client (`clientId`), not to the Roblox id. You can add another profile in `config.json` for a different Roblox id without a second login and without pasting a token when that profile uses the same `clientId` as a profile that already logged in.
+`clientId` and `redirectUri` are the developer application. They are not a Roblox account, and they do not authorize sending another alias's access token. Each profile uses only its own keyring token. A hand-added profile does not reuse a credential, even when the Roblox id is the same. An old `credentialProfile` value is ignored and is not written back.
 
-`alt1` below omits scopes, expiry, and `redirectUri`. bg-cli uses the values already stored on `main`, including that callback. `accountId` and `ps99UserId` stay the values written on `alt1`.
+`GET /v1/account/*` returns only the Roblox account that authorized that access token. The body is that player's cached save (`Cache-Control: private, no-cache`). It is not a lookup by `accountId`, `linkedAccountId`, or `ps99UserId`.
+
+Authorize the other Roblox account with a normal login. The consent screen selects the player. Unless the account profile actually includes an identity field, that selection is trusted for the alias you named. The new access token is stored only in that profile's keyring entry. The other profile's token is not copied. An expired token is not replaced with another profile's token. A new grant also stores a new `credentialEpoch`. That epoch is not a token hash. It keeps a mistaken consent click from continuing the previous snapshot history.
+
+```bash
+bg-cli auth login --profile alt1
+```
+
+`--client-id` and `--redirect-uri` can both be omitted when a complete pair is already on that profile, on the shared `oauth` object, or on the default profile. The profile named by `--profile` is created if it does not exist yet. Passing only one of the two flags does not pair a new client with an older redirect. Omitting them does not copy another profile's access token.
+
+After the code exchange, bg-cli reads `GET /v1/account/profile` with the new token. The documented profile does not include a Roblox user id or a BIG Games linked-account id, so automatic discovery of linked accounts is unfinished. If a response positively includes `linkedAccountId` or a user id, bg-cli fills an empty field or matches an existing alias. It does not rename an alias when the username changes, does not point an alias at a different linked account, and does not delete a profile that was not in the response. If the returned identity disagrees with the alias, login stops and stores nothing.
+
+`accountId` in an old config is kept and is not treated as `linkedAccountId`. `auth status` warns when that legacy field is set. `auth status` and `auth profiles` show the alias, linked account id, PS99 user id, username, display name, client id, whether a token is present, the credential owner, credential epoch, expiry, and scopes. They do not show the access token.
+
+Dashboard routes such as `https://db.biggames.io/account.data` are not called. A bearer-only read of those routes was not confirmed, and they are not used to list linked accounts.
+
+`alt1` below is a different Roblox account from `main`. Account reads for `alt1` fail until that login finishes.
 
 ```json
 {
   "defaultProfile": "main",
+  "oauth": {
+    "clientId": "YOUR_CLIENT_ID",
+    "redirectUri": "http://127.0.0.1:8765/callback"
+  },
   "profiles": {
     "main": {
       "alias": "main",
-      "clientId": "YOUR_CLIENT_ID",
-      "redirectUri": "http://127.0.0.1:8765/callback",
+      "credentialEpoch": "created-when-the-grant-is-installed",
       "accountId": "111",
       "ps99UserId": "111"
     },
     "alt1": {
       "alias": "alt1",
-      "clientId": "YOUR_CLIENT_ID",
-      "accountId": "222",
       "ps99UserId": "222",
       "ps99ClanTag": "OTHERTAG"
     }
@@ -138,6 +158,6 @@ The keyring entry belongs to the OAuth client (`clientId`), not to the Roblox id
 }
 ```
 
-Account commands for `alt1` send the token stored for that client. `auth status` reports `credentialProfile` as the alias that holds the keyring entry. Logging out only `alt1` removes that alias and leaves the token in place. Logging out the alias that holds the token removes the shared credential.
+Logging out `alt1` removes that alias and leaves `main`'s token in place. Do not put the access token or client secret in `config.json`.
 
-A different `clientId` does not receive this token. Authorize that client with `auth login`. Do not put the access token or client secret in `config.json`.
+Snapshot summaries and manifests record `profileAlias`, `linkedAccountId`, `ps99UserId`, `userId`, and `credentialEpoch` when they are known. File names still use the alias, not the provider id. `linkedAccountId` is provider identity. `ps99UserId` is owner metadata. `userId` is the contribution and rank target. `credentialEpoch` is the history lineage when `linkedAccountId` is absent. A previous snapshot, a 5m/30m/1h/session window, and an inventory diff use that one rule. A matching linked-account id is authoritative. A known `ps99UserId` that disagrees is inconsistent and is not ignored. When the linked-account id is absent, a matching credential epoch is enough, and changing `userId` does not split it. A different epoch is a new lineage. `userId` is account identity only when both `credentialEpoch` and `ps99UserId` are absent, which is how older summaries stored the owner. Two of those older summaries still compare. A new epoch does not continue one of them merely because `userId` matches. The alias alone is not identity. A different account is not diffed and is not rated; the reason is that the previous snapshot was rejected because account identity differs. Old summaries stay readable. An old `accountId` is not a linked-account id. It still ties two summaries together only when neither side has a linked-account id, a PS99 user id, or a credential epoch.
