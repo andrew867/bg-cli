@@ -138,22 +138,12 @@ func (a *App) sharedAccountPayloadError() error {
 
 // ownAccountToken returns the keyring entry for this alias only.
 // An expired token is not sent, and no other profile is consulted.
-// CredentialProfile does not select a bearer. The token value is returned
-// to the caller and must not be logged.
+// The token value is returned to the caller and must not be logged.
 func (a *App) ownAccountToken(p config.Profile) (string, error) {
 	tok, err := a.tokenStore().Get(p.Alias)
 	if err != nil {
 		if !tokenMissing(err) {
 			return "", &ExitError{Code: exitcode.CredentialStore, Msg: err.Error()}
-		}
-		if strings.TrimSpace(p.CredentialProfile) != "" {
-			return "", &ExitError{
-				Code: exitcode.AuthRequired,
-				Msg: fmt.Sprintf(
-					"profile %q has no access token. credentialProfile is not used to send another profile's bearer. One OAuth grant is one Roblox account, and GET /v1/account/* returns only the player who authorized the token.\n  bg-cli auth login --profile %s",
-					p.Alias, p.Alias,
-				),
-			}
 		}
 		return "", &ExitError{
 			Code: exitcode.AuthRequired,
@@ -163,7 +153,7 @@ func (a *App) ownAccountToken(p config.Profile) (string, error) {
 			),
 		}
 	}
-	if tokenExpired(p) {
+	if tokenExpired(a.nowUTC(), p) {
 		return "", &ExitError{
 			Code: exitcode.AuthRequired,
 			Msg: fmt.Sprintf(
@@ -189,11 +179,14 @@ func (a *App) profileHasAccountToken(_ *config.File, requested config.Profile, _
 	return false, "", err
 }
 
-func tokenExpired(p config.Profile) bool {
+func tokenExpired(now time.Time, p config.Profile) bool {
 	if p.ExpiresAt.IsZero() {
 		return false
 	}
-	return time.Now().UTC().After(p.ExpiresAt.UTC())
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return now.UTC().After(p.ExpiresAt.UTC())
 }
 
 func tokenMissing(err error) bool {

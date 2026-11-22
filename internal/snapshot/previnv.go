@@ -20,6 +20,7 @@ type PreviousRequest struct {
 	AccountID       string
 	LinkedAccountID string
 	PS99UserID      string
+	CredentialEpoch string
 	Profile         string
 }
 
@@ -48,6 +49,7 @@ type summaryHead struct {
 	LinkedAccountID string `json:"linkedAccountId"`
 	UserID          string `json:"userId"`
 	PS99UserID      string `json:"ps99UserId"`
+	CredentialEpoch string `json:"credentialEpoch"`
 	Current         struct {
 		StatisticsKnown bool              `json:"statisticsKnown"`
 		Statistics      map[string]string `json:"statistics"`
@@ -174,11 +176,13 @@ func sameSnapshotAccount(req PreviousRequest, head summaryHead) (bool, string) {
 	ok, reason := clan.CompareHistory(clan.HistoryIdentity{
 		LinkedAccountID: req.LinkedAccountID,
 		PS99UserID:      req.PS99UserID,
+		CredentialEpoch: req.CredentialEpoch,
 		LegacyAccountID: req.AccountID,
 		Profile:         req.Profile,
 	}, clan.HistoryIdentity{
 		LinkedAccountID: head.LinkedAccountID,
 		PS99UserID:      ps99,
+		CredentialEpoch: head.CredentialEpoch,
 		LegacyAccountID: head.AccountID,
 		Profile:         profile,
 	})

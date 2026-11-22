@@ -88,9 +88,6 @@ func LegacyIdentityWarnings(p Profile) []string {
 	if accountID != "" && ps99 != "" && accountID != ps99 {
 		out = append(out, "accountId and ps99UserId differ; accountId is not used as linkedAccountId")
 	}
-	if strings.TrimSpace(p.CredentialProfile) != "" {
-		out = append(out, "credentialProfile is not used to read /v1/account/*; one OAuth grant is one Roblox account")
-	}
 	return out
 }
 
@@ -113,7 +110,7 @@ func ReconcileGrant(cfg *File, requested string, id GrantIdentity) (alias, notic
 		return "", "", fmt.Errorf("this grant is a different Roblox account than profile %q; that alias was not changed and the token was not stored", requested)
 	}
 	if linked == "" && ps99 == "" {
-		return requested, "the account API did not return a linked-account id or a PS99 user id; the token stays on the profile you named", nil
+		return requested, "the account profile did not include a linked-account id or a PS99 user id; account selection is trusted to the consent screen and the token stays on the profile you named", nil
 	}
 	matches := matchingProfiles(cfg, linked, ps99)
 	if len(matches) > 1 {
@@ -228,7 +225,7 @@ func positiveID(top map[string]json.RawMessage, keys ...string) string {
 		return ""
 	}
 	n, ok := new(big.Int).SetString(s, 10)
-	if !ok || n.Sign() < 0 {
+	if !ok || n.Sign() <= 0 {
 		return ""
 	}
 	return n.String()

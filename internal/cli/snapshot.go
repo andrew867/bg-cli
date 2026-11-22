@@ -225,6 +225,13 @@ func snapshotPS99ID(a *App) string {
 	return ""
 }
 
+func snapshotCredentialEpoch(a *App) string {
+	if meta, ok, err := a.profileMetadata(); err == nil && ok {
+		return strings.TrimSpace(meta.CredentialEpoch)
+	}
+	return ""
+}
+
 func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error {
 	if err := a.confirmRefresh(opt.Flags, "account snapshot"); err != nil {
 		return err
@@ -303,6 +310,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		ProfileAlias:    profileAlias,
 		LinkedAccountID: snapshotLinkedID(a),
 		PS99UserID:      snapshotPS99ID(a),
+		CredentialEpoch: snapshotCredentialEpoch(a),
 		OutputDir:       absDir,
 		Prefix:          opt.Prefix,
 		Refresh:         opt.Flags.refresh,

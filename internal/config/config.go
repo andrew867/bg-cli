@@ -44,18 +44,27 @@ type Profile struct {
 	LinkedAccountID string `json:"linkedAccountId,omitempty"`
 	Username        string `json:"username,omitempty"`
 	DisplayName     string `json:"displayName,omitempty"`
-	// CredentialProfile is an explicit pointer. This client does not send
-	// that profile's access token to /v1/account/*. One OAuth grant is one
-	// Roblox account. Bearer-only dashboard account routes were not confirmed.
-	CredentialProfile string `json:"credentialProfile,omitempty"`
+	// CredentialEpoch identifies one installed OAuth grant. It is not a
+	// secret and it is not derived from the access token. A later snapshot
+	// uses it when the provider did not verify the linked account.
+	CredentialEpoch string `json:"credentialEpoch,omitempty"`
 	// PS99ClanTag is the clan tag used by GET /api/clan/{tag} when the account
 	// profile and extended profile do not include one. It stays on this alias.
 	PS99ClanTag string `json:"ps99ClanTag,omitempty"`
 }
 
+// OAuthApp is the developer application shared by local aliases.
+// ClientID and RedirectURI are not secrets and they are not a player.
+type OAuthApp struct {
+	ClientID    string `json:"clientId,omitempty"`
+	RedirectURI string `json:"redirectUri,omitempty"`
+}
+
 // File is the on-disk configuration document. It must never contain secrets.
+// An old credentialProfile value is ignored. The next save omits it.
 type File struct {
 	DefaultProfile string             `json:"defaultProfile"`
+	OAuth          OAuthApp           `json:"oauth,omitempty"`
 	Profiles       map[string]Profile `json:"profiles"`
 }
 
@@ -144,7 +153,6 @@ func PreserveProfileIdentity(next, previous Profile) Profile {
 	next.LinkedAccountID = previous.LinkedAccountID
 	next.Username = previous.Username
 	next.DisplayName = previous.DisplayName
-	next.CredentialProfile = previous.CredentialProfile
 	return next
 }
 
@@ -183,8 +191,7 @@ func Get(f *File, alias string) (Profile, bool) {
 // The returned alias list contains only that profile. A same-client peer is
 // not a credential. Scopes, expiry, and redirect URI are not copied from
 // another profile. The access token, when one exists, is the keyring entry
-// for this alias. CredentialProfile is not consulted: one OAuth grant reads
-// one Roblox account, and bearer-only linked-account routes were not confirmed.
+// for this alias. Login resolves the developer application separately.
 func BindAccount(f *File, alias string) (Profile, []string, bool) {
 	if f == nil {
 		return Profile{}, nil, false
@@ -198,6 +205,50 @@ func BindAccount(f *File, alias string) (Profile, []string, bool) {
 		p.Alias = alias
 	}
 	return p, []string{p.Alias}, true
+}
+
+// ResolveDeveloperApp fills the non-secret client id and redirect URI for a
+// login. Explicit flags win, then the named profile, then the shared oauth
+// app, then the default profile. It does not return an access token.
+func ResolveDeveloperApp(cfg *File, profile, clientID, redirectURI string) (string, string) {
+	clientID = strings.TrimSpace(clientID)
+	redirectURI = strings.TrimSpace(redirectURI)
+	if cfg == nil {
+		return clientID, redirectURI
+	}
+	fill := func(id, uri string) {
+		if clientID == "" {
+			clientID = strings.TrimSpace(id)
+		}
+		if redirectURI == "" {
+			redirectURI = strings.TrimSpace(uri)
+		}
+	}
+	if p, ok := cfg.Profiles[profile]; ok {
+		fill(p.ClientID, p.RedirectURI)
+	}
+	fill(cfg.OAuth.ClientID, cfg.OAuth.RedirectURI)
+	def := strings.TrimSpace(cfg.DefaultProfile)
+	if def != "" && def != profile {
+		if p, ok := cfg.Profiles[def]; ok {
+			fill(p.ClientID, p.RedirectURI)
+		}
+	}
+	return clientID, redirectURI
+}
+
+// RememberDeveloperApp stores the application used by a successful login.
+// The access token stays on the profile that received the grant.
+func RememberDeveloperApp(cfg *File, clientID, redirectURI string) {
+	if cfg == nil {
+		return
+	}
+	if id := strings.TrimSpace(clientID); id != "" {
+		cfg.OAuth.ClientID = id
+	}
+	if uri := strings.TrimSpace(redirectURI); uri != "" {
+		cfg.OAuth.RedirectURI = uri
+	}
 }
 
 func normalizeAliases(f *File) {

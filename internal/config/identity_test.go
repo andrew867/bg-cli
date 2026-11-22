@@ -40,6 +40,13 @@ func TestDiscoverProfileIgnoresLegacyAccountIDAlone(t *testing.T) {
 	}
 }
 
+func TestDiscoverProfileRejectsZeroUserID(t *testing.T) {
+	got := DiscoverProfile(json.RawMessage(`{"UserID":0,"RobloxUserId":"-4"}`))
+	if got.PS99UserID != "" {
+		t.Fatalf("non-positive id accepted: %+v", got)
+	}
+}
+
 func TestDiscoverProfileEmptyOfficialShape(t *testing.T) {
 	got := DiscoverProfile(json.RawMessage(`{"Rank":12,"Currency":{"Diamonds":{"_am":10}}}`))
 	if got.LinkedAccountID != "" || got.PS99UserID != "" || got.Username != "" {

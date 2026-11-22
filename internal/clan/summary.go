@@ -34,6 +34,7 @@ type Summary struct {
 	LinkedAccountID string   `json:"linkedAccountId,omitempty"`
 	UserID          string   `json:"userId,omitempty"`
 	PS99UserID      string   `json:"ps99UserId,omitempty"`
+	CredentialEpoch string   `json:"credentialEpoch,omitempty"`
 	Current         Current  `json:"current"`
 	Windows         Windows  `json:"windows"`
 	Warnings        []string `json:"warnings,omitempty"`
@@ -169,6 +170,7 @@ type Prior struct {
 	Profile         string
 	UserID          string
 	PS99UserID      string
+	CredentialEpoch string
 	ClanTag         string
 	BattleID        string
 	Points          string
@@ -195,6 +197,7 @@ type Input struct {
 	LinkedAccountID string
 	UserID          string
 	PS99UserID      string
+	CredentialEpoch string
 	SessionID       string
 	Currencies      map[string]CurrencyAmount
 	CurrenciesKnown bool
@@ -253,6 +256,7 @@ func Build(in Input) Summary {
 		LinkedAccountID: strings.TrimSpace(in.LinkedAccountID),
 		UserID:          user,
 		PS99UserID:      ps99,
+		CredentialEpoch: strings.TrimSpace(in.CredentialEpoch),
 		Current: Current{
 			CurrenciesKnown: in.CurrenciesKnown,
 			Currencies:      in.Currencies,

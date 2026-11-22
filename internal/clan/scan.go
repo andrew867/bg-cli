@@ -93,6 +93,8 @@ func summaryKeyFor(p Prior) summaryKey {
 	switch {
 	case h.LinkedAccountID != "":
 		ident = "linked:" + h.LinkedAccountID
+	case h.CredentialEpoch != "":
+		ident = "epoch:" + h.CredentialEpoch
 	case h.PS99UserID != "":
 		ident = "ps99:" + h.PS99UserID
 	case h.LegacyAccountID != "":
@@ -132,6 +134,7 @@ func decodePrior(name string, body []byte, now time.Time) (Prior, string, bool) 
 		Profile:         firstNonEmpty(sum.ProfileAlias, sum.Profile),
 		UserID:          strings.TrimSpace(sum.UserID),
 		PS99UserID:      strings.TrimSpace(sum.PS99UserID),
+		CredentialEpoch: strings.TrimSpace(sum.CredentialEpoch),
 		ClanTag:         sum.Current.Clan.Tag,
 		CurrenciesKnown: sum.Current.CurrenciesKnown,
 		Currencies:      map[string]string{},

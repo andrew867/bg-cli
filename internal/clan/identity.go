@@ -60,14 +60,20 @@ func canonicalID(raw json.RawMessage) string {
 const BaselineIdentityRejected = "previous snapshot was rejected because account identity differs"
 
 // HistoryIdentity is the account a snapshot belongs to.
-// LinkedAccountID is the BIG Games linked-account id.
-// PS99UserID is the Roblox/PS99 user id.
+// LinkedAccountID is the BIG Games linked-account id when a trustworthy
+// OAuth source provided it. That match is provider-verified identity.
+// PS99UserID is metadata. It is not proof of which bearer wrote the file.
+// CredentialEpoch is the non-secret id of the OAuth grant that wrote the
+// snapshot. It is not a token hash. When provider-verified identity is
+// unavailable, a snapshot that has an epoch matches only the same epoch.
+// Two summaries that both omit the epoch stay readable against each other.
 // LegacyAccountID is the older summary accountId field. It is not a
 // linked-account id and is used only when both sides lack the newer ids.
 // Profile is the local alias and is never identity by itself.
 type HistoryIdentity struct {
 	LinkedAccountID string
 	PS99UserID      string
+	CredentialEpoch string
 	LegacyAccountID string
 	Profile         string
 	Conflict        bool
@@ -99,6 +105,15 @@ func CompareHistory(a, b HistoryIdentity) (bool, string) {
 	if aL != "" && bL != "" && aL == bL {
 		return true, ""
 	}
+	// No provider-verified linked account. A new grant's epoch starts a new
+	// lineage, including against an older summary that stored a user id on
+	// another account's payload. Legacy files with no epoch still match.
+	aE, bE := strings.TrimSpace(a.CredentialEpoch), strings.TrimSpace(b.CredentialEpoch)
+	if aE != "" || bE != "" {
+		if aE == "" || bE == "" || aE != bE {
+			return false, BaselineIdentityRejected
+		}
+	}
 	if aL == "" && bL == "" && aU != "" && bU != "" && aU == bU {
 		return true, ""
 	}
@@ -124,6 +139,7 @@ func (p Prior) historyIdentity() HistoryIdentity {
 	id := HistoryIdentity{
 		LinkedAccountID: strings.TrimSpace(p.LinkedAccountID),
 		PS99UserID:      ps99,
+		CredentialEpoch: strings.TrimSpace(p.CredentialEpoch),
 		LegacyAccountID: strings.TrimSpace(p.AccountID),
 		Profile:         p.Profile,
 	}
@@ -141,6 +157,7 @@ func (in Input) historyIdentity() HistoryIdentity {
 	id := HistoryIdentity{
 		LinkedAccountID: strings.TrimSpace(in.LinkedAccountID),
 		PS99UserID:      ps99,
+		CredentialEpoch: strings.TrimSpace(in.CredentialEpoch),
 		LegacyAccountID: strings.TrimSpace(in.AccountID),
 		Profile:         in.Profile,
 	}

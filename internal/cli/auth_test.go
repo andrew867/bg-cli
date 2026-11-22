@@ -31,7 +31,7 @@ func TestAuthStatusLocalNoNetwork(t *testing.T) {
 				ClientID:  "cid",
 				Scopes:    auth.DefaultScopes,
 				IssuedAt:  time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
-				ExpiresAt: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+				ExpiresAt: time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC),
 			},
 		},
 	}
@@ -64,6 +64,45 @@ func TestAuthStatusLocalNoNetwork(t *testing.T) {
 	data, _ := env.Data.(map[string]any)
 	if data["tokenPresent"] != true {
 		t.Fatalf("data %#v", data)
+	}
+	if data["expired"] != false {
+		t.Fatalf("injected clock is before expiry, expired=%#v", data["expired"])
+	}
+}
+
+func TestAuthStatusExpiryUsesInjectedClock(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	cfg := &config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias:     "main",
+				ClientID:  "cid",
+				ExpiresAt: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout:     &stdout,
+		Stderr:     &stderr,
+		TokenStore: auth.NewMemoryStore(),
+		Clock:      output.FixedClock{T: time.Date(2026, 12, 15, 0, 0, 0, 0, time.UTC)},
+	}, []string{"auth", "status", "--profile", "main"})
+	if code != exitcode.OK {
+		t.Fatalf("exit %d stderr=%s", code, stderr.String())
+	}
+	var env output.Envelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := env.Data.(map[string]any)
+	if data["expired"] != true {
+		t.Fatalf("injected clock is after expiry, expired=%#v", data["expired"])
 	}
 }
 
@@ -345,6 +384,120 @@ func TestAuthLoginReauthStoresSeparateToken(t *testing.T) {
 	}
 	if strings.Contains(string(raw), mainToken) || strings.Contains(string(raw), altToken) || strings.Contains(string(raw), clientSecret) {
 		t.Fatal("secret written into config")
+	}
+}
+
+func TestAuthLoginAltInheritsDeveloperApp(t *testing.T) {
+	const mainToken = "synthetic_main_client_token"
+	const altToken = "synthetic_alt_inherited_token"
+	const clientSecret = "synthetic-client-secret"
+
+	reserve, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	redirectURI := "http://" + reserve.Addr().String() + "/callback"
+	_ = reserve.Close()
+
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		OAuth:          config.OAuthApp{ClientID: "same-client", RedirectURI: redirectURI},
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias: "main", ClientID: "same-client", Scopes: auth.DefaultScopes,
+				RedirectURI: redirectURI, PS99UserID: "111", CredentialEpoch: "main-epoch",
+			},
+			"alt1": {Alias: "alt1", PS99UserID: "222", PS99ClanTag: "ALT"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store := auth.NewMemoryStore()
+	if err := store.Set("main", mainToken); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("client_id") != "same-client" || q.Get("redirect_uri") != redirectURI {
+			t.Errorf("app client %q redirect %q", q.Get("client_id"), q.Get("redirect_uri"))
+		}
+		cb := q.Get("redirect_uri") + "?code=" + url.QueryEscape("synthetic-auth-code") + "&state=" + url.QueryEscape(q.Get("state"))
+		http.Redirect(w, r, cb, http.StatusFound)
+	})
+	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":2592000,"scope":%q}`, altToken, auth.ScopeString(auth.DefaultScopes))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		HTTPClient:        srv.Client(),
+		BaseURL:           srv.URL,
+		OAuthAuthorizeURL: srv.URL + "/oauth/authorize",
+		OAuthTokenURL:     srv.URL + "/oauth/token",
+		Env: func(k string) string {
+			if k == auth.ClientSecretEnv {
+				return clientSecret
+			}
+			return ""
+		},
+		IsTTY: func() bool { return false },
+		OpenURL: func(u string) error {
+			go func() {
+				c := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+				resp, err := c.Get(u)
+				if err != nil {
+					return
+				}
+				loc := resp.Header.Get("Location")
+				resp.Body.Close()
+				if r2, err := http.Get(loc); err == nil {
+					r2.Body.Close()
+				}
+			}()
+			return nil
+		},
+		Now: func() time.Time { return time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC) },
+	}, []string{"auth", "login", "--profile", "alt1"})
+	if code != 0 {
+		t.Fatalf("login exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), mainToken) || strings.Contains(stdout.String()+stderr.String(), altToken) || strings.Contains(stdout.String()+stderr.String(), clientSecret) {
+		t.Fatal("token or client secret was printed")
+	}
+	if strings.Contains(stderr.String(), "grant matches") || !strings.Contains(stderr.String(), "consent screen") {
+		t.Fatalf("stderr=%s", stderr.String())
+	}
+	gotMain, err := store.Get("main")
+	if err != nil || gotMain != mainToken {
+		t.Fatalf("main token changed: %q err=%v", gotMain, err)
+	}
+	gotAlt, err := store.Get("alt1")
+	if err != nil || gotAlt != altToken {
+		t.Fatalf("alt token %q err=%v", gotAlt, err)
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	alt := loaded.Profiles["alt1"]
+	if alt.PS99UserID != "222" || alt.PS99ClanTag != "ALT" || alt.ClientID != "same-client" || alt.RedirectURI != redirectURI {
+		t.Fatalf("alt profile %+v", alt)
+	}
+	if alt.CredentialEpoch == "" || alt.CredentialEpoch == "main-epoch" || strings.Contains(alt.CredentialEpoch, altToken) {
+		t.Fatalf("epoch %q", alt.CredentialEpoch)
+	}
+	if loaded.Profiles["main"].CredentialEpoch != "main-epoch" {
+		t.Fatal("main epoch changed")
+	}
+	if loaded.OAuth.ClientID != "same-client" || loaded.OAuth.RedirectURI != redirectURI {
+		t.Fatalf("oauth %+v", loaded.OAuth)
 	}
 }
 

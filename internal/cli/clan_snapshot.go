@@ -187,8 +187,10 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		a.notice("summary history: %s", w)
 	}
 	linkedID := ""
+	credentialEpoch := ""
 	if meta, ok, err := a.profileMetadata(); err == nil && ok {
 		linkedID = strings.TrimSpace(meta.LinkedAccountID)
+		credentialEpoch = strings.TrimSpace(meta.CredentialEpoch)
 	}
 	sessionID := opt.SessionID
 	switch {
@@ -202,6 +204,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		sessionID = clan.MatchingSession(scanned.Priors, clan.HistoryIdentity{
 			LinkedAccountID: linkedID,
 			PS99UserID:      userID,
+			CredentialEpoch: credentialEpoch,
 			LegacyAccountID: accountID,
 			Profile:         profile,
 		})
@@ -234,6 +237,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		LinkedAccountID: linkedID,
 		UserID:          userID,
 		PS99UserID:      userID,
+		CredentialEpoch: credentialEpoch,
 		SessionID:       sessionID,
 		Currencies:      currencies,
 		CurrenciesKnown: currenciesKnown,
@@ -272,6 +276,10 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	}
 	if sum.PS99UserID != "" {
 		man.Summary["ps99UserId"] = sum.PS99UserID
+	}
+	if sum.CredentialEpoch != "" {
+		man.Summary["credentialEpoch"] = sum.CredentialEpoch
+		man.CredentialEpoch = sum.CredentialEpoch
 	}
 	man.Summary["clanTelemetry"] = telemetry
 	man.Summary["clan"] = sum.Current.Clan

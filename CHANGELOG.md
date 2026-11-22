@@ -13,11 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Each profile uses only its own access token. The same `clientId` does not borrow another alias's bearer, including when the Roblox id matches, when the token is expired, or when `credentialProfile` is set. `GET /v1/account/*` returns only the player who authorized that token. Login stores the new token on the matching alias and does not retarget an alias onto a different Roblox account.
+- Each profile uses only its own access token. The same `clientId` does not borrow another alias's bearer, including when the Roblox id matches or the token is expired. An old `credentialProfile` value is ignored. `GET /v1/account/*` returns only the player who authorized that token. Unless the account profile includes an identity field, login trusts the consent screen and stores the new token on the profile you named. It does not retarget an alias onto a different Roblox account.
 
 ### Changed
 
-- Snapshot summaries and manifests add `profileAlias`, `linkedAccountId`, and `ps99UserId`. History and inventory diffs require the same linked account, or the same PS99 user id when the linked id is absent. The profile alias alone is not identity. Old `accountId` values are left as stored and are not treated as linked-account ids.
+- Snapshot summaries and manifests add `profileAlias`, `linkedAccountId`, `ps99UserId`, and `credentialEpoch`. A linked-account id from the provider is identity. A PS99 user id is metadata. When that linked id is absent, history requires the same credential epoch. Summaries that both omit the epoch stay readable. A new OAuth grant starts a new lineage. Old `accountId` values are left as stored and are not treated as linked-account ids.
+- `clientId` and `redirectUri` are the developer app. `auth login` stores them on the shared `oauth` config and reuses them for another profile, so `auth login --profile alt1` does not ask for them again. The access token stays on that profile.
 
 ## [0.2.7] - 2026-11-22
 

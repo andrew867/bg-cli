@@ -3,6 +3,8 @@ package cli
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,16 +20,17 @@ func TestExpiredTokenDoesNotFallBack(t *testing.T) {
 	const altToken = "synthetic_alt_expired_token"
 	dir := t.TempDir()
 	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	now := time.Date(2026, 12, 15, 12, 0, 0, 0, time.UTC)
 	if err := config.Save(&config.File{
 		DefaultProfile: "main",
 		Profiles: map[string]config.Profile{
 			"main": {
 				Alias: "main", ClientID: "same-client", Scopes: auth.DefaultScopes,
-				ExpiresAt: time.Now().UTC().Add(time.Hour), PS99UserID: "111",
+				ExpiresAt: now.Add(time.Hour), PS99UserID: "111",
 			},
 			"alt1": {
 				Alias: "alt1", ClientID: "same-client", Scopes: auth.DefaultScopes,
-				ExpiresAt: time.Now().UTC().Add(-time.Hour), PS99UserID: "222",
+				ExpiresAt: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC), PS99UserID: "222",
 			},
 		},
 	}); err != nil {
@@ -48,6 +51,7 @@ func TestExpiredTokenDoesNotFallBack(t *testing.T) {
 	code := Execute(Deps{
 		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
 		BaseURL: srv.URL, HTTPClient: srv.Client(), IsTTY: func() bool { return true },
+		Clock: output.FixedClock{T: now},
 	}, []string{"account", "currencies", "--profile", "alt1"})
 	if code != exitcode.AuthRequired || calls != 0 {
 		t.Fatalf("exit %d calls %d stderr=%s", code, calls, stderr.String())
@@ -61,21 +65,40 @@ func TestCredentialProfileDoesNotBorrowUnderModelB(t *testing.T) {
 	const mainToken = "synthetic_main_live_token"
 	dir := t.TempDir()
 	t.Setenv("BG_CLI_CONFIG_DIR", dir)
-	if err := config.Save(&config.File{
-		DefaultProfile: "main",
-		Profiles: map[string]config.Profile{
-			"main": {
-				Alias: "main", ClientID: "same-client", Scopes: auth.DefaultScopes,
-				ExpiresAt: time.Now().UTC().Add(time.Hour), PS99UserID: "111",
-			},
-			"alt1": {
-				Alias: "alt1", ClientID: "same-client", Scopes: auth.DefaultScopes,
-				ExpiresAt: time.Now().UTC().Add(time.Hour), PS99UserID: "222",
-				CredentialProfile: "main",
-			},
-		},
-	}); err != nil {
+	raw := `{
+		"defaultProfile": "main",
+		"profiles": {
+			"main": {"alias": "main", "clientId": "same-client", "ps99UserId": "111"},
+			"alt1": {"alias": "alt1", "clientId": "same-client", "ps99UserId": "222", "credentialProfile": "main"}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, config.ConfigFile), []byte(raw), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(config.LegacyIdentityWarnings(loaded.Profiles["alt1"]), " "), "credentialProfile") {
+		t.Fatal("credentialProfile is no longer a warning")
+	}
+	loaded.Profiles["main"] = config.Profile{
+		Alias: "main", ClientID: "same-client", Scopes: auth.DefaultScopes,
+		ExpiresAt: time.Now().UTC().Add(time.Hour), PS99UserID: "111",
+	}
+	alt := loaded.Profiles["alt1"]
+	alt.Scopes = auth.DefaultScopes
+	alt.ExpiresAt = time.Now().UTC().Add(time.Hour)
+	loaded.Profiles["alt1"] = alt
+	if err := config.Save(loaded); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(filepath.Join(dir, config.ConfigFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(saved), "credentialProfile") {
+		t.Fatal("old credentialProfile was written back")
 	}
 	store := auth.NewMemoryStore()
 	_ = store.Set("main", mainToken)
@@ -92,7 +115,7 @@ func TestCredentialProfileDoesNotBorrowUnderModelB(t *testing.T) {
 	if code != exitcode.AuthRequired || calls != 0 {
 		t.Fatalf("exit %d calls %d stderr=%s", code, calls, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "credentialProfile is not used") || strings.Contains(stdout.String()+stderr.String(), mainToken) {
+	if !strings.Contains(stderr.String(), "has no access token") || strings.Contains(stderr.String(), "credentialProfile") || strings.Contains(stdout.String()+stderr.String(), mainToken) {
 		t.Fatalf("stderr=%s", stderr.String())
 	}
 }

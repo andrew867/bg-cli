@@ -347,7 +347,7 @@ func TestHandAddedProfileDoesNotBorrowToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := env.Data.(map[string]any)
-	if data["tokenPresent"] != false || data["credentialOwner"] != "" || data["credentialProfile"] != "" {
+	if data["tokenPresent"] != false || data["credentialOwner"] != "" || data["credentialProfile"] != nil {
 		t.Fatalf("different Roblox id reported main's token as alt1's credential: %#v", data)
 	}
 	if data["redirectUri"] != "" {

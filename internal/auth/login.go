@@ -31,10 +31,14 @@ type LoginOptions struct {
 	OpenURL      func(string) error
 	Now          func() time.Time
 	CallbackWait time.Duration
+	// NewEpoch creates the non-secret credential epoch stored with this grant.
+	// Nil uses config.NewCredentialEpoch. It must not hash the access token.
+	NewEpoch func() (string, error)
 	// Discover reads the account that authorized this grant. It must use the
 	// new access token only against an OAuth account route. A nil Discover
 	// means that identity is unavailable. Errors are reported without storing
-	// a token on a conflicting alias; a failed read keeps the named profile.
+	// a token on a conflicting alias. An empty identity keeps the named profile
+	// because the consent screen made the selection.
 	Discover func(ctx context.Context, accessToken string) (config.GrantIdentity, error)
 }
 
@@ -162,7 +166,7 @@ func Login(ctx context.Context, opt LoginOptions) (LoginResult, *redact.Secrets,
 	if opt.Discover != nil {
 		id, derr := opt.Discover(ctx, tr.AccessToken)
 		if derr != nil {
-			fmt.Fprintf(stderr, "The account profile did not identify this grant. The token stays on the profile you named.\n")
+			fmt.Fprintf(stderr, "The account profile could not be read, so no identity field was available.\n")
 		} else {
 			discovered = id
 			if strings.TrimSpace(id.Warning) != "" {
@@ -183,13 +187,22 @@ func Login(ctx context.Context, opt LoginOptions) (LoginResult, *redact.Secrets,
 		fmt.Fprintf(stderr, "%s\n", notice)
 	}
 	granted := strings.Fields(tr.Scope)
+	newEpoch := opt.NewEpoch
+	if newEpoch == nil {
+		newEpoch = config.NewCredentialEpoch
+	}
+	epoch, err := newEpoch()
+	if err != nil {
+		return LoginResult{}, secrets, err
+	}
 	p := config.Profile{
-		Alias:       target,
-		ClientID:    opt.ClientID,
-		Scopes:      granted,
-		IssuedAt:    issued,
-		ExpiresAt:   expires,
-		RedirectURI: redirectURI,
+		Alias:           target,
+		ClientID:        opt.ClientID,
+		Scopes:          granted,
+		IssuedAt:        issued,
+		ExpiresAt:       expires,
+		RedirectURI:     redirectURI,
+		CredentialEpoch: epoch,
 	}
 	if prev, ok := config.Get(cfg, target); ok {
 		p = config.PreserveProfileIdentity(p, prev)
@@ -205,6 +218,7 @@ func Login(ctx context.Context, opt LoginOptions) (LoginResult, *redact.Secrets,
 		return LoginResult{}, secrets, err
 	}
 	makeDefault := cfg.DefaultProfile == "" || cfg.DefaultProfile == opt.Profile || cfg.DefaultProfile == target
+	config.RememberDeveloperApp(cfg, opt.ClientID, redirectURI)
 	if err := config.UpsertProfile(cfg, p, makeDefault); err != nil {
 		_ = store.Delete(target)
 		return LoginResult{}, secrets, err

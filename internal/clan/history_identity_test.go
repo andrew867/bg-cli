@@ -87,6 +87,58 @@ func TestLegacyAccountIDIsNotLinkedID(t *testing.T) {
 	}
 }
 
+func TestHistoryNewEpochDoesNotContinueContaminatedPS99(t *testing.T) {
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	prior := Prior{
+		File: "old.json", ExportedAt: now.Add(-time.Hour), ExportedAtText: now.Add(-time.Hour).Format(time.RFC3339),
+		SessionID: "sess", PS99UserID: "222", Profile: "alt1",
+		CurrenciesKnown: true, Currencies: map[string]string{"Diamonds": "1"},
+	}
+	sum := Build(Input{
+		Now: now, LocalStamp: "stamp", Prefix: "ps99", Profile: "alt1",
+		PS99UserID: "222", UserID: "222", CredentialEpoch: "grant-new", SessionID: "sess",
+		CurrenciesKnown: true, Currencies: map[string]CurrencyAmount{"Diamonds": {Amount: "9"}},
+		Priors: []Prior{prior},
+	})
+	if sum.Windows.Previous.Valid || sum.Windows.Previous.Reason != BaselineIdentityRejected {
+		t.Fatalf("contaminated baseline was used: valid=%v reason=%s", sum.Windows.Previous.Valid, sum.Windows.Previous.Reason)
+	}
+	if sum.CredentialEpoch != "grant-new" {
+		t.Fatalf("epoch %q", sum.CredentialEpoch)
+	}
+}
+
+func TestHistoryLegacySummariesWithoutEpochStillMatch(t *testing.T) {
+	a := HistoryIdentity{PS99UserID: "222", Profile: "alt1"}
+	b := HistoryIdentity{PS99UserID: "222", Profile: "alt1"}
+	if !SameHistory(a, b) {
+		t.Fatal("legacy summaries without an epoch were split")
+	}
+}
+
+func TestHistorySameEpochContinuesAndDifferentEpochDoesNot(t *testing.T) {
+	same := HistoryIdentity{PS99UserID: "222", CredentialEpoch: "grant-a", Profile: "alt1"}
+	if !SameHistory(same, same) {
+		t.Fatal("same epoch was rejected")
+	}
+	other := HistoryIdentity{PS99UserID: "222", CredentialEpoch: "grant-b", Profile: "alt1"}
+	if SameHistory(same, other) {
+		t.Fatal("different grants shared history")
+	}
+}
+
+func TestHistoryVerifiedLinkedAccountIgnoresEpoch(t *testing.T) {
+	a := HistoryIdentity{LinkedAccountID: "link-alt", PS99UserID: "222", CredentialEpoch: "old"}
+	b := HistoryIdentity{LinkedAccountID: "link-alt", PS99UserID: "222", CredentialEpoch: "new"}
+	if !SameHistory(a, b) {
+		t.Fatal("verified linked account was split by epoch")
+	}
+	c := HistoryIdentity{LinkedAccountID: "link-main", PS99UserID: "222", CredentialEpoch: "old"}
+	if SameHistory(a, c) {
+		t.Fatal("different linked accounts matched")
+	}
+}
+
 func TestScanDoesNotCollapseDifferentAccounts(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)

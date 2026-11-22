@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -286,12 +288,13 @@ func TestLoginReauthKeepsIdentityMetadata(t *testing.T) {
 		DefaultProfile: "main",
 		Profiles: map[string]config.Profile{
 			"main": {
-				Alias:       "main",
-				ClientID:    "old-client",
-				Scopes:      []string{"player-data:pet-simulator-99:profile:read"},
-				AccountID:   "acct-kept",
-				PS99UserID:  "1001",
-				PS99ClanTag: "SYN",
+				Alias:           "main",
+				ClientID:        "old-client",
+				Scopes:          []string{"player-data:pet-simulator-99:profile:read"},
+				AccountID:       "acct-kept",
+				PS99UserID:      "1001",
+				PS99ClanTag:     "SYN",
+				CredentialEpoch: "old-epoch",
 			},
 		},
 	}); err != nil {
@@ -375,7 +378,20 @@ func TestLoginReauthKeepsIdentityMetadata(t *testing.T) {
 	if p.ClientID != "test-client-id" {
 		t.Fatalf("client id was not updated: %s", p.ClientID)
 	}
+	if p.CredentialEpoch == "" || p.CredentialEpoch == "old-epoch" || strings.Contains(p.CredentialEpoch, "synthetic_test_access_token") {
+		t.Fatalf("epoch %q", p.CredentialEpoch)
+	}
+	sum := sha256.Sum256([]byte("synthetic_test_access_token_do_not_use"))
+	if p.CredentialEpoch == hex.EncodeToString(sum[:]) {
+		t.Fatal("epoch is a hash of the access token")
+	}
+	if cfg.OAuth.ClientID != "test-client-id" || cfg.OAuth.RedirectURI != redirectURI {
+		t.Fatalf("shared app %+v", cfg.OAuth)
+	}
 	if !strings.Contains(stderr.String(), "Kept accountId, ps99UserId, and ps99ClanTag") {
+		t.Fatalf("stderr=%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "consent screen") || strings.Contains(stderr.String(), "grant matches") {
 		t.Fatalf("stderr=%s", stderr.String())
 	}
 }
