@@ -474,3 +474,98 @@ func TestLoginReauthDoesNotAttachAliasToDifferentAccount(t *testing.T) {
 		t.Fatalf("alias retargeted: %+v", p)
 	}
 }
+
+type saveFailStore struct {
+	*MemoryStore
+	dir   string
+	armed bool
+}
+
+func (s *saveFailStore) Set(profile, token string) error {
+	if err := s.MemoryStore.Set(profile, token); err != nil {
+		return err
+	}
+	if !s.armed {
+		return nil
+	}
+	s.armed = false
+	path := filepath.Join(s.dir, config.ConfigFile)
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	return os.Mkdir(path, 0o700)
+}
+
+func TestLoginReauthRestoresTokenWhenSaveFails(t *testing.T) {
+	const previous = "synthetic_previous_token"
+	const replacement = "synthetic_replacement_token"
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {Alias: "main", ClientID: "cid", PS99UserID: "111", CredentialEpoch: "old-epoch"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reserve, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	redirectURI := "http://" + reserve.Addr().String() + "/callback"
+	_ = reserve.Close()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		cb := q.Get("redirect_uri") + "?code=c&state=" + url.QueryEscape(q.Get("state"))
+		http.Redirect(w, r, cb, http.StatusFound)
+	})
+	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":3600,"scope":%q}`, replacement, ScopeString(DefaultScopes))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	inner := NewMemoryStore()
+	if err := inner.Set("main", previous); err != nil {
+		t.Fatal(err)
+	}
+	store := &saveFailStore{MemoryStore: inner, dir: dir, armed: true}
+	var stderr strings.Builder
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	_, _, err = Login(ctx, LoginOptions{
+		Profile: "main", ClientID: "cid", RedirectURI: redirectURI, Scopes: DefaultScopes,
+		AuthorizeURL: srv.URL + "/oauth/authorize", TokenURL: srv.URL + "/oauth/token",
+		HTTPClient: srv.Client(), TokenStore: store,
+		SecretSource: SecretSource{Env: func(string) string { return "sec" }, IsTTY: func() bool { return false }, Stderr: io.Discard},
+		Stderr:       &stderr,
+		OpenURL: func(u string) error {
+			go func() {
+				c := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+				resp, err := c.Get(u)
+				if err != nil {
+					return
+				}
+				loc := resp.Header.Get("Location")
+				resp.Body.Close()
+				if r2, err := http.Get(loc); err == nil {
+					r2.Body.Close()
+				}
+			}()
+			return nil
+		},
+		CallbackWait: 5 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("save failure was ignored")
+	}
+	if strings.Contains(stderr.String(), previous) || strings.Contains(stderr.String(), replacement) {
+		t.Fatal("token was printed")
+	}
+	got, gerr := store.Get("main")
+	if gerr != nil || got != previous {
+		t.Fatal("previous token was not restored")
+	}
+}

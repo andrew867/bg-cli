@@ -501,6 +501,126 @@ func TestAuthLoginAltInheritsDeveloperApp(t *testing.T) {
 	}
 }
 
+func TestAuthLoginCreatesMissingProfileFromSharedApp(t *testing.T) {
+	const mainToken = "synthetic_main_client_token"
+	const altToken = "synthetic_alt_created_token"
+	const clientSecret = "synthetic-client-secret"
+
+	reserve, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	redirectURI := "http://" + reserve.Addr().String() + "/callback"
+	_ = reserve.Close()
+
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		OAuth:          config.OAuthApp{ClientID: "same-client", RedirectURI: redirectURI},
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias: "main", ClientID: "same-client", Scopes: auth.DefaultScopes,
+				RedirectURI: redirectURI, PS99UserID: "111", CredentialEpoch: "main-epoch",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store := auth.NewMemoryStore()
+	if err := store.Set("main", mainToken); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("client_id") != "same-client" || q.Get("redirect_uri") != redirectURI {
+			t.Errorf("app client %q redirect %q", q.Get("client_id"), q.Get("redirect_uri"))
+		}
+		cb := q.Get("redirect_uri") + "?code=" + url.QueryEscape("synthetic-auth-code") + "&state=" + url.QueryEscape(q.Get("state"))
+		http.Redirect(w, r, cb, http.StatusFound)
+	})
+	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":2592000,"scope":%q}`, altToken, auth.ScopeString(auth.DefaultScopes))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		HTTPClient:        srv.Client(),
+		BaseURL:           srv.URL,
+		OAuthAuthorizeURL: srv.URL + "/oauth/authorize",
+		OAuthTokenURL:     srv.URL + "/oauth/token",
+		Env: func(k string) string {
+			if k == auth.ClientSecretEnv {
+				return clientSecret
+			}
+			return ""
+		},
+		IsTTY: func() bool { return false },
+		OpenURL: func(u string) error {
+			go func() {
+				c := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+				resp, err := c.Get(u)
+				if err != nil {
+					return
+				}
+				loc := resp.Header.Get("Location")
+				resp.Body.Close()
+				if r2, err := http.Get(loc); err == nil {
+					r2.Body.Close()
+				}
+			}()
+			return nil
+		},
+		Now: func() time.Time { return time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC) },
+	}, []string{"auth", "login", "--profile", "alt1"})
+	if code != 0 {
+		t.Fatalf("login exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), mainToken) || strings.Contains(stdout.String()+stderr.String(), altToken) || strings.Contains(stdout.String()+stderr.String(), clientSecret) {
+		t.Fatal("token or client secret was printed")
+	}
+	gotMain, err := store.Get("main")
+	if err != nil || gotMain != mainToken {
+		t.Fatal("main token changed")
+	}
+	gotAlt, err := store.Get("alt1")
+	if err != nil || gotAlt != altToken {
+		t.Fatal("alt token was not stored on alt1")
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.DefaultProfile != "main" {
+		t.Fatalf("default profile %q", loaded.DefaultProfile)
+	}
+	main := loaded.Profiles["main"]
+	if main.PS99UserID != "111" || main.CredentialEpoch != "main-epoch" || main.ClientID != "same-client" {
+		t.Fatalf("main changed %+v", main)
+	}
+	alt, ok := loaded.Profiles["alt1"]
+	if !ok {
+		t.Fatal("profiles.alt1 was not created")
+	}
+	if alt.ClientID != "same-client" || alt.RedirectURI != redirectURI {
+		t.Fatalf("alt did not use the shared app %+v", alt)
+	}
+	if alt.CredentialEpoch == "" || alt.CredentialEpoch == "main-epoch" || strings.Contains(alt.CredentialEpoch, altToken) {
+		t.Fatalf("epoch %q", alt.CredentialEpoch)
+	}
+	if alt.PS99UserID != "" || alt.CredentialEpoch == main.CredentialEpoch {
+		t.Fatalf("alt copied main %+v", alt)
+	}
+	if _, err := store.Get("missing"); err == nil {
+		t.Fatal("unexpected token")
+	}
+}
+
 func mustRead(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)

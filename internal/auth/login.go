@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/zalando/go-keyring"
 
 	"github.com/andrew867/bg-cli/internal/config"
 	"github.com/andrew867/bg-cli/internal/redact"
@@ -214,19 +217,33 @@ func Login(ctx context.Context, opt LoginOptions) (LoginResult, *redact.Secrets,
 	if err != nil {
 		return LoginResult{}, secrets, err
 	}
+	previousToken, getErr := store.Get(target)
+	hadPrevious := getErr == nil
+	if getErr != nil && !errors.Is(getErr, keyring.ErrNotFound) {
+		return LoginResult{}, secrets, getErr
+	}
 	if err := store.Set(target, tr.AccessToken); err != nil {
 		return LoginResult{}, secrets, err
+	}
+	restoreToken := func() {
+		if hadPrevious {
+			_ = store.Set(target, previousToken)
+			previousToken = ""
+			return
+		}
+		_ = store.Delete(target)
 	}
 	makeDefault := cfg.DefaultProfile == "" || cfg.DefaultProfile == opt.Profile || cfg.DefaultProfile == target
 	config.RememberDeveloperApp(cfg, opt.ClientID, redirectURI)
 	if err := config.UpsertProfile(cfg, p, makeDefault); err != nil {
-		_ = store.Delete(target)
+		restoreToken()
 		return LoginResult{}, secrets, err
 	}
 	if err := config.Save(cfg); err != nil {
-		_ = store.Delete(target)
+		restoreToken()
 		return LoginResult{}, secrets, err
 	}
+	previousToken = ""
 
 	return LoginResult{
 		Profile:   target,

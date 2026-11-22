@@ -100,8 +100,21 @@ func TestResolveDeveloperAppInheritsDefaultProfile(t *testing.T) {
 		t.Fatalf("id %q uri %q", id, uri)
 	}
 	id, uri = ResolveDeveloperApp(cfg, "alt1", "flag-client", "")
-	if id != "flag-client" || uri != "http://127.0.0.1:8765/callback" {
-		t.Fatalf("flag lost: id %q uri %q", id, uri)
+	if id != "flag-client" || uri != "" {
+		t.Fatalf("one flag borrowed the other half of a pair: id %q uri %q", id, uri)
+	}
+}
+
+func TestResolveDeveloperAppUsesWholePair(t *testing.T) {
+	cfg := &File{
+		OAuth: OAuthApp{ClientID: "shared-client", RedirectURI: "http://127.0.0.1:9/callback"},
+		Profiles: map[string]Profile{
+			"alt1": {Alias: "alt1", ClientID: "partial-only"},
+		},
+	}
+	id, uri := ResolveDeveloperApp(cfg, "alt1", "", "")
+	if id != "shared-client" || uri != "http://127.0.0.1:9/callback" {
+		t.Fatalf("incomplete profile mixed with the app: id %q uri %q", id, uri)
 	}
 }
 

@@ -59,10 +59,12 @@ click does not continue earlier history. The token is not copied onto
 another alias. An alias is not renamed when a username changes, and it is
 not pointed at a different linked account.
 
-When --client-id or --redirect-uri is omitted, bg-cli uses the shared
-developer app: this profile, then oauth in config.json, then the default
-profile. Those values are not a player. A second alias does not need them
-typed again. The bearer is still stored only under the profile you named.
+When both --client-id and --redirect-uri are omitted, bg-cli uses the first
+complete shared developer app: this profile, then oauth in config.json, then
+the default profile. The named profile does not have to exist yet. Passing
+only one of those flags does not borrow the other half from an older app.
+Those values are not a player. The bearer is stored only under the profile
+you named, and that profile is created when it is new.
 
 After the code exchange, bg-cli reads GET /v1/account/profile with the new
 token. That official document does not include the Roblox user id or a
@@ -158,8 +160,8 @@ Auth commands do not support --output raw or --output csv.`,
 			return app.emit(env)
 		},
 	}
-	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID (non-secret; defaults to this profile, then the shared developer app)")
-	cmd.Flags().StringVar(&redirectURI, "redirect-uri", "", "exact registered loopback redirect URI (defaults to this profile, then the shared developer app)")
+	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID (non-secret). Pass with --redirect-uri, or omit both to use the shared developer app")
+	cmd.Flags().StringVar(&redirectURI, "redirect-uri", "", "exact registered loopback redirect URI. Pass with --client-id, or omit both to use the shared developer app")
 	cmd.Flags().StringVar(&scopesRaw, "scopes", "", "opt-out: request only these scopes (default: all seven account read scopes)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "print authorize URL instead of opening a browser")
 	return cmd

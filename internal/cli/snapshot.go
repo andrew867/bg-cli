@@ -44,8 +44,11 @@ GET /v1/account/* returns the Roblox account that authorized this profile's
 token. Another alias's token is not sent, including when the client id or
 the Roblox id matches. The snapshot stops before any file is written when
 this profile has no usable token. Log in that profile. File names keep the
-alias. History matches linkedAccountId, or ps99UserId when the linked id is
-absent. A different account is not used as a baseline.
+alias. History uses a provider-verified linkedAccountId when both snapshots
+have one. Otherwise a snapshot that has a credentialEpoch continues only
+that same epoch. Older summaries that both omit the epoch keep the previous
+identity rules. A different account is not used as a baseline.
+--user-id selects the battle contribution row and does not change ps99UserId.
 
 Every snapshot also writes summary.json. That file is the history record for
 clan points and currencies. Later snapshots read prior *-prefix-summary.json
@@ -101,7 +104,7 @@ Examples:
 	cmd.Flags().BoolVar(&allViews, "all-views", false, "capture all seven authenticated account views (includes trades/booth/mail)")
 	cmd.Flags().StringVar(&include, "include", "", "comma-separated views (inventory,profile,extendedProfile,itemIndex,trades,booth,mail) or all")
 	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag to read; otherwise taken from the profile, then config ps99ClanTag")
-	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (otherwise config ps99UserId; omitted when unset)")
+	cmd.Flags().StringVar(&userID, "user-id", "", "battle contribution and rank user id (default: this profile's ps99UserId; does not change the account id)")
 	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account (cannot be combined with --session-id)")
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
@@ -148,7 +151,7 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&allViews, "all-views", false, "capture all seven authenticated account views")
 	cmd.Flags().StringVar(&include, "include", "", "comma-separated views or all")
 	cmd.Flags().StringVar(&clanTag, "clan-tag", "", "clan tag to read; otherwise taken from the profile, then config ps99ClanTag")
-	cmd.Flags().StringVar(&userID, "user-id", "", "PS99 user id for battle contribution and rank (otherwise config ps99UserId; omitted when unset)")
+	cmd.Flags().StringVar(&userID, "user-id", "", "battle contribution and rank user id (default: this profile's ps99UserId; does not change the account id)")
 	cmd.Flags().BoolVar(&newSession, "new-session", false, "start a new delta session instead of continuing the latest one for this account (cannot be combined with --session-id)")
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "explicit delta session id; does not inherit the previous session (cannot be combined with --new-session)")
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")

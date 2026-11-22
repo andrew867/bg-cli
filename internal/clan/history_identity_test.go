@@ -127,6 +127,27 @@ func TestHistorySameEpochContinuesAndDifferentEpochDoesNot(t *testing.T) {
 	}
 }
 
+func TestHistoryContributionTargetDoesNotSplitAccount(t *testing.T) {
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	prior := Prior{
+		File: "old.json", ExportedAt: now.Add(-time.Minute), ExportedAtText: now.Add(-time.Minute).Format(time.RFC3339),
+		SessionID: "sess", PS99UserID: "111", UserID: "111", CredentialEpoch: "epoch-a", Profile: "main",
+		CurrenciesKnown: true, Currencies: map[string]string{"Diamonds": "1"},
+	}
+	sum := Build(Input{
+		Now: now, LocalStamp: "stamp", Prefix: "ps99", Profile: "main",
+		PS99UserID: "111", UserID: "999999", CredentialEpoch: "epoch-a", SessionID: "sess",
+		CurrenciesKnown: true, Currencies: map[string]CurrencyAmount{"Diamonds": {Amount: "1"}},
+		Priors: []Prior{prior},
+	})
+	if sum.PS99UserID != "111" || sum.UserID != "999999" {
+		t.Fatalf("owner %q contribution %q", sum.PS99UserID, sum.UserID)
+	}
+	if !sum.Windows.Previous.Valid {
+		t.Fatalf("contribution target split history: %s", sum.Windows.Previous.Reason)
+	}
+}
+
 func TestHistoryVerifiedLinkedAccountIgnoresEpoch(t *testing.T) {
 	a := HistoryIdentity{LinkedAccountID: "link-alt", PS99UserID: "222", CredentialEpoch: "old"}
 	b := HistoryIdentity{LinkedAccountID: "link-alt", PS99UserID: "222", CredentialEpoch: "new"}

@@ -23,7 +23,21 @@ type clanSnapState struct {
 }
 
 func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, prefix, profile string, now time.Time, man *snapshot.Manifest, st clanSnapState, currentInv json.RawMessage, opt snapshotOptions) (clan.Summary, []clan.Prior) {
-	userID, userOK := a.configuredPS99UserID(opt.UserID)
+	accountUserID := ""
+	linkedID := ""
+	credentialEpoch := ""
+	if meta, ok, err := a.profileMetadata(); err == nil && ok {
+		accountUserID = strings.TrimSpace(meta.PS99UserID)
+		linkedID = strings.TrimSpace(meta.LinkedAccountID)
+		credentialEpoch = strings.TrimSpace(meta.CredentialEpoch)
+	}
+	// --user-id selects the battle contribution row. It is not the account owner.
+	userID, userOK := clan.ResolveUserID(opt.UserID, accountUserID)
+	historyUserID := accountUserID
+	if historyUserID == "" {
+		// Older summaries stored the account id only in userId.
+		historyUserID = userID
+	}
 	var warnings []string
 	if !userOK {
 		msg := "player user id is not configured; contribution and rank omitted"
@@ -186,12 +200,6 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	for _, w := range scanned.Warnings {
 		a.notice("summary history: %s", w)
 	}
-	linkedID := ""
-	credentialEpoch := ""
-	if meta, ok, err := a.profileMetadata(); err == nil && ok {
-		linkedID = strings.TrimSpace(meta.LinkedAccountID)
-		credentialEpoch = strings.TrimSpace(meta.CredentialEpoch)
-	}
 	sessionID := opt.SessionID
 	switch {
 	case sessionID != "":
@@ -203,7 +211,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	default:
 		sessionID = clan.MatchingSession(scanned.Priors, clan.HistoryIdentity{
 			LinkedAccountID: linkedID,
-			PS99UserID:      userID,
+			PS99UserID:      historyUserID,
 			CredentialEpoch: credentialEpoch,
 			LegacyAccountID: accountID,
 			Profile:         profile,
@@ -236,7 +244,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		AccountID:       accountID,
 		LinkedAccountID: linkedID,
 		UserID:          userID,
-		PS99UserID:      userID,
+		PS99UserID:      accountUserID,
 		CredentialEpoch: credentialEpoch,
 		SessionID:       sessionID,
 		Currencies:      currencies,
@@ -276,6 +284,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	}
 	if sum.PS99UserID != "" {
 		man.Summary["ps99UserId"] = sum.PS99UserID
+		man.PS99UserID = sum.PS99UserID
 	}
 	if sum.CredentialEpoch != "" {
 		man.Summary["credentialEpoch"] = sum.CredentialEpoch

@@ -144,9 +144,8 @@ func (p Prior) historyIdentity() HistoryIdentity {
 		Profile:         p.Profile,
 	}
 	if ps99 == "" {
+		// Older summaries stored the account id only in userId.
 		id.PS99UserID = user
-	} else if user != "" && user != ps99 {
-		id.Conflict = true
 	}
 	return id
 }
@@ -162,9 +161,8 @@ func (in Input) historyIdentity() HistoryIdentity {
 		Profile:         in.Profile,
 	}
 	if ps99 == "" {
+		// Older summaries stored the account id only in userId.
 		id.PS99UserID = user
-	} else if user != "" && user != ps99 {
-		id.Conflict = true
 	}
 	return id
 }

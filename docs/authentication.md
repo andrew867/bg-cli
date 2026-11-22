@@ -100,7 +100,7 @@ bg-cli auth profile unset --profile main --clan-tag
 }
 ```
 
-`ps99UserId` is the PS99 user id used for battle contribution and rank. `--user-id` overrides it. `ps99ClanTag` is the clan tag for `GET /api/clan/{tag}`. `clan show` uses `--tag`, then the stored tag, and only then the account documents. A stored tag does not require an access token. `account snapshot` still prefers a tag on the profile or extended profile, then `ps99ClanTag`. `--clan-tag` overrides that snapshot order. `auth status` prints the three fields.
+`ps99UserId` is the account's PS99 user id. Snapshot history and `summary.ps99UserId` use that stored id. `--user-id` selects the battle contribution and rank row for one snapshot and does not replace `ps99UserId`. When the flag is omitted, contribution uses the stored id. `ps99ClanTag` is the clan tag for `GET /api/clan/{tag}`. `clan show` uses `--tag`, then the stored tag, and only then the account documents. A stored tag does not require an access token. `account snapshot` still prefers a tag on the profile or extended profile, then `ps99ClanTag`. `--clan-tag` overrides that snapshot order. `auth status` prints the three fields.
 
 ## Multiple accounts
 
@@ -125,7 +125,7 @@ Authorize the other Roblox account with a normal login. The consent screen selec
 bg-cli auth login --profile alt1
 ```
 
-`--client-id` and `--redirect-uri` can be omitted when they are already on that profile, on the shared `oauth` object, or on the default profile. Omitting them does not copy another profile's access token.
+`--client-id` and `--redirect-uri` can both be omitted when a complete pair is already on that profile, on the shared `oauth` object, or on the default profile. The profile named by `--profile` is created if it does not exist yet. Passing only one of the two flags does not pair a new client with an older redirect. Omitting them does not copy another profile's access token.
 
 After the code exchange, bg-cli reads `GET /v1/account/profile` with the new token. The documented profile does not include a Roblox user id or a BIG Games linked-account id, so automatic discovery of linked accounts is unfinished. If a response positively includes `linkedAccountId` or a user id, bg-cli fills an empty field or matches an existing alias. It does not rename an alias when the username changes, does not point an alias at a different linked account, and does not delete a profile that was not in the response. If the returned identity disagrees with the alias, login stops and stores nothing.
 

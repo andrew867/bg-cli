@@ -208,33 +208,35 @@ func BindAccount(f *File, alias string) (Profile, []string, bool) {
 }
 
 // ResolveDeveloperApp fills the non-secret client id and redirect URI for a
-// login. Explicit flags win, then the named profile, then the shared oauth
-// app, then the default profile. It does not return an access token.
+// login. An explicit value for either side is returned as given and is not
+// completed from a different application. When both are empty, the first
+// complete pair wins: the named profile, then the shared oauth app, then
+// the default profile. It does not return an access token.
 func ResolveDeveloperApp(cfg *File, profile, clientID, redirectURI string) (string, string) {
 	clientID = strings.TrimSpace(clientID)
 	redirectURI = strings.TrimSpace(redirectURI)
-	if cfg == nil {
+	if clientID != "" || redirectURI != "" || cfg == nil {
 		return clientID, redirectURI
 	}
-	fill := func(id, uri string) {
-		if clientID == "" {
-			clientID = strings.TrimSpace(id)
-		}
-		if redirectURI == "" {
-			redirectURI = strings.TrimSpace(uri)
-		}
-	}
+	var pairs []OAuthApp
 	if p, ok := cfg.Profiles[profile]; ok {
-		fill(p.ClientID, p.RedirectURI)
+		pairs = append(pairs, OAuthApp{ClientID: p.ClientID, RedirectURI: p.RedirectURI})
 	}
-	fill(cfg.OAuth.ClientID, cfg.OAuth.RedirectURI)
+	pairs = append(pairs, cfg.OAuth)
 	def := strings.TrimSpace(cfg.DefaultProfile)
 	if def != "" && def != profile {
 		if p, ok := cfg.Profiles[def]; ok {
-			fill(p.ClientID, p.RedirectURI)
+			pairs = append(pairs, OAuthApp{ClientID: p.ClientID, RedirectURI: p.RedirectURI})
 		}
 	}
-	return clientID, redirectURI
+	for _, pair := range pairs {
+		id := strings.TrimSpace(pair.ClientID)
+		uri := strings.TrimSpace(pair.RedirectURI)
+		if id != "" && uri != "" {
+			return id, uri
+		}
+	}
+	return "", ""
 }
 
 // RememberDeveloperApp stores the application used by a successful login.

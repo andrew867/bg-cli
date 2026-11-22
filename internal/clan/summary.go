@@ -239,9 +239,6 @@ func Build(in Input) Summary {
 	}
 	user := strings.TrimSpace(in.UserID)
 	ps99 := strings.TrimSpace(in.PS99UserID)
-	if ps99 == "" {
-		ps99 = user
-	}
 	nowText := in.Now.Format(time.RFC3339)
 	sum := Summary{
 		SchemaVersion:   SchemaVersion,
