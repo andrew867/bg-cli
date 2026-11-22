@@ -22,7 +22,10 @@ func newAuthCmd(app *App) *cobra.Command {
 		Long: `Authorize Roblox accounts through the official BIG Games OAuth flow.
 
 One access token reads only the account that approved consent. Authorize each
-account under a distinct --profile alias.
+Roblox account under a distinct --profile alias. Another alias with the same
+clientId reuses that keyring token; a different Roblox id does not require a
+second login. Omitted scopes, expiry, and redirect URI come from the profile
+that already has them.
 
 auth logout removes the local token only. To revoke server-side access, open
 Connected apps in the BIG Games account dashboard.`,
@@ -162,16 +165,14 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 			if profile == "" {
 				return writeAuthError(app, "auth status", exitcode.AuthRequired, "not_logged_in", "no profile configured; run auth login")
 			}
-			p, ok := config.Get(cfg, profile)
+			p, aliases, ok := config.BindAccount(cfg, profile)
 			if !ok {
 				return writeAuthError(app, "auth status", exitcode.AuthRequired, "not_logged_in", fmt.Sprintf("profile %q not found", profile))
 			}
 
-			store := app.tokenStore()
-			_, tokErr := store.Get(profile)
+			_, credentialProfile, tokErr := app.tokenFromAliases(aliases)
 			hasToken := tokErr == nil
-			if tokErr != nil && !strings.Contains(tokErr.Error(), "not found") && tokErr.Error() != "secret not found in keyring" {
-				// zalando returns keyring.ErrNotFound
+			if tokErr != nil && !tokenMissing(tokErr) {
 				if strings.Contains(strings.ToLower(tokErr.Error()), "credential store") {
 					return writeAuthError(app, "auth status", exitcode.CredentialStore, "credential_store", tokErr.Error())
 				}
@@ -195,17 +196,18 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 			}
 
 			data := map[string]any{
-				"profile":      p.Alias,
-				"clientId":     p.ClientID,
-				"scopes":       p.Scopes,
-				"issuedAt":     p.IssuedAt.UTC().Format(time.RFC3339),
-				"expiresAt":    p.ExpiresAt.UTC().Format(time.RFC3339),
-				"tokenPresent": hasToken,
-				"expired":      time.Now().UTC().After(p.ExpiresAt),
-				"redirectUri":  p.RedirectURI,
-				"accountId":    p.AccountID,
-				"ps99UserId":   p.PS99UserID,
-				"ps99ClanTag":  p.PS99ClanTag,
+				"profile":           p.Alias,
+				"clientId":          p.ClientID,
+				"scopes":            p.Scopes,
+				"issuedAt":          p.IssuedAt.UTC().Format(time.RFC3339),
+				"expiresAt":         p.ExpiresAt.UTC().Format(time.RFC3339),
+				"tokenPresent":      hasToken,
+				"expired":           time.Now().UTC().After(p.ExpiresAt),
+				"redirectUri":       p.RedirectURI,
+				"accountId":         p.AccountID,
+				"ps99UserId":        p.PS99UserID,
+				"ps99ClanTag":       p.PS99ClanTag,
+				"credentialProfile": credentialProfile,
 			}
 			return app.emit(output.NewSuccess("auth status", nil, output.DefaultFreshnessNull(), data))
 		},

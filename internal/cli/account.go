@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -26,7 +27,10 @@ func newAccountCmd(app *App) *cobra.Command {
 		Short: "Read private account data for the authorizing profile",
 		Long: `Account commands call official GET /v1/account/* endpoints using the access
 token stored for --profile. One token reads only the Roblox account that
-authorized that profile. Data is a cached snapshot, not real time.
+authorized that profile. A second local alias with the same clientId uses
+that existing keyring token even when its Roblox id differs. Omitted scopes,
+expiry, and redirect URI come from the profile that logged in. Data is a
+cached snapshot, not real time.
 
 This client is unofficial and not endorsed by BIG Games.`,
 	}
@@ -85,7 +89,7 @@ func (a *App) resolveProfileToken(requiredScope string) (config.Profile, string,
 	if alias == "" {
 		return config.Profile{}, "", secrets, &ExitError{Code: exitcode.AuthRequired, Msg: "not logged in; run auth login"}
 	}
-	p, ok := config.Get(cfg, alias)
+	p, aliases, ok := config.BindAccount(cfg, alias)
 	if !ok {
 		return config.Profile{}, "", secrets, &ExitError{Code: exitcode.AuthRequired, Msg: fmt.Sprintf("profile %q not found; run auth login", alias)}
 	}
@@ -95,15 +99,46 @@ func (a *App) resolveProfileToken(requiredScope string) (config.Profile, string,
 			Msg:  fmt.Sprintf("profile %q missing scope %s; run auth login again (defaults to all account scopes)", alias, requiredScope),
 		}
 	}
-	tok, err := a.tokenStore().Get(alias)
+	tok, _, err := a.tokenFromAliases(aliases)
 	if err != nil {
-		if err == keyring.ErrNotFound || strings.Contains(strings.ToLower(err.Error()), "not found") {
+		if tokenMissing(err) {
 			return p, "", secrets, &ExitError{Code: exitcode.AuthRequired, Msg: fmt.Sprintf("no access token for profile %q; run auth login", alias)}
 		}
 		return p, "", secrets, &ExitError{Code: exitcode.CredentialStore, Msg: err.Error()}
 	}
 	secrets.Add(tok)
 	return p, tok, secrets, nil
+}
+
+// tokenFromAliases returns the first keyring token among aliases. The first
+// alias is the requested profile; later aliases share its OAuth client.
+func (a *App) tokenFromAliases(aliases []string) (token, from string, err error) {
+	var last error
+	for _, alias := range aliases {
+		tok, getErr := a.tokenStore().Get(alias)
+		if getErr == nil {
+			return tok, alias, nil
+		}
+		if !tokenMissing(getErr) {
+			return "", "", getErr
+		}
+		last = getErr
+	}
+	if last == nil {
+		last = keyring.ErrNotFound
+	}
+	return "", "", last
+}
+
+func tokenMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, keyring.ErrNotFound) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found")
 }
 
 func containsScope(scopes []string, want string) bool {

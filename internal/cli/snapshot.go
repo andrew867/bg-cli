@@ -14,6 +14,7 @@ import (
 
 	"github.com/andrew867/bg-cli/internal/api"
 	"github.com/andrew867/bg-cli/internal/clan"
+	"github.com/andrew867/bg-cli/internal/config"
 	"github.com/andrew867/bg-cli/internal/exitcode"
 	"github.com/andrew867/bg-cli/internal/jsonutil"
 	"github.com/andrew867/bg-cli/internal/output"
@@ -33,6 +34,10 @@ trades, booth, mail). --refresh applies to at most the first requested view;
 remaining views read the server-side cache.
 
 Same-second collisions get a -0002 style suffix. Use snapshot diff / validate offline.
+
+When config.json has more than one profile, default file names include that
+profile alias, for example 2026-11-22-120000-alt1-ps99-inv.json. One profile
+keeps the current names. --zip-path is used exactly as given.
 
 Every snapshot also writes summary.json. That file is the history record for
 clan points and currencies. Later snapshots read prior *-prefix-summary.json
@@ -94,7 +99,7 @@ Examples:
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
 	cmd.Flags().BoolVar(&zip, "zip", true, "write a ZIP of this snapshot's manifest artifacts (default; no tokens or config)")
 	cmd.Flags().BoolVar(&noZip, "no-zip", false, "do not write the snapshot ZIP")
-	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
+	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip, or <stamp>-<profile>-<prefix>.zip when more than one profile is configured)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "show full inventory changes, diagnostics, and absolute paths")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the machine-readable JSON summary on stdout")
@@ -141,7 +146,7 @@ func newAccountSnapshotExportCmd(app *App) *cobra.Command {
 	cmd.Flags().BoolVar(&requireClan, "require-clan", false, "fail the snapshot when clan or active-battle telemetry cannot be read")
 	cmd.Flags().BoolVar(&zip, "zip", true, "write a ZIP of this snapshot's manifest artifacts (default; no tokens or config)")
 	cmd.Flags().BoolVar(&noZip, "no-zip", false, "do not write the snapshot ZIP")
-	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip in --dir)")
+	cmd.Flags().StringVar(&zipPath, "zip-path", "", "ZIP destination; refuses to replace an existing file (default: <stamp>-<prefix>.zip, or <stamp>-<profile>-<prefix>.zip when more than one profile is configured)")
 	cmd.Flags().BoolVar(&showAll, "show-all-currencies", false, "list every currency in the human summary; JSON and CSV always keep the full set")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "show full inventory changes, diagnostics, and absolute paths")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the machine-readable JSON summary on stdout")
@@ -193,6 +198,9 @@ type snapshotOptions struct {
 	ShowAllCurrencies bool
 	Verbose           bool
 	MachineJSON       bool
+	// FileProfile is inserted into default snapshot file names when the
+	// config has more than one profile. Empty keeps the single-profile names.
+	FileProfile string
 }
 
 func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error {
@@ -228,18 +236,29 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		return &ExitError{Code: exitcode.Usage, Msg: fmt.Sprintf("create output dir: %v", err)}
 	}
 
-	now := a.nowLocal()
-	baseStamp := now.Format("2006-01-02-150405")
-	stamp, collision, err := snapshot.AllocateStamp(absDir, baseStamp, opt.Prefix)
+	cfg, err := config.Load()
 	if err != nil {
 		return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
 	}
-
-	profileAlias := a.Flags.Profile
+	profileAlias := strings.TrimSpace(a.Flags.Profile)
 	if profileAlias == "" {
-		if p, _, _, err := a.resolveProfileToken(""); err == nil {
-			profileAlias = p.Alias
+		profileAlias = strings.TrimSpace(cfg.DefaultProfile)
+	}
+	if profileAlias == "" {
+		profileAlias = config.DefaultProfile
+	}
+	if len(cfg.Profiles) > 1 {
+		if err := config.ValidateAlias(profileAlias); err != nil {
+			return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
 		}
+		opt.FileProfile = profileAlias
+	}
+
+	now := a.nowLocal()
+	baseStamp := now.Format("2006-01-02-150405")
+	stamp, collision, err := snapshot.AllocateNamedStamp(absDir, baseStamp, opt.Prefix, opt.FileProfile)
+	if err != nil {
+		return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
 	}
 
 	views, err := snapshot.ParseIncludeViews(opt.Include, opt.AllViews)
@@ -288,8 +307,8 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		switch view {
 		case "inventory":
 			invEnv, invBuilt, invErr := a.snapshotInventory(ctx, viewOpt)
-			invJSONName := snapshot.FileName(stamp, collision, opt.Prefix, "inv.json")
-			invCSVName := snapshot.FileName(stamp, collision, opt.Prefix, "inventory.csv")
+			invJSONName := opt.artifact(stamp, collision, "inv.json")
+			invCSVName := opt.artifact(stamp, collision, "inventory.csv")
 			if invErr != nil {
 				man.OK = false
 				a.notice("inventory fetch failed: %v", invErr)
@@ -335,8 +354,8 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		case "profile":
 			clanState.ProfileFetched = true
 			profEnv, profData, curMap, profErr := a.snapshotProfile(ctx, viewOpt)
-			profName := snapshot.FileName(stamp, collision, opt.Prefix, "prof.json")
-			curName := snapshot.FileName(stamp, collision, opt.Prefix, "currencies.csv")
+			profName := opt.artifact(stamp, collision, "prof.json")
+			curName := opt.artifact(stamp, collision, "currencies.csv")
 			if profErr != nil {
 				man.OK = false
 				a.notice("profile fetch failed: %v", profErr)
@@ -375,7 +394,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		case "extendedProfile":
 			clanState.ExtendedFetched = true
 			extEnv, extErr := a.snapshotExtended(ctx, viewOpt)
-			extName := snapshot.FileName(stamp, collision, opt.Prefix, snapshot.SuffixForView(view))
+			extName := opt.artifact(stamp, collision, snapshot.SuffixForView(view))
 			if extErr != nil {
 				man.OK = false
 				a.notice("extended-profile fetch failed: %v", extErr)
@@ -397,7 +416,7 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 			}
 		default:
 			env, ferr := a.snapshotGenericView(ctx, view, viewOpt)
-			name := snapshot.FileName(stamp, collision, opt.Prefix, snapshot.SuffixForView(view))
+			name := opt.artifact(stamp, collision, snapshot.SuffixForView(view))
 			kind := snapshot.KindForView(view)
 			if ferr != nil {
 				man.OK = false
@@ -417,9 +436,9 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	}
 
 	sum, priors := a.attachClanSnapshot(ctx, absDir, stamp, collision, opt.Prefix, profileAlias, now, &man, clanState, currentInventory, opt)
-	diff := a.writeInventoryDiff(absDir, stamp, collision, opt.Prefix, &man, sum, currentInventory)
+	diff := a.writeInventoryDiff(absDir, stamp, collision, opt.Prefix, opt.FileProfile, &man, sum, currentInventory)
 
-	manName := snapshot.FileName(stamp, collision, opt.Prefix, "manifest.json")
+	manName := opt.artifact(stamp, collision, "manifest.json")
 	man.ManifestFile = manName
 	// Write manifest once — no self size/digest entry.
 	manPath := filepath.Join(absDir, manName)
@@ -443,6 +462,10 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 	a.notice("snapshot export complete (%s)", manName)
 
 	return a.presentSnapshot(man, sum, priors, opt, absDir, manName, diff)
+}
+
+func (opt snapshotOptions) artifact(stamp, collision, suffix string) string {
+	return snapshot.ProfileFileName(stamp, collision, opt.FileProfile, opt.Prefix, suffix)
 }
 
 func snapshotWantsZip(cmd *cobra.Command, zip, noZip bool, zipPath string) (bool, error) {

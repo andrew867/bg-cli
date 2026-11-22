@@ -108,4 +108,36 @@ bg-cli account inventory --profile main
 bg-cli account inventory --profile alt1
 ```
 
-One token never grants private access to another player.
+One token never grants private access to another Roblox player. A second login is how you authorize a different player.
+
+## Same OAuth client, second alias
+
+The keyring entry belongs to the OAuth client (`clientId`), not to the Roblox id. You can add another profile in `config.json` for a different Roblox id without a second login and without pasting a token when that profile uses the same `clientId` as a profile that already logged in.
+
+`alt1` below omits scopes, expiry, and `redirectUri`. bg-cli uses the values already stored on `main`, including that callback. `accountId` and `ps99UserId` stay the values written on `alt1`.
+
+```json
+{
+  "defaultProfile": "main",
+  "profiles": {
+    "main": {
+      "alias": "main",
+      "clientId": "YOUR_CLIENT_ID",
+      "redirectUri": "http://127.0.0.1:8765/callback",
+      "accountId": "111",
+      "ps99UserId": "111"
+    },
+    "alt1": {
+      "alias": "alt1",
+      "clientId": "YOUR_CLIENT_ID",
+      "accountId": "222",
+      "ps99UserId": "222",
+      "ps99ClanTag": "OTHERTAG"
+    }
+  }
+}
+```
+
+Account commands for `alt1` send the token stored for that client. `auth status` reports `credentialProfile` as the alias that holds the keyring entry. Logging out only `alt1` removes that alias and leaves the token in place. Logging out the alias that holds the token removes the shared credential.
+
+A different `clientId` does not receive this token. Authorize that client with `auth login`. Do not put the access token or client secret in `config.json`.

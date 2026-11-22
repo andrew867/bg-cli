@@ -41,36 +41,63 @@ var PayloadKinds = []string{
 	"snapshot-summary",
 }
 
-// FileName builds "{stamp}-{prefix}-{suffix}" or "{stamp}-{suffixPart}-{prefix}-{suffix}" with collision.
+// FileName builds "{stamp}-{prefix}-{suffix}" or "{stamp}-{collision}-{prefix}-{suffix}".
 func FileName(stamp, collision, prefix, suffix string) string {
-	if collision == "" {
-		return stamp + "-" + prefix + "-" + suffix
+	return ProfileFileName(stamp, collision, "", prefix, suffix)
+}
+
+// ProfileFileName builds the snapshot file name. An empty profile keeps the
+// single-profile shape from FileName. A profile inserts that alias before the
+// prefix: "{stamp}-{profile}-{prefix}-{suffix}", with a collision suffix
+// before the profile when one was allocated.
+func ProfileFileName(stamp, collision, profile, prefix, suffix string) string {
+	profile = strings.TrimSpace(profile)
+	if profile == "" {
+		if collision == "" {
+			return stamp + "-" + prefix + "-" + suffix
+		}
+		return stamp + "-" + collision + "-" + prefix + "-" + suffix
 	}
-	return stamp + "-" + collision + "-" + prefix + "-" + suffix
+	if collision == "" {
+		return stamp + "-" + profile + "-" + prefix + "-" + suffix
+	}
+	return stamp + "-" + collision + "-" + profile + "-" + prefix + "-" + suffix
 }
 
 // AllocateStamp finds a local stamp (+ optional collision suffix) that does not
 // collide with any existing completed payload or manifest in dir.
 func AllocateStamp(dir, stamp, prefix string) (fullStamp string, collision string, err error) {
+	return AllocateNamedStamp(dir, stamp, prefix, "")
+}
+
+// AllocateNamedStamp is AllocateStamp for the multi-profile file name.
+// profile is empty when the config has a single profile.
+func AllocateNamedStamp(dir, stamp, prefix, profile string) (fullStamp string, collision string, err error) {
 	if err := ValidatePrefix(prefix); err != nil {
 		return "", "", err
+	}
+	profile = strings.TrimSpace(profile)
+	if profile != "" {
+		if strings.ContainsAny(profile, `/\`) || strings.Contains(profile, "..") || !prefixRE.MatchString(profile) {
+			return "", "", fmt.Errorf("profile %q cannot be used in a file name", profile)
+		}
 	}
 	for i := 0; i <= 9999; i++ {
 		coll := ""
 		if i > 0 {
 			coll = fmt.Sprintf("%04d", i)
 		}
-		manifestName := FileName(stamp, coll, prefix, "manifest.json")
+		manifestName := ProfileFileName(stamp, coll, profile, prefix, "manifest.json")
 		names := []string{
-			FileName(stamp, coll, prefix, "inv.json"),
-			FileName(stamp, coll, prefix, "prof.json"),
-			FileName(stamp, coll, prefix, "extprof.json"),
-			FileName(stamp, coll, prefix, "inventory.csv"),
-			FileName(stamp, coll, prefix, "currencies.csv"),
-			FileName(stamp, coll, prefix, "clan.json"),
-			FileName(stamp, coll, prefix, "clanbattle.json"),
-			FileName(stamp, coll, prefix, "summary.json"),
-			FileName(stamp, coll, prefix, "inventory-diff.json"),
+			ProfileFileName(stamp, coll, profile, prefix, "inv.json"),
+			ProfileFileName(stamp, coll, profile, prefix, "prof.json"),
+			ProfileFileName(stamp, coll, profile, prefix, "extprof.json"),
+			ProfileFileName(stamp, coll, profile, prefix, "inventory.csv"),
+			ProfileFileName(stamp, coll, profile, prefix, "currencies.csv"),
+			ProfileFileName(stamp, coll, profile, prefix, "clan.json"),
+			ProfileFileName(stamp, coll, profile, prefix, "clanbattle.json"),
+			ProfileFileName(stamp, coll, profile, prefix, "summary.json"),
+			ProfileFileName(stamp, coll, profile, prefix, "inventory-diff.json"),
 			manifestName,
 			strings.TrimSuffix(manifestName, "-manifest.json") + ".zip",
 		}
