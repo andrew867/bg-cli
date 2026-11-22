@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Fixed
 
-- (none)
+- A profile added in `config.json` can use the existing OS keyring token when its `clientId` matches a profile that already logged in. A different Roblox id (`accountId` or `ps99UserId`) does not block that. Omitted scopes, expiry, and `redirectUri` come from the logged-in profile, including the callback `main` already uses. The token stays in the OS credential store.
+
+### Changed
+
+- With more than one profile in `config.json`, default `account snapshot` and `account snapshot export` file names include the profile alias. A single profile keeps the previous names. `--zip-path` is not rewritten.
 
 ## [0.2.6] - 2026-11-19
 

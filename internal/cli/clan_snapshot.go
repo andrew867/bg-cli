@@ -70,7 +70,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			clanErr = err
 			a.notice("clan tag rejected: %v", err)
 		} else {
-			clanName := snapshot.FileName(stamp, collision, prefix, "clan.json")
+			clanName := snapshot.ProfileFileName(stamp, collision, opt.FileProfile, prefix, "clan.json")
 			clanPath := "/api/clan/" + url.PathEscape(tag)
 			pr, err := a.getPublicFresh(ctx, clanPath, nil, api.BodyLimitDefault)
 			switch {
@@ -125,7 +125,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		telemetry["clan"] = "ok"
 	}
 
-	battleName := snapshot.FileName(stamp, collision, prefix, "clanbattle.json")
+	battleName := snapshot.ProfileFileName(stamp, collision, opt.FileProfile, prefix, "clanbattle.json")
 	var battleRaw json.RawMessage
 	battleFetched := false
 	var battleErr error
@@ -176,7 +176,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		}
 	}
 
-	sumName := snapshot.FileName(stamp, collision, prefix, "summary.json")
+	sumName := snapshot.ProfileFileName(stamp, collision, opt.FileProfile, prefix, "summary.json")
 	scanned, scanErr := clan.Scan(absDir, prefix, now, sumName)
 	warnings = append(warnings, scanned.Warnings...)
 	if scanErr != nil {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/andrew867/bg-cli/internal/auth"
+	"github.com/andrew867/bg-cli/internal/config"
 	"github.com/andrew867/bg-cli/internal/exitcode"
 	"github.com/andrew867/bg-cli/internal/output"
 	"github.com/andrew867/bg-cli/internal/snapshot"
@@ -512,6 +513,118 @@ func TestAccountSnapshotNoZip(t *testing.T) {
 	code = Execute(deps, []string{"account", "snapshot", "--zip", "--no-zip", "--dir", t.TempDir()})
 	if code != exitcode.Usage {
 		t.Fatalf("both flags exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestSnapshotFileNamesFollowProfileCount(t *testing.T) {
+	store := auth.NewMemoryStore()
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	save := func(profiles map[string]config.Profile) {
+		t.Helper()
+		cfg := &config.File{DefaultProfile: "main", Profiles: profiles}
+		if err := config.Save(cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mainProfile := config.Profile{
+		Alias: "main", ClientID: "same-client", Scopes: auth.DefaultScopes,
+		IssuedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), ExpiresAt: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+		RedirectURI: "http://127.0.0.1:8765/callback", AccountID: "111", PS99UserID: "111",
+	}
+	altProfile := config.Profile{
+		Alias: "alt1", ClientID: "same-client", AccountID: "222", PS99UserID: "222",
+	}
+	if err := store.Set("main", "synthetic_main_client_token"); err != nil {
+		t.Fatal(err)
+	}
+	invBody, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-inventory-ok.json"))
+	profBody, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-profile-ok.json"))
+	extBody, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-extended-profile-ok.json"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/inventory":
+			_, _ = w.Write(invBody)
+		case "/v1/account/profile":
+			_, _ = w.Write(profBody)
+		case "/v1/account/extendedProfile":
+			_, _ = w.Write(extBody)
+		case "/api/activeClanBattle":
+			_, _ = w.Write(inactiveClanBattleBody)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer srv.Close()
+	fixed := time.Date(2026, 11, 6, 15, 45, 30, 0, time.UTC)
+	stamp := fixed.In(time.Local).Format("2006-01-02-150405")
+
+	save(map[string]config.Profile{"main": mainProfile})
+	singleDir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Clock: output.FixedClock{T: fixed}, IsTTY: func() bool { return true },
+	}, []string{"account", "snapshot", "--profile", "main", "--dir", singleDir, "--prefix", "ps99", "--no-zip"})
+	if code != 0 {
+		t.Fatalf("single exit %d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(singleDir, stamp+"-ps99-manifest.json")); err != nil {
+		t.Fatalf("single-profile manifest: %v names=%v", err, listNames(t, singleDir))
+	}
+	for _, name := range listNames(t, singleDir) {
+		if strings.Contains(name, "-main-ps99-") {
+			t.Fatalf("single profile renamed %s", name)
+		}
+	}
+
+	save(map[string]config.Profile{"main": mainProfile, "alt1": altProfile})
+	multiDir := t.TempDir()
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Clock: output.FixedClock{T: fixed}, IsTTY: func() bool { return true },
+	}, []string{"account", "snapshot", "export", "--profile", "alt1", "--dir", multiDir, "--prefix", "ps99"})
+	if code != 0 {
+		t.Fatalf("multi exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	for _, suffix := range []string{"manifest.json", "inv.json", "summary.json", "inventory-diff.json", "zip"} {
+		name := stamp + "-alt1-ps99-" + suffix
+		if suffix == "zip" {
+			name = stamp + "-alt1-ps99.zip"
+		}
+		if _, err := os.Stat(filepath.Join(multiDir, name)); err != nil {
+			t.Fatalf("missing %s: %v names=%v", name, err, listNames(t, multiDir))
+		}
+	}
+	if _, err := os.Stat(filepath.Join(multiDir, stamp+"-ps99-manifest.json")); !os.IsNotExist(err) {
+		t.Fatal("multi-profile snapshot used the single-profile manifest name")
+	}
+
+	explicitDir := t.TempDir()
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Clock: output.FixedClock{T: fixed}, IsTTY: func() bool { return true },
+	}, []string{"account", "snapshot", "--profile", "main", "--dir", explicitDir, "--prefix", "ps99", "--zip-path", "kept-name.zip"})
+	if code != 0 {
+		t.Fatalf("zip-path exit %d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(explicitDir, "kept-name.zip")); err != nil {
+		t.Fatalf("explicit zip path: %v names=%v", err, listNames(t, explicitDir))
+	}
+	if _, err := os.Stat(filepath.Join(explicitDir, stamp+"-main-ps99-manifest.json")); err != nil {
+		t.Fatalf("explicit zip still renames snapshot files: %v", err)
+	}
+	for _, name := range listNames(t, explicitDir) {
+		if strings.Contains(name, "kept-name") && name != "kept-name.zip" {
+			t.Fatalf("explicit zip path was rewritten: %s", name)
+		}
 	}
 }
 

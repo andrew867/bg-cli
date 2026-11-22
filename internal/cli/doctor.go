@@ -82,10 +82,18 @@ and does not call the network.`,
 					"defaultProfile": cfg.DefaultProfile,
 					"profileCount":   len(cfg.Profiles),
 				})
-				for _, p := range cfg.Profiles {
+				for _, raw := range cfg.Profiles {
+					alias := raw.Alias
+					p, credAliases, bound := config.BindAccount(cfg, alias)
+					if !bound {
+						p = raw
+						credAliases = []string{alias}
+					}
 					tokPresent := false
-					if _, err := store.Get(p.Alias); err == nil {
+					credentialProfile := ""
+					if _, from, err := app.tokenFromAliases(credAliases); err == nil {
 						tokPresent = true
+						credentialProfile = from
 					}
 					missing := missingFrom(auth.DefaultScopes, p.Scopes)
 					expired := time.Now().UTC().After(p.ExpiresAt)
@@ -93,6 +101,7 @@ and does not call the network.`,
 						"alias":                p.Alias,
 						"clientId":             p.ClientID,
 						"tokenPresent":         tokPresent,
+						"credentialProfile":    credentialProfile,
 						"expired":              expired,
 						"expiresAt":            p.ExpiresAt.UTC().Format(time.RFC3339),
 						"grantedScopes":        p.Scopes,

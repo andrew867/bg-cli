@@ -10,14 +10,14 @@ import (
 	"github.com/andrew867/bg-cli/internal/snapshot"
 )
 
-func (a *App) writeInventoryDiff(absDir, stamp, collision, prefix string, man *snapshot.Manifest, sum clan.Summary, currentInv json.RawMessage) *snapshot.InventoryDiff {
+func (a *App) writeInventoryDiff(absDir, stamp, collision, prefix, fileProfile string, man *snapshot.Manifest, sum clan.Summary, currentInv json.RawMessage) *snapshot.InventoryDiff {
 	opt := snapshot.InventoryDiffOptions{
 		CurrentAt:     sum.ExportedAt,
 		CurStats:      sum.Current.Statistics,
 		CurStatsKnown: sum.Current.StatisticsKnown,
 	}
 	if len(currentInv) > 0 {
-		opt.CurrentFile = snapshot.FileName(stamp, collision, prefix, "inv.json")
+		opt.CurrentFile = snapshot.ProfileFileName(stamp, collision, fileProfile, prefix, "inv.json")
 	}
 	var prev json.RawMessage
 	win := sum.Windows.Previous
@@ -54,7 +54,7 @@ func (a *App) writeInventoryDiff(absDir, stamp, collision, prefix string, man *s
 	if diff.Status != snapshot.DiffStatusOK && diff.Reason != "" {
 		a.notice("inventory diff: %s", diff.Reason)
 	}
-	name := snapshot.FileName(stamp, collision, prefix, "inventory-diff.json")
+	name := snapshot.ProfileFileName(stamp, collision, fileProfile, prefix, "inventory-diff.json")
 	rec := a.writePayloadRaw(absDir, name, "inventory-diff", func(w io.Writer) error {
 		return snapshot.WriteInventoryDiff(w, diff)
 	}, output.Envelope{})

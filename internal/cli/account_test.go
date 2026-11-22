@@ -243,3 +243,170 @@ func TestNoAccountDiskCache(t *testing.T) {
 		}
 	}
 }
+
+func TestHandAddedProfileSharesClientCredential(t *testing.T) {
+	const mainToken = "synthetic_main_client_token"
+	const altToken = "synthetic_alt_own_token"
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	cfg := &config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias:       "main",
+				ClientID:    "same-client",
+				Scopes:      auth.DefaultScopes,
+				IssuedAt:    time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+				ExpiresAt:   time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+				RedirectURI: "http://127.0.0.1:8765/callback",
+				AccountID:   "111",
+				PS99UserID:  "111",
+			},
+			"alt1": {
+				Alias:       "alt1",
+				ClientID:    "same-client",
+				AccountID:   "222",
+				PS99UserID:  "222",
+				PS99ClanTag: "ALT",
+			},
+			"other": {
+				Alias:      "other",
+				ClientID:   "other-client",
+				AccountID:  "333",
+				PS99UserID: "333",
+			},
+		},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	store := auth.NewMemoryStore()
+	if err := store.Set("main", mainToken); err != nil {
+		t.Fatal(err)
+	}
+
+	var sawAlt bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/account/profile" {
+			t.Errorf("path %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer "+mainToken {
+			t.Error("shared client request did not use the existing credential")
+		}
+		sawAlt = true
+		body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-profile-ok.json"))
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: srv.URL, HTTPClient: srv.Client(), IsTTY: func() bool { return true },
+	}, []string{"account", "currencies", "--profile", "alt1"})
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if !sawAlt {
+		t.Fatal("expected an account request for alt1")
+	}
+	if strings.Contains(stdout.String(), mainToken) || strings.Contains(stderr.String(), mainToken) {
+		t.Fatal("token leaked")
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, config.ConfigFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), mainToken) || strings.Contains(string(raw), "access_token") {
+		t.Fatal("token written into config")
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	alt := loaded.Profiles["alt1"]
+	if alt.PS99UserID != "222" || alt.AccountID != "222" || alt.RedirectURI != "" || len(alt.Scopes) != 0 {
+		t.Fatalf("stored alt1 changed: %+v", alt)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		Clock: output.FixedClock{T: time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)},
+	}, []string{"auth", "status", "--profile", "alt1"})
+	if code != 0 {
+		t.Fatalf("status exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if strings.Contains(stdout.String(), mainToken) {
+		t.Fatal("token leaked in status")
+	}
+	var env output.Envelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := env.Data.(map[string]any)
+	if data["tokenPresent"] != true || data["credentialProfile"] != "main" {
+		t.Fatalf("status %#v", data)
+	}
+	if data["redirectUri"] != "http://127.0.0.1:8765/callback" {
+		t.Fatalf("redirect %#v", data["redirectUri"])
+	}
+	if data["ps99UserId"] != "222" || data["accountId"] != "222" {
+		t.Fatalf("roblox id overwritten: %#v", data)
+	}
+
+	called := false
+	denied := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer denied.Close()
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: denied.URL, HTTPClient: denied.Client(),
+	}, []string{"account", "currencies", "--profile", "other"})
+	if code != exitcode.AuthRequired {
+		t.Fatalf("other client exit %d stdout=%s", code, stdout.String())
+	}
+	if called {
+		t.Fatal("different clientId must not use the shared token")
+	}
+
+	if err := store.Set("alt1", altToken); err != nil {
+		t.Fatal(err)
+	}
+	own := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+altToken {
+			t.Error("own token was not preferred")
+		}
+		body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-profile-ok.json"))
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_, _ = w.Write(body)
+	}))
+	defer own.Close()
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		BaseURL: own.URL, HTTPClient: own.Client(), IsTTY: func() bool { return true },
+	}, []string{"account", "currencies", "--profile", "alt1"})
+	if code != 0 {
+		t.Fatalf("own token exit %d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), altToken) || strings.Contains(stdout.String(), mainToken) {
+		t.Fatal("token leaked")
+	}
+}

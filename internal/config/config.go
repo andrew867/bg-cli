@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -92,6 +94,7 @@ func Load() (*File, error) {
 	if f.Profiles == nil {
 		f.Profiles = map[string]Profile{}
 	}
+	normalizeAliases(&f)
 	return &f, nil
 }
 
@@ -154,4 +157,127 @@ func DeleteProfile(f *File, alias string) {
 func Get(f *File, alias string) (Profile, bool) {
 	p, ok := f.Profiles[alias]
 	return p, ok
+}
+
+// BindAccount resolves alias for authenticated use.
+//
+// The OS credential store keys the access token by the profile that ran
+// auth login. That credential belongs to the OAuth client (clientId), not
+// to the Roblox id. A hand-added alias with the same clientId is the same
+// API account even when accountId and ps99UserId differ. BindAccount then
+// returns the logged-in alias as a later credential candidate and copies
+// missing non-secret OAuth fields (scopes, expiry, redirect URI) onto the
+// result. It does not read the token and does not write config. Roblox
+// identity fields on the requested alias are left as written.
+func BindAccount(f *File, alias string) (Profile, []string, bool) {
+	if f == nil {
+		return Profile{}, nil, false
+	}
+	normalizeAliases(f)
+	p, ok := f.Profiles[alias]
+	if !ok {
+		return Profile{}, nil, false
+	}
+	if strings.TrimSpace(p.Alias) == "" {
+		p.Alias = alias
+	}
+	peers := sameClientPeers(f, p)
+	p = fillSharedAuth(p, peers)
+	aliases := make([]string, 0, 1+len(peers))
+	seen := map[string]struct{}{}
+	for _, name := range append([]string{p.Alias}, peerAliases(peers)...) {
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		aliases = append(aliases, name)
+	}
+	if len(aliases) == 0 {
+		aliases = []string{alias}
+	}
+	return p, aliases, true
+}
+
+func normalizeAliases(f *File) {
+	if f.Profiles == nil {
+		f.Profiles = map[string]Profile{}
+		return
+	}
+	for key, p := range f.Profiles {
+		if strings.TrimSpace(p.Alias) == "" {
+			p.Alias = key
+			f.Profiles[key] = p
+		}
+	}
+}
+
+func sameClientPeers(f *File, p Profile) []Profile {
+	id := strings.TrimSpace(p.ClientID)
+	if id == "" {
+		return nil
+	}
+	var peers []Profile
+	for key, other := range f.Profiles {
+		if strings.TrimSpace(other.Alias) == "" {
+			other.Alias = key
+		}
+		if other.Alias == p.Alias {
+			continue
+		}
+		if strings.TrimSpace(other.ClientID) != id {
+			continue
+		}
+		peers = append(peers, other)
+	}
+	sort.Slice(peers, func(i, j int) bool {
+		return peerLess(f, peers[i], peers[j])
+	})
+	return peers
+}
+
+func peerAliases(peers []Profile) []string {
+	out := make([]string, 0, len(peers))
+	for _, p := range peers {
+		out = append(out, p.Alias)
+	}
+	return out
+}
+
+func peerLess(f *File, a, b Profile) bool {
+	ra, rb := peerRank(f, a.Alias), peerRank(f, b.Alias)
+	if ra != rb {
+		return ra < rb
+	}
+	return a.Alias < b.Alias
+}
+
+func peerRank(f *File, alias string) int {
+	if f != nil && alias != "" && alias == f.DefaultProfile {
+		return 0
+	}
+	if alias == DefaultProfile {
+		return 1
+	}
+	return 2
+}
+
+func fillSharedAuth(p Profile, peers []Profile) Profile {
+	for _, src := range peers {
+		if len(p.Scopes) == 0 && len(src.Scopes) > 0 {
+			p.Scopes = append([]string(nil), src.Scopes...)
+		}
+		if p.RedirectURI == "" {
+			p.RedirectURI = src.RedirectURI
+		}
+		if p.IssuedAt.IsZero() {
+			p.IssuedAt = src.IssuedAt
+		}
+		if p.ExpiresAt.IsZero() {
+			p.ExpiresAt = src.ExpiresAt
+		}
+	}
+	return p
 }

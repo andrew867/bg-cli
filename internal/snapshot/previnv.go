@@ -82,7 +82,7 @@ func LoadPreviousInventory(req PreviousRequest) PreviousInventory {
 	if head.Current.StatisticsKnown {
 		out.Statistics = head.Current.Statistics
 	}
-	manName := FileName(head.LocalStamp, head.CollisionSuffix, prefix, "manifest.json")
+	manName := manifestNameFromSummary(req.SummaryFile, head.LocalStamp, head.CollisionSuffix, prefix)
 	manBody, err := readSnapshotFile(req.Dir, manName)
 	if err != nil {
 		out.Reason = "previous manifest is unusable: " + err.Error()
@@ -129,6 +129,22 @@ func LoadPreviousInventory(req PreviousRequest) PreviousInventory {
 	out.Items = append(json.RawMessage(nil), items...)
 	out.File = invName
 	return out
+}
+
+// manifestNameFromSummary uses the summary file's own stem so a profile
+// segment in the name is preserved. Older summaries still map
+// "{stamp}-{prefix}-summary.json" to "{stamp}-{prefix}-manifest.json".
+func manifestNameFromSummary(summaryFile, stamp, collision, prefix string) string {
+	base := strings.TrimSpace(summaryFile)
+	base = strings.ReplaceAll(base, "\\", "/")
+	if i := strings.LastIndex(base, "/"); i >= 0 {
+		base = base[i+1:]
+	}
+	const suffix = "-summary.json"
+	if strings.HasSuffix(base, suffix) && base != suffix && !strings.Contains(base, "..") {
+		return strings.TrimSuffix(base, suffix) + "-manifest.json"
+	}
+	return FileName(stamp, collision, prefix, "manifest.json")
 }
 
 func summarySchemaOK(v string) bool {
