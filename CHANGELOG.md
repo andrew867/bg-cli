@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (none)
+
+## [0.2.7] - 2026-11-22
+
 ### Fixed
 
 - A profile added in `config.json` can use the existing OS keyring token when its `clientId` matches a profile that already logged in. A different Roblox id (`accountId` or `ps99UserId`) does not block that. Omitted scopes, expiry, and `redirectUri` come from the logged-in profile, including the callback `main` already uses. The token stays in the OS credential store.
