@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/andrew867/bg-cli/internal/api"
 	"github.com/andrew867/bg-cli/internal/auth"
 	"github.com/andrew867/bg-cli/internal/config"
 	"github.com/andrew867/bg-cli/internal/exitcode"
@@ -22,11 +23,9 @@ func newAuthCmd(app *App) *cobra.Command {
 		Long: `Authorize Roblox accounts through the official BIG Games OAuth flow.
 
 One access token reads only the account that approved consent. Authorize each
-Roblox account under a distinct --profile alias. Another alias with the same
-clientId and the same Roblox id can reuse that keyring token. A different
-accountId or ps99UserId needs its own login before account commands will
-read it. Omitted scopes, expiry, and redirect URI come from the profile
-that already has them.
+Roblox account with its own login. The access token is stored only in that
+profile's keyring entry. clientId is the developer application, not an
+account, and it does not select another profile's token.
 
 auth logout removes the local token only. To revoke server-side access, open
 Connected apps in the BIG Games account dashboard.`,
@@ -52,13 +51,19 @@ func newAuthLoginCmd(app *App) *cobra.Command {
 		Long: `Starts a loopback callback, opens the BIG Games consent page, exchanges the
 authorization code, and stores the access token in the OS credential store.
 
-Logging in a profile that already has a client id is a new authorization for
-that alias. The same OAuth client id is reused. The new access token is stored
-only under that profile's keyring entry. Another profile's token is not copied.
+The consent page selects one Roblox account. The new access token is stored
+only for the profile that grant matches. It is not copied onto another alias.
+An alias is not renamed when a username changes, and it is not pointed at a
+different linked account.
 
-When --client-id or --redirect-uri is omitted, the values already stored for
-this profile are used, including a redirect URI filled from the same client.
-A profile that has never been configured still needs both flags.
+When --client-id or --redirect-uri is omitted, the values already stored on
+this profile are used. They are not taken from another profile. A profile
+that has never been configured still needs both flags.
+
+After the code exchange, bg-cli reads GET /v1/account/profile with the new
+token. That official document does not include the Roblox user id, so the
+grant stays on the profile you named unless the document positively matches
+one local linked account. Dashboard account routes are not called.
 
 By default every documented account read scope is requested. Pass --scopes to
 opt out and request a smaller set instead.
@@ -99,7 +104,7 @@ Auth commands do not support --output raw or --output csv.`,
 			ctx, cancel := context.WithTimeout(cmd.Context(), 6*time.Minute)
 			defer cancel()
 
-			app.notice("Authorizing profile %s. A new access token is stored only in that profile's keyring entry.", profile)
+			app.notice("Authorizing profile %s. A new access token is stored only for the profile this grant matches.", profile)
 			res, secrets, err := auth.Login(ctx, auth.LoginOptions{
 				Profile:      profile,
 				ClientID:     clientID,
@@ -114,6 +119,7 @@ Auth commands do not support --output raw or --output csv.`,
 				Stderr:       app.stderr(),
 				OpenURL:      app.Deps.OpenURL,
 				Now:          app.Deps.Now,
+				Discover:     app.discoverOAuthAccount,
 			})
 			if err != nil {
 				msg := err.Error()
@@ -148,8 +154,8 @@ Auth commands do not support --output raw or --output csv.`,
 			return app.emit(env)
 		},
 	}
-	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID (non-secret; defaults to the client id already stored for this profile or the same client)")
-	cmd.Flags().StringVar(&redirectURI, "redirect-uri", "", "exact registered loopback redirect URI (defaults to the URI already stored for this client)")
+	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID (non-secret; defaults to the client id already stored on this profile)")
+	cmd.Flags().StringVar(&redirectURI, "redirect-uri", "", "exact registered loopback redirect URI (defaults to the URI already stored on this profile)")
 	cmd.Flags().StringVar(&scopesRaw, "scopes", "", "opt-out: request only these scopes (default: all seven account read scopes)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "print authorize URL instead of opening a browser")
 	return cmd
@@ -216,7 +222,7 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 				return writeAuthError(app, "auth status", exitcode.AuthRequired, "not_logged_in", fmt.Sprintf("profile %q not found", profile))
 			}
 
-			hasToken, credentialProfile, tokErr := app.profileHasAccountToken(cfg, p, aliases)
+			hasToken, _, tokErr := app.profileHasAccountToken(cfg, p, aliases)
 			if tokErr != nil && !tokenMissing(tokErr) {
 				if strings.Contains(strings.ToLower(tokErr.Error()), "credential store") {
 					return writeAuthError(app, "auth status", exitcode.CredentialStore, "credential_store", tokErr.Error())
@@ -240,19 +246,29 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 				})
 			}
 
+			owner := ""
+			if hasToken {
+				owner = p.Alias
+			}
 			data := map[string]any{
 				"profile":           p.Alias,
+				"alias":             p.Alias,
+				"linkedAccountId":   p.LinkedAccountID,
+				"ps99UserId":        p.PS99UserID,
+				"username":          p.Username,
+				"displayName":       p.DisplayName,
 				"clientId":          p.ClientID,
 				"scopes":            p.Scopes,
 				"issuedAt":          p.IssuedAt.UTC().Format(time.RFC3339),
 				"expiresAt":         p.ExpiresAt.UTC().Format(time.RFC3339),
 				"tokenPresent":      hasToken,
-				"expired":           time.Now().UTC().After(p.ExpiresAt),
+				"credentialOwner":   owner,
+				"expired":           !p.ExpiresAt.IsZero() && time.Now().UTC().After(p.ExpiresAt.UTC()),
 				"redirectUri":       p.RedirectURI,
 				"accountId":         p.AccountID,
-				"ps99UserId":        p.PS99UserID,
 				"ps99ClanTag":       p.PS99ClanTag,
-				"credentialProfile": credentialProfile,
+				"credentialProfile": p.CredentialProfile,
+				"warnings":          config.LegacyIdentityWarnings(p),
 			}
 			return app.emit(output.NewSuccess("auth status", nil, output.DefaultFreshnessNull(), data))
 		},
@@ -315,13 +331,32 @@ func newAuthProfilesCmd(app *App) *cobra.Command {
 				return exitf(exitcode.Usage, "%v", err)
 			}
 			list := make([]map[string]any, 0, len(cfg.Profiles))
-			for _, p := range cfg.Profiles {
+			for _, raw := range cfg.Profiles {
+				alias := raw.Alias
+				p, credAliases, bound := config.BindAccount(cfg, alias)
+				if !bound {
+					p = raw
+					credAliases = []string{alias}
+				}
+				hasToken, owner, tokErr := app.profileHasAccountToken(cfg, p, credAliases)
+				if tokErr != nil || !hasToken {
+					hasToken = false
+					owner = ""
+				}
 				list = append(list, map[string]any{
-					"alias":     p.Alias,
-					"clientId":  p.ClientID,
-					"scopes":    p.Scopes,
-					"expiresAt": p.ExpiresAt.UTC().Format(time.RFC3339),
-					"isDefault": p.Alias == cfg.DefaultProfile,
+					"alias":             p.Alias,
+					"linkedAccountId":   p.LinkedAccountID,
+					"ps99UserId":        p.PS99UserID,
+					"username":          p.Username,
+					"displayName":       p.DisplayName,
+					"clientId":          p.ClientID,
+					"scopes":            p.Scopes,
+					"expiresAt":         p.ExpiresAt.UTC().Format(time.RFC3339),
+					"tokenPresent":      hasToken,
+					"credentialOwner":   owner,
+					"credentialProfile": p.CredentialProfile,
+					"isDefault":         p.Alias == cfg.DefaultProfile,
+					"warnings":          config.LegacyIdentityWarnings(p),
 				})
 			}
 			data := map[string]any{
@@ -331,6 +366,17 @@ func newAuthProfilesCmd(app *App) *cobra.Command {
 			return app.emit(output.NewSuccess("auth profiles", nil, output.DefaultFreshnessNull(), data))
 		},
 	}
+}
+
+func (a *App) discoverOAuthAccount(ctx context.Context, accessToken string) (config.GrantIdentity, error) {
+	res, err := a.apiClient().GetProfile(ctx, accessToken, api.AccountGetOptions{})
+	if err != nil {
+		return config.GrantIdentity{}, err
+	}
+	if res.HTTPStatus < 200 || res.HTTPStatus >= 300 {
+		return config.GrantIdentity{}, fmt.Errorf("account profile status %d", res.HTTPStatus)
+	}
+	return config.DiscoverProfile(res.Data), nil
 }
 
 func writeAuthError(app *App, command string, code int, errCode, msg string) error {

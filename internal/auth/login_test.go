@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -376,5 +377,84 @@ func TestLoginReauthKeepsIdentityMetadata(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "Kept accountId, ps99UserId, and ps99ClanTag") {
 		t.Fatalf("stderr=%s", stderr.String())
+	}
+}
+
+func TestLoginReauthDoesNotAttachAliasToDifferentAccount(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	if err := config.Save(&config.File{
+		DefaultProfile: "alt1",
+		Profiles: map[string]config.Profile{
+			"alt1": {Alias: "alt1", ClientID: "cid", PS99UserID: "111", PS99ClanTag: "ALT"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reserve, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := reserve.Addr().String()
+	_ = reserve.Close()
+	redirectURI := "http://" + addr + "/callback"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		cb := q.Get("redirect_uri") + "?code=c&state=" + url.QueryEscape(q.Get("state"))
+		http.Redirect(w, r, cb, http.StatusFound)
+	})
+	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"access_token":"synthetic_new_grant","token_type":"Bearer","expires_in":3600,"scope":%q}`, ScopeString(DefaultScopes))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	store := NewMemoryStore()
+	if err := store.Set("alt1", "synthetic_old_grant"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	_, _, err = Login(ctx, LoginOptions{
+		Profile: "alt1", ClientID: "cid", RedirectURI: redirectURI, Scopes: DefaultScopes,
+		AuthorizeURL: srv.URL + "/oauth/authorize", TokenURL: srv.URL + "/oauth/token",
+		HTTPClient: srv.Client(), TokenStore: store,
+		SecretSource: SecretSource{Env: func(string) string { return "sec" }, IsTTY: func() bool { return false }, Stderr: io.Discard},
+		Stderr:       io.Discard,
+		Discover: func(context.Context, string) (config.GrantIdentity, error) {
+			return config.GrantIdentity{PS99UserID: "222", Username: "OtherPlayer"}, nil
+		},
+		OpenURL: func(u string) error {
+			go func() {
+				c := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+				resp, err := c.Get(u)
+				if err != nil {
+					return
+				}
+				loc := resp.Header.Get("Location")
+				resp.Body.Close()
+				if r2, err := http.Get(loc); err == nil {
+					r2.Body.Close()
+				}
+			}()
+			return nil
+		},
+		CallbackWait: 5 * time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "was not changed") {
+		t.Fatalf("err %v", err)
+	}
+	got, gerr := store.Get("alt1")
+	if gerr != nil || got != "synthetic_old_grant" {
+		t.Fatalf("token replaced: %q err=%v", got, gerr)
+	}
+	cfg, lerr := config.Load()
+	if lerr != nil {
+		t.Fatal(lerr)
+	}
+	p := cfg.Profiles["alt1"]
+	if p.PS99UserID != "111" || p.Username == "OtherPlayer" || p.Alias != "alt1" {
+		t.Fatalf("alias retargeted: %+v", p)
 	}
 }

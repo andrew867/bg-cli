@@ -90,21 +90,28 @@ and does not call the network.`,
 						credAliases = []string{alias}
 					}
 					tokPresent := false
-					credentialProfile := ""
-					present, from, err := app.profileHasAccountToken(cfg, p, credAliases)
+					present, _, err := app.profileHasAccountToken(cfg, p, credAliases)
 					if err != nil && !tokenMissing(err) {
 						tokPresent = false
 					} else if present {
 						tokPresent = true
-						credentialProfile = from
 					}
 					missing := missingFrom(auth.DefaultScopes, p.Scopes)
 					expired := time.Now().UTC().After(p.ExpiresAt)
+					owner := ""
+					if tokPresent {
+						owner = p.Alias
+					}
 					profiles = append(profiles, map[string]any{
 						"alias":                p.Alias,
+						"linkedAccountId":      p.LinkedAccountID,
+						"ps99UserId":           p.PS99UserID,
+						"username":             p.Username,
+						"displayName":          p.DisplayName,
 						"clientId":             p.ClientID,
 						"tokenPresent":         tokPresent,
-						"credentialProfile":    credentialProfile,
+						"credentialOwner":      owner,
+						"credentialProfile":    p.CredentialProfile,
 						"expired":              expired,
 						"expiresAt":            p.ExpiresAt.UTC().Format(time.RFC3339),
 						"grantedScopes":        p.Scopes,

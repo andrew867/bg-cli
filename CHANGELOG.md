@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A profile that shares an OAuth client with another alias no longer uses that alias's access token when the Roblox id differs. `GET /v1/account/*` returns only the player who authorized the token, including that player's cached profile and inventory, so those bodies are not written under the other label. `auth login --profile alt1` reauthorizes that account with the same client id and stores a separate keyring token. It does not copy the other profile's token. The same Roblox id can still use the shared token.
+- Each profile uses only its own access token. The same `clientId` does not borrow another alias's bearer, including when the Roblox id matches, when the token is expired, or when `credentialProfile` is set. `GET /v1/account/*` returns only the player who authorized that token. Login stores the new token on the matching alias and does not retarget an alias onto a different Roblox account.
+
+### Changed
+
+- Snapshot summaries and manifests add `profileAlias`, `linkedAccountId`, and `ps99UserId`. History and inventory diffs require the same linked account, or the same PS99 user id when the linked id is absent. The profile alias alone is not identity. Old `accountId` values are left as stored and are not treated as linked-account ids.
 
 ## [0.2.7] - 2026-11-22
 

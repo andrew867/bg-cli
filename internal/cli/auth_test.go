@@ -250,7 +250,8 @@ func TestAuthLoginReauthStoresSeparateToken(t *testing.T) {
 				ExpiresAt: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
 			},
 			"alt1": {
-				Alias: "alt1", ClientID: "same-client", AccountID: "222", PS99UserID: "222", PS99ClanTag: "ALT",
+				Alias: "alt1", ClientID: "same-client", RedirectURI: "http://127.0.0.1:8765/callback",
+				AccountID: "222", PS99UserID: "222", PS99ClanTag: "ALT",
 			},
 		},
 	}); err != nil {
@@ -285,6 +286,7 @@ func TestAuthLoginReauthStoresSeparateToken(t *testing.T) {
 	code := Execute(Deps{
 		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
 		HTTPClient:        srv.Client(),
+		BaseURL:           srv.URL,
 		OAuthAuthorizeURL: srv.URL + "/oauth/authorize",
 		OAuthTokenURL:     srv.URL + "/oauth/token",
 		Env: func(k string) string {

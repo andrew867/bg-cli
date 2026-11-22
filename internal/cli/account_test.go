@@ -244,7 +244,7 @@ func TestNoAccountDiskCache(t *testing.T) {
 	}
 }
 
-func TestHandAddedProfileSharesClientCredential(t *testing.T) {
+func TestHandAddedProfileDoesNotBorrowToken(t *testing.T) {
 	const mainToken = "synthetic_main_client_token"
 	const altToken = "synthetic_alt_own_token"
 	dir := t.TempDir()
@@ -265,6 +265,7 @@ func TestHandAddedProfileSharesClientCredential(t *testing.T) {
 			"alt1": {
 				Alias:       "alt1",
 				ClientID:    "same-client",
+				Scopes:      auth.DefaultScopes,
 				AccountID:   "222",
 				PS99UserID:  "222",
 				PS99ClanTag: "ALT",
@@ -325,7 +326,7 @@ func TestHandAddedProfileSharesClientCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	alt := loaded.Profiles["alt1"]
-	if alt.PS99UserID != "222" || alt.AccountID != "222" || alt.RedirectURI != "" || len(alt.Scopes) != 0 {
+	if alt.PS99UserID != "222" || alt.AccountID != "222" || alt.RedirectURI != "" || len(alt.Scopes) != len(auth.DefaultScopes) {
 		t.Fatalf("stored alt1 changed: %+v", alt)
 	}
 
@@ -346,10 +347,10 @@ func TestHandAddedProfileSharesClientCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := env.Data.(map[string]any)
-	if data["tokenPresent"] != false || data["credentialProfile"] != "" {
+	if data["tokenPresent"] != false || data["credentialOwner"] != "" || data["credentialProfile"] != "" {
 		t.Fatalf("different Roblox id reported main's token as alt1's credential: %#v", data)
 	}
-	if data["redirectUri"] != "http://127.0.0.1:8765/callback" {
+	if data["redirectUri"] != "" {
 		t.Fatalf("redirect %#v", data["redirectUri"])
 	}
 	if data["ps99UserId"] != "222" || data["accountId"] != "222" {

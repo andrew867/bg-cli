@@ -692,11 +692,8 @@ func TestHistoryDoesNotCrossAccountsClansOrUsers(t *testing.T) {
 	users.Priors = []Prior{same}
 	sum = Build(users)
 	w = sum.Windows.Five
-	if w.ChangedCurrencies["PumpkinTokens"].Delta != "10" || w.Clan == nil || w.Clan.Points == nil || w.Clan.Points.Delta != "1000" {
-		t.Fatalf("shared totals blocked: tok=%+v clan=%+v", w.ChangedCurrencies["PumpkinTokens"], w.Clan)
-	}
-	if w.Clan.UserContribution == nil || w.Clan.UserContribution.Status != "unavailable" || w.Clan.UserContribution.Delta != "" || !contains(w.Clan.UserContribution.Reason, "differs") {
-		t.Fatalf("user delta leaked: %+v", w.Clan.UserContribution)
+	if w.Valid || w.Reason != BaselineIdentityRejected || w.ChangedCurrencies["PumpkinTokens"].Delta != "" {
+		t.Fatalf("different ps99 user was rated: %+v tok=%+v", w, w.ChangedCurrencies["PumpkinTokens"])
 	}
 
 	moved := current
@@ -718,7 +715,7 @@ func TestMatchingSessionStaysOnTheSameAccount(t *testing.T) {
 		{File: "same.json", ExportedAt: now.Add(-time.Hour), SessionID: "sess-a", AccountID: "acct-a", Profile: "main"},
 		{File: "other.json", ExportedAt: now.Add(-time.Minute), SessionID: "sess-b", AccountID: "acct-b", Profile: "alt"},
 	}
-	if got := MatchingSession(priors, "acct-a", "main"); got != "sess-a" {
+	if got := MatchingSession(priors, HistoryIdentity{LegacyAccountID: "acct-a", Profile: "main"}); got != "sess-a" {
 		t.Fatalf("session=%s", got)
 	}
 }

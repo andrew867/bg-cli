@@ -31,6 +31,11 @@ type LoginOptions struct {
 	OpenURL      func(string) error
 	Now          func() time.Time
 	CallbackWait time.Duration
+	// Discover reads the account that authorized this grant. It must use the
+	// new access token only against an OAuth account route. A nil Discover
+	// means that identity is unavailable. Errors are reported without storing
+	// a token on a conflicting alias; a failed read keeps the named profile.
+	Discover func(ctx context.Context, accessToken string) (config.GrantIdentity, error)
 }
 
 // LoginResult is the non-secret outcome of a successful login.
@@ -153,41 +158,64 @@ func Login(ctx context.Context, opt LoginOptions) (LoginResult, *redact.Secrets,
 
 	issued := now()
 	expires := issued.Add(time.Duration(tr.ExpiresIn) * time.Second)
-	if err := store.Set(opt.Profile, tr.AccessToken); err != nil {
-		return LoginResult{}, secrets, err
+	discovered := config.GrantIdentity{}
+	if opt.Discover != nil {
+		id, derr := opt.Discover(ctx, tr.AccessToken)
+		if derr != nil {
+			fmt.Fprintf(stderr, "The account profile did not identify this grant. The token stays on the profile you named.\n")
+		} else {
+			discovered = id
+			if strings.TrimSpace(id.Warning) != "" {
+				fmt.Fprintf(stderr, "%s\n", id.Warning)
+			}
+		}
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		_ = store.Delete(opt.Profile)
 		return LoginResult{}, secrets, err
+	}
+	target, notice, err := config.ReconcileGrant(cfg, opt.Profile, discovered)
+	if err != nil {
+		return LoginResult{}, secrets, err
+	}
+	if notice != "" {
+		fmt.Fprintf(stderr, "%s\n", notice)
 	}
 	granted := strings.Fields(tr.Scope)
 	p := config.Profile{
-		Alias:       opt.Profile,
+		Alias:       target,
 		ClientID:    opt.ClientID,
 		Scopes:      granted,
 		IssuedAt:    issued,
 		ExpiresAt:   expires,
 		RedirectURI: redirectURI,
 	}
-	if prev, ok := config.Get(cfg, opt.Profile); ok {
+	if prev, ok := config.Get(cfg, target); ok {
 		p = config.PreserveProfileIdentity(p, prev)
 		if kept := keptIdentityFields(prev); len(kept) > 0 {
-			fmt.Fprintf(stderr, "Kept %s for profile %s\n", formatKeptList(kept), opt.Profile)
+			fmt.Fprintf(stderr, "Kept %s for profile %s\n", formatKeptList(kept), target)
 		}
 	}
-	if err := config.UpsertProfile(cfg, p, cfg.DefaultProfile == "" || cfg.DefaultProfile == opt.Profile); err != nil {
-		_ = store.Delete(opt.Profile)
+	p, err = config.ApplyDiscovered(p, discovered)
+	if err != nil {
+		return LoginResult{}, secrets, err
+	}
+	if err := store.Set(target, tr.AccessToken); err != nil {
+		return LoginResult{}, secrets, err
+	}
+	makeDefault := cfg.DefaultProfile == "" || cfg.DefaultProfile == opt.Profile || cfg.DefaultProfile == target
+	if err := config.UpsertProfile(cfg, p, makeDefault); err != nil {
+		_ = store.Delete(target)
 		return LoginResult{}, secrets, err
 	}
 	if err := config.Save(cfg); err != nil {
-		_ = store.Delete(opt.Profile)
+		_ = store.Delete(target)
 		return LoginResult{}, secrets, err
 	}
 
 	return LoginResult{
-		Profile:   opt.Profile,
+		Profile:   target,
 		Scopes:    granted,
 		ExpiresAt: expires,
 		IssuedAt:  issued,
@@ -204,6 +232,9 @@ func keptIdentityFields(p config.Profile) []string {
 	}
 	if strings.TrimSpace(p.PS99ClanTag) != "" {
 		kept = append(kept, "ps99ClanTag")
+	}
+	if strings.TrimSpace(p.LinkedAccountID) != "" {
+		kept = append(kept, "linkedAccountId")
 	}
 	return kept
 }

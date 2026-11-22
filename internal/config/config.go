@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 )
@@ -21,10 +20,15 @@ const (
 
 var profileAliasRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
-// Profile is non-secret metadata for one authorized account alias.
-// AccountID, PS99UserID, and PS99ClanTag are not part of the OAuth response.
-// They are stored on the profile so a later auth login can fill them once
-// and a reauthorization does not erase a value already written here.
+// Profile is non-secret metadata for one local alias.
+//
+// These are different things and are not inferred from each other:
+// the alias, the OAuth credential, the developer clientId, the BIG Games
+// linked-account id, and the Roblox/PS99 user id. clientId is not an
+// account. accountId is legacy config and is not linkedAccountId.
+// AccountID, PS99UserID, PS99ClanTag, LinkedAccountID, Username, and
+// DisplayName are not part of the OAuth token response. A later login
+// keeps values already written here.
 type Profile struct {
 	Alias       string    `json:"alias"`
 	ClientID    string    `json:"clientId"`
@@ -32,10 +36,20 @@ type Profile struct {
 	IssuedAt    time.Time `json:"issuedAt"`
 	ExpiresAt   time.Time `json:"expiresAt"`
 	RedirectURI string    `json:"redirectUri,omitempty"`
-	AccountID   string    `json:"accountId,omitempty"`
-	PS99UserID  string    `json:"ps99UserId,omitempty"`
+	// AccountID is a legacy label. It is not the BIG Games linked-account id.
+	AccountID  string `json:"accountId,omitempty"`
+	PS99UserID string `json:"ps99UserId,omitempty"`
+	// LinkedAccountID is the BIG Games linked-account id when a provider
+	// response positively includes one. It is never copied from accountId.
+	LinkedAccountID string `json:"linkedAccountId,omitempty"`
+	Username        string `json:"username,omitempty"`
+	DisplayName     string `json:"displayName,omitempty"`
+	// CredentialProfile is an explicit pointer. This client does not send
+	// that profile's access token to /v1/account/*. One OAuth grant is one
+	// Roblox account. Bearer-only dashboard account routes were not confirmed.
+	CredentialProfile string `json:"credentialProfile,omitempty"`
 	// PS99ClanTag is the clan tag used by GET /api/clan/{tag} when the account
-	// profile and extended profile do not include one.
+	// profile and extended profile do not include one. It stays on this alias.
 	PS99ClanTag string `json:"ps99ClanTag,omitempty"`
 }
 
@@ -120,12 +134,17 @@ func Save(f *File) error {
 }
 
 // PreserveProfileIdentity copies non-secret account metadata that OAuth does
-// not return. Reauthorization replaces the token fields and keeps accountId,
-// ps99UserId, and ps99ClanTag instead of erasing them.
+// not return. Reauthorization replaces the token fields and keeps the
+// existing identity. It does not delete a linked account or point the alias
+// at a different one.
 func PreserveProfileIdentity(next, previous Profile) Profile {
 	next.AccountID = previous.AccountID
 	next.PS99UserID = previous.PS99UserID
 	next.PS99ClanTag = previous.PS99ClanTag
+	next.LinkedAccountID = previous.LinkedAccountID
+	next.Username = previous.Username
+	next.DisplayName = previous.DisplayName
+	next.CredentialProfile = previous.CredentialProfile
 	return next
 }
 
@@ -159,17 +178,13 @@ func Get(f *File, alias string) (Profile, bool) {
 	return p, ok
 }
 
-// BindAccount resolves alias for authenticated use.
+// BindAccount loads the requested alias and nothing else.
 //
-// The OS credential store keys the access token by the profile that ran
-// auth login. That credential belongs to the OAuth client (clientId).
-// BindAccount returns the logged-in alias as a later credential candidate
-// and copies missing non-secret OAuth fields (scopes, expiry, redirect URI)
-// onto the result. It does not read the token and does not write config.
-// Roblox identity fields on the requested alias are left as written.
-// Account payload commands still refuse that shared token when accountId
-// or ps99UserId differs: GET /v1/account/* returns the player who authorized
-// the token, not the other configured Roblox account.
+// The returned alias list contains only that profile. A same-client peer is
+// not a credential. Scopes, expiry, and redirect URI are not copied from
+// another profile. The access token, when one exists, is the keyring entry
+// for this alias. CredentialProfile is not consulted: one OAuth grant reads
+// one Roblox account, and bearer-only linked-account routes were not confirmed.
 func BindAccount(f *File, alias string) (Profile, []string, bool) {
 	if f == nil {
 		return Profile{}, nil, false
@@ -182,24 +197,7 @@ func BindAccount(f *File, alias string) (Profile, []string, bool) {
 	if strings.TrimSpace(p.Alias) == "" {
 		p.Alias = alias
 	}
-	peers := sameClientPeers(f, p)
-	p = fillSharedAuth(p, peers)
-	aliases := make([]string, 0, 1+len(peers))
-	seen := map[string]struct{}{}
-	for _, name := range append([]string{p.Alias}, peerAliases(peers)...) {
-		if name == "" {
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
-		aliases = append(aliases, name)
-	}
-	if len(aliases) == 0 {
-		aliases = []string{alias}
-	}
-	return p, aliases, true
+	return p, []string{p.Alias}, true
 }
 
 func normalizeAliases(f *File) {
@@ -213,72 +211,4 @@ func normalizeAliases(f *File) {
 			f.Profiles[key] = p
 		}
 	}
-}
-
-func sameClientPeers(f *File, p Profile) []Profile {
-	id := strings.TrimSpace(p.ClientID)
-	if id == "" {
-		return nil
-	}
-	var peers []Profile
-	for key, other := range f.Profiles {
-		if strings.TrimSpace(other.Alias) == "" {
-			other.Alias = key
-		}
-		if other.Alias == p.Alias {
-			continue
-		}
-		if strings.TrimSpace(other.ClientID) != id {
-			continue
-		}
-		peers = append(peers, other)
-	}
-	sort.Slice(peers, func(i, j int) bool {
-		return peerLess(f, peers[i], peers[j])
-	})
-	return peers
-}
-
-func peerAliases(peers []Profile) []string {
-	out := make([]string, 0, len(peers))
-	for _, p := range peers {
-		out = append(out, p.Alias)
-	}
-	return out
-}
-
-func peerLess(f *File, a, b Profile) bool {
-	ra, rb := peerRank(f, a.Alias), peerRank(f, b.Alias)
-	if ra != rb {
-		return ra < rb
-	}
-	return a.Alias < b.Alias
-}
-
-func peerRank(f *File, alias string) int {
-	if f != nil && alias != "" && alias == f.DefaultProfile {
-		return 0
-	}
-	if alias == DefaultProfile {
-		return 1
-	}
-	return 2
-}
-
-func fillSharedAuth(p Profile, peers []Profile) Profile {
-	for _, src := range peers {
-		if len(p.Scopes) == 0 && len(src.Scopes) > 0 {
-			p.Scopes = append([]string(nil), src.Scopes...)
-		}
-		if p.RedirectURI == "" {
-			p.RedirectURI = src.RedirectURI
-		}
-		if p.IssuedAt.IsZero() {
-			p.IssuedAt = src.IssuedAt
-		}
-		if p.ExpiresAt.IsZero() {
-			p.ExpiresAt = src.ExpiresAt
-		}
-	}
-	return p
 }

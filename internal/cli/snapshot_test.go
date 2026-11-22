@@ -533,9 +533,14 @@ func TestSnapshotFileNamesFollowProfileCount(t *testing.T) {
 		RedirectURI: "http://127.0.0.1:8765/callback", AccountID: "111", PS99UserID: "111",
 	}
 	altProfile := config.Profile{
-		Alias: "alt1", ClientID: "same-client", AccountID: "111", PS99UserID: "111",
+		Alias: "alt1", ClientID: "same-client", Scopes: auth.DefaultScopes,
+		IssuedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), ExpiresAt: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+		AccountID: "222", PS99UserID: "222",
 	}
 	if err := store.Set("main", "synthetic_main_client_token"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("alt1", "synthetic_alt_filename_token"); err != nil {
 		t.Fatal(err)
 	}
 	invBody, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-inventory-ok.json"))
@@ -645,7 +650,9 @@ func TestSharedCredentialDoesNotReuseAccountBodies(t *testing.T) {
 		RedirectURI: "http://127.0.0.1:8765/callback", AccountID: "111", PS99UserID: "111",
 	}
 	altProfile := config.Profile{
-		Alias: "alt1", ClientID: "same-client", AccountID: "222", PS99UserID: "222", PS99ClanTag: "ALT",
+		Alias: "alt1", ClientID: "same-client", Scopes: auth.DefaultScopes,
+		IssuedAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), ExpiresAt: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+		AccountID: "222", PS99UserID: "222", PS99ClanTag: "ALT",
 	}
 	if err := config.Save(&config.File{DefaultProfile: "main", Profiles: map[string]config.Profile{
 		"main": mainProfile, "alt1": altProfile,
@@ -711,7 +718,7 @@ func TestSharedCredentialDoesNotReuseAccountBodies(t *testing.T) {
 	if strings.Contains(stdout, "MainOnlyPet") || strings.Contains(stderr, "MainOnlyPet") || strings.Contains(stdout+stderr, mainToken) {
 		t.Fatal("alt inventory reused main's body or printed the token")
 	}
-	if !strings.Contains(stderr, "cached profile and inventory") || !strings.Contains(stderr, "auth login --profile alt1") || !strings.Contains(stderr, "does not copy") {
+	if !strings.Contains(stderr, "cached profile and inventory") || !strings.Contains(stderr, "auth login --profile alt1") || !strings.Contains(stderr, "not used") {
 		t.Fatalf("alt inventory reason:\n%s", stderr)
 	}
 
@@ -765,9 +772,13 @@ func TestSharedCredentialDoesNotReuseAccountBodies(t *testing.T) {
 	}}); err != nil {
 		t.Fatal(err)
 	}
+	before := calls
 	code, stdout, stderr = run("account", "inventory", "--profile", "twin")
-	if code != 0 || !strings.Contains(stdout, "MainOnlyPet") {
-		t.Fatalf("same Roblox id exit %d stdout=%s stderr=%s", code, stdout, stderr)
+	if code != exitcode.AuthRequired {
+		t.Fatalf("same Roblox id must not borrow a token, exit %d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if calls != before || strings.Contains(stdout, "MainOnlyPet") || strings.Contains(stdout+stderr, mainToken) {
+		t.Fatal("same Roblox id reused main's token or inventory")
 	}
 }
 

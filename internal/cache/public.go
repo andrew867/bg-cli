@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -55,6 +57,9 @@ func (s Store) pathFor(rawURL string) (string, error) {
 
 // Get returns a cached body when present and unexpired.
 func (s Store) Get(rawURL string, now time.Time) (status int, body []byte, ok bool, err error) {
+	if Refuses(rawURL, "") {
+		return 0, nil, false, nil
+	}
 	path, err := s.pathFor(rawURL)
 	if err != nil {
 		return 0, nil, false, err
@@ -78,8 +83,34 @@ func (s Store) Get(rawURL string, now time.Time) (status int, body []byte, ok bo
 	return e.Status, e.Body, true, nil
 }
 
+// Refuses reports a response that must not be stored. Account payloads,
+// db.biggames.io responses, and private or no-cache documents stay out of
+// the public cache so one account cannot be read back as another.
+func Refuses(rawURL, cacheControl string) bool {
+	cc := strings.ToLower(cacheControl)
+	if strings.Contains(cc, "private") || strings.Contains(cc, "no-cache") {
+		return true
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return true
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "db.biggames.io" {
+		return true
+	}
+	if strings.Contains(u.Path, "/v1/account") {
+		return true
+	}
+	return false
+}
+
 // Put stores a public response atomically. maxAge <= 0 skips caching.
+// A private or account URL is refused and nothing is written.
 func (s Store) Put(rawURL string, status int, body []byte, contentType string, maxAge time.Duration, now time.Time) error {
+	if Refuses(rawURL, "") {
+		return fmt.Errorf("refusing to cache a private response")
+	}
 	if maxAge <= 0 || status < 200 || status >= 300 {
 		return nil
 	}

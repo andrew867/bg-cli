@@ -205,6 +205,8 @@ func TestSnapshotSummaryManifestAndSharedBaseline(t *testing.T) {
 		ExportedAt:    priorAt.Format(time.RFC3339),
 		SessionID:     "ps99-session",
 		Profile:       "main",
+		UserID:        "1001",
+		PS99UserID:    "1001",
 		Current: clan.Current{
 			CurrenciesKnown: true,
 			Currencies: map[string]clan.CurrencyAmount{

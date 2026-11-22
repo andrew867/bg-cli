@@ -29,8 +29,11 @@ type Summary struct {
 	SessionID       string   `json:"sessionId"`
 	Prefix          string   `json:"prefix,omitempty"`
 	Profile         string   `json:"profile,omitempty"`
+	ProfileAlias    string   `json:"profileAlias,omitempty"`
 	AccountID       string   `json:"accountId,omitempty"`
+	LinkedAccountID string   `json:"linkedAccountId,omitempty"`
 	UserID          string   `json:"userId,omitempty"`
+	PS99UserID      string   `json:"ps99UserId,omitempty"`
 	Current         Current  `json:"current"`
 	Windows         Windows  `json:"windows"`
 	Warnings        []string `json:"warnings,omitempty"`
@@ -162,8 +165,10 @@ type Prior struct {
 	ExportedAtText  string
 	SessionID       string
 	AccountID       string
+	LinkedAccountID string
 	Profile         string
 	UserID          string
+	PS99UserID      string
 	ClanTag         string
 	BattleID        string
 	Points          string
@@ -187,7 +192,9 @@ type Input struct {
 	Prefix          string
 	Profile         string
 	AccountID       string
+	LinkedAccountID string
 	UserID          string
+	PS99UserID      string
 	SessionID       string
 	Currencies      map[string]CurrencyAmount
 	CurrenciesKnown bool
@@ -228,6 +235,10 @@ func Build(in Input) Summary {
 		session = NewSessionID(in.Prefix, in.LocalStamp)
 	}
 	user := strings.TrimSpace(in.UserID)
+	ps99 := strings.TrimSpace(in.PS99UserID)
+	if ps99 == "" {
+		ps99 = user
+	}
 	nowText := in.Now.Format(time.RFC3339)
 	sum := Summary{
 		SchemaVersion:   SchemaVersion,
@@ -237,8 +248,11 @@ func Build(in Input) Summary {
 		SessionID:       session,
 		Prefix:          in.Prefix,
 		Profile:         in.Profile,
+		ProfileAlias:    in.Profile,
 		AccountID:       strings.TrimSpace(in.AccountID),
+		LinkedAccountID: strings.TrimSpace(in.LinkedAccountID),
 		UserID:          user,
+		PS99UserID:      ps99,
 		Current: Current{
 			CurrenciesKnown: in.CurrenciesKnown,
 			Currencies:      in.Currencies,
@@ -268,9 +282,13 @@ const (
 
 func buildWindow(in Input, session, nowText string, requested *int64, kind int) Window {
 	w := Window{CurrentAt: nowText, RequestedSeconds: requested}
-	base, ok := selectBaseline(in.Priors, in.Now, session, in.AccountID, in.Profile, requested, kind)
+	base, ok, reject := selectBaseline(in.Priors, in.Now, session, in.historyIdentity(), requested, kind)
 	if !ok {
-		w.Reason = "no earlier snapshot in this session"
+		if reject != "" {
+			w.Reason = reject
+		} else {
+			w.Reason = "no earlier snapshot in this session"
+		}
 		return w
 	}
 	elapsed := in.Now.Unix() - base.ExportedAt.Unix()
@@ -300,7 +318,7 @@ func buildWindow(in Input, session, nowText string, requested *int64, kind int) 
 		}
 		w.Valid = true
 	}
-	mids := priorsBetween(in.Priors, base, in.Now, session, in.AccountID, in.Profile)
+	mids := priorsBetween(in.Priors, base, in.Now, session, in.historyIdentity())
 	switch {
 	case in.CurrenciesKnown && base.CurrenciesKnown:
 		w.ChangedCurrencies = diffCurrencies(base, mids, in.Currencies, elapsed, nowText)
@@ -384,11 +402,22 @@ func hugeInventoryCount(base, cur *InventoryState) *InventoryCount {
 	return out
 }
 
-func selectBaseline(priors []Prior, now time.Time, session, accountID, profile string, requested *int64, kind int) (Prior, bool) {
+func selectBaseline(priors []Prior, now time.Time, session string, cur HistoryIdentity, requested *int64, kind int) (Prior, bool, string) {
 	var best Prior
 	found := false
+	sawSame := false
+	sawOther := false
 	for _, p := range priors {
-		if p.SessionID != session || !sameAccount(accountID, profile, p.AccountID, p.Profile) || !p.ExportedAt.Before(now) {
+		if !p.ExportedAt.Before(now) {
+			continue
+		}
+		if SameHistory(cur, p.historyIdentity()) {
+			sawSame = true
+			if p.SessionID != session {
+				continue
+			}
+		} else {
+			sawOther = true
 			continue
 		}
 		age := now.Unix() - p.ExportedAt.Unix()
@@ -404,7 +433,10 @@ func selectBaseline(priors []Prior, now time.Time, session, accountID, profile s
 			best = p
 		}
 	}
-	return best, found
+	if !found && !sawSame && sawOther {
+		return Prior{}, false, BaselineIdentityRejected
+	}
+	return best, found, ""
 }
 
 func betterBaseline(p, best Prior, requested *int64, kind int, now time.Time) bool {
@@ -713,10 +745,10 @@ type continuityEvent struct {
 // priorsBetween returns same-account observations strictly after the baseline
 // and strictly before the current snapshot. Rate continuity is derived from
 // those balances. Old summaries do not need epoch metadata.
-func priorsBetween(priors []Prior, base Prior, now time.Time, session, accountID, profile string) []Prior {
+func priorsBetween(priors []Prior, base Prior, now time.Time, session string, cur HistoryIdentity) []Prior {
 	var mid []Prior
 	for _, p := range priors {
-		if p.SessionID != session || !sameAccount(accountID, profile, p.AccountID, p.Profile) {
+		if p.SessionID != session || !SameHistory(cur, p.historyIdentity()) {
 			continue
 		}
 		if !p.ExportedAt.After(base.ExportedAt) || !p.ExportedAt.Before(now) {

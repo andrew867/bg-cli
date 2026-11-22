@@ -88,9 +88,15 @@ type summaryKey struct {
 }
 
 func summaryKeyFor(p Prior) summaryKey {
+	h := p.historyIdentity()
 	ident := "alias:" + p.Profile
-	if p.AccountID != "" {
-		ident = "id:" + p.AccountID
+	switch {
+	case h.LinkedAccountID != "":
+		ident = "linked:" + h.LinkedAccountID
+	case h.PS99UserID != "":
+		ident = "ps99:" + h.PS99UserID
+	case h.LegacyAccountID != "":
+		ident = "legacy:" + h.LegacyAccountID
 	}
 	return summaryKey{unix: p.ExportedAt.Unix(), ident: ident, session: p.SessionID}
 }
@@ -122,8 +128,10 @@ func decodePrior(name string, body []byte, now time.Time) (Prior, string, bool) 
 		ExportedAtText:  sum.ExportedAt,
 		SessionID:       sum.SessionID,
 		AccountID:       strings.TrimSpace(sum.AccountID),
-		Profile:         sum.Profile,
+		LinkedAccountID: strings.TrimSpace(sum.LinkedAccountID),
+		Profile:         firstNonEmpty(sum.ProfileAlias, sum.Profile),
 		UserID:          strings.TrimSpace(sum.UserID),
+		PS99UserID:      strings.TrimSpace(sum.PS99UserID),
 		ClanTag:         sum.Current.Clan.Tag,
 		CurrenciesKnown: sum.Current.CurrenciesKnown,
 		Currencies:      map[string]string{},
@@ -166,6 +174,15 @@ func decodePrior(name string, body []byte, now time.Time) (Prior, string, bool) 
 		}
 	}
 	return p, "", true
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func schemaCompatible(v string) bool {

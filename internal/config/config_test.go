@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestBindAccountSharesClientAcrossRobloxIDs(t *testing.T) {
+func TestBindAccountDoesNotShareClientAcrossRobloxIDs(t *testing.T) {
 	issued := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	expires := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
 	f := &File{
@@ -40,13 +40,13 @@ func TestBindAccountSharesClientAcrossRobloxIDs(t *testing.T) {
 	if p.AccountID != "222" || p.PS99UserID != "222" || p.PS99ClanTag != "ALT" {
 		t.Fatalf("roblox identity changed: %+v", p)
 	}
-	if p.RedirectURI != "http://127.0.0.1:8765/callback" {
-		t.Fatalf("redirect %q", p.RedirectURI)
+	if p.RedirectURI != "" || len(p.Scopes) != 0 || !p.ExpiresAt.IsZero() || !p.IssuedAt.IsZero() {
+		t.Fatalf("same client inherited auth metadata: %+v", p)
 	}
-	if p.ClientID != "same-client" || len(p.Scopes) != 1 || !p.ExpiresAt.Equal(expires) || !p.IssuedAt.Equal(issued) {
-		t.Fatalf("auth metadata %+v", p)
+	if p.ClientID != "same-client" {
+		t.Fatalf("client %q", p.ClientID)
 	}
-	if len(aliases) < 2 || aliases[0] != "alt1" || aliases[1] != "main" {
+	if len(aliases) != 1 || aliases[0] != "alt1" {
 		t.Fatalf("aliases %v", aliases)
 	}
 	if f.Profiles["alt1"].RedirectURI != "" || len(f.Profiles["alt1"].Scopes) != 0 {

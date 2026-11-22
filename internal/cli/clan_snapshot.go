@@ -186,6 +186,10 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	for _, w := range scanned.Warnings {
 		a.notice("summary history: %s", w)
 	}
+	linkedID := ""
+	if meta, ok, err := a.profileMetadata(); err == nil && ok {
+		linkedID = strings.TrimSpace(meta.LinkedAccountID)
+	}
 	sessionID := opt.SessionID
 	switch {
 	case sessionID != "":
@@ -195,7 +199,12 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			sessionID += "-" + collision
 		}
 	default:
-		sessionID = clan.MatchingSession(scanned.Priors, accountID, profile)
+		sessionID = clan.MatchingSession(scanned.Priors, clan.HistoryIdentity{
+			LinkedAccountID: linkedID,
+			PS99UserID:      userID,
+			LegacyAccountID: accountID,
+			Profile:         profile,
+		})
 		if sessionID == "" {
 			sessionID = clan.NewSessionID(prefix, stamp)
 		}
@@ -222,7 +231,9 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		Prefix:          prefix,
 		Profile:         profile,
 		AccountID:       accountID,
+		LinkedAccountID: linkedID,
 		UserID:          userID,
+		PS99UserID:      userID,
 		SessionID:       sessionID,
 		Currencies:      currencies,
 		CurrenciesKnown: currenciesKnown,
@@ -250,8 +261,17 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 	if sum.AccountID != "" {
 		man.Summary["accountId"] = sum.AccountID
 	}
+	if sum.ProfileAlias != "" {
+		man.Summary["profileAlias"] = sum.ProfileAlias
+	}
+	if sum.LinkedAccountID != "" {
+		man.Summary["linkedAccountId"] = sum.LinkedAccountID
+	}
 	if sum.UserID != "" {
 		man.Summary["userId"] = sum.UserID
+	}
+	if sum.PS99UserID != "" {
+		man.Summary["ps99UserId"] = sum.PS99UserID
 	}
 	man.Summary["clanTelemetry"] = telemetry
 	man.Summary["clan"] = sum.Current.Clan

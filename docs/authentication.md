@@ -110,21 +110,27 @@ bg-cli account inventory --profile alt1
 
 One token never grants private access to another Roblox player. A second login is how you authorize a different player.
 
-## Same OAuth client, second alias
+## One grant, one Roblox account
 
-The keyring entry belongs to the OAuth client (`clientId`). A hand-added profile may omit scopes, expiry, and `redirectUri`. bg-cli fills those from the profile that already logged in with the same `clientId`, including that callback. `accountId`, `ps99UserId`, and `ps99ClanTag` stay the values written on the alias you asked for.
+`clientId` is the developer application. It is not a Roblox account, and it does not authorize sending another alias's access token. A hand-added profile does not reuse a credential, even when the Roblox id is the same and even when `credentialProfile` names another alias.
 
-`GET /v1/account/*` returns only the Roblox account that authorized the access token. The body is that player's cached save (`Cache-Control: private, no-cache`). It is not a lookup by the `accountId` stored on another alias.
+`GET /v1/account/*` returns only the Roblox account that authorized that access token. The body is that player's cached save (`Cache-Control: private, no-cache`). It is not a lookup by `accountId`, `linkedAccountId`, or `ps99UserId`.
 
-When `accountId` or `ps99UserId` differs, account commands do not send the other profile's token and do not write that profile's inventory or profile under this alias. Authorize the other Roblox account with a real login. The OAuth client id stays the one already stored. The new access token is written only to this alias's keyring entry. The other profile's token is not copied.
+Authorize the other Roblox account with a normal login. The consent page selects the player. The new access token is stored only in the matching profile's keyring entry. The other profile's token is not copied. An expired token is not replaced with another profile's token.
 
 ```bash
-bg-cli auth login --profile alt1
+bg-cli auth login --profile alt1 --client-id YOUR_CLIENT_ID --redirect-uri http://127.0.0.1:8765/callback
 ```
 
-`--client-id` and `--redirect-uri` can be omitted when they are already on the profile, including a redirect URI taken from the profile that logged in with the same client. The consent page is where the other Roblox account is chosen. Two aliases for the same Roblox id can still share one token.
+`--client-id` and `--redirect-uri` can be omitted only when they are already stored on that same profile. They are not copied from another alias.
 
-`alt1` below is a different Roblox account from `main`. Account reads for `alt1` fail until that login finishes. `auth status` reports no token for `alt1` while only `main` has one.
+After the code exchange, bg-cli reads `GET /v1/account/profile` with the new token. The documented profile does not include a Roblox user id or a BIG Games linked-account id, so discovery of those ids is unavailable from the official account API. The token stays on the profile you named. If a future response positively includes `linkedAccountId` or a user id, bg-cli fills an empty field or matches an existing alias. It does not rename an alias when the username changes, does not point an alias at a different linked account, and does not delete a profile that was not in the response. If the grant disagrees with the alias, login stops and stores nothing.
+
+`accountId` in an old config is kept and is not treated as `linkedAccountId`. `auth status` warns when that legacy field is set. `auth status` and `auth profiles` show the alias, linked account id, PS99 user id, username, display name, client id, whether a token is present, the credential owner, expiry, and scopes. They do not show the access token.
+
+Dashboard routes such as `https://db.biggames.io/account.data` are not called. A bearer-only read of those routes was not confirmed, and they are not used to list linked accounts.
+
+`alt1` below is a different Roblox account from `main`. Account reads for `alt1` fail until that login finishes.
 
 ```json
 {
@@ -140,7 +146,7 @@ bg-cli auth login --profile alt1
     "alt1": {
       "alias": "alt1",
       "clientId": "YOUR_CLIENT_ID",
-      "accountId": "222",
+      "redirectUri": "http://127.0.0.1:8765/callback",
       "ps99UserId": "222",
       "ps99ClanTag": "OTHERTAG"
     }
@@ -148,6 +154,6 @@ bg-cli auth login --profile alt1
 }
 ```
 
-`auth status` reports `credentialProfile` as the alias whose keyring entry account commands will use. For a different Roblox id that entry is empty until `auth login` stores one. Logging out only `alt1` removes that alias and leaves `main`'s token in place. Logging out the alias that holds a shared token removes it. An account command for `alt1` uses a shared token only when the Roblox id matches. A different id is refused, and the token owner's payload is not printed or saved as `alt1`.
+Logging out `alt1` removes that alias and leaves `main`'s token in place. Do not put the access token or client secret in `config.json`.
 
-A different `clientId` does not receive this token. Authorize that client with `auth login`. Do not put the access token or client secret in `config.json`.
+Snapshot summaries and manifests record `profileAlias`, `linkedAccountId`, and `ps99UserId` when they are known. File names still use the alias, not the provider id. A previous snapshot, a 5m/30m/1h/session window, or an inventory diff is used only when the linked-account id matches, or when that id is absent on both sides and the PS99 user id matches. If both ids are present they must agree. The alias alone is not identity. A different account is not diffed and is not rated; the reason is that the previous snapshot was rejected because account identity differs. Old summaries stay readable. An old `accountId` is not a linked-account id. It still ties two summaries together only when neither side has a linked-account id or a PS99 user id.

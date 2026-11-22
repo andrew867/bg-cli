@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,11 +40,12 @@ When config.json has more than one profile, default file names include that
 profile alias, for example 2026-11-22-120000-alt1-ps99-inv.json. One profile
 keeps the current names. --zip-path is used exactly as given.
 
-GET /v1/account/* returns the Roblox account that authorized the token.
-If --profile names a different accountId or ps99UserId than the alias that
-holds that token, the snapshot stops before any file is written. The token
-owner's cached profile and inventory are not saved under the other label.
-Log in that profile. The same Roblox id can still use the shared token.
+GET /v1/account/* returns the Roblox account that authorized this profile's
+token. Another alias's token is not sent, including when the client id or
+the Roblox id matches. The snapshot stops before any file is written when
+this profile has no usable token. Log in that profile. File names keep the
+alias. History matches linkedAccountId, or ps99UserId when the linked id is
+absent. A different account is not used as a baseline.
 
 Every snapshot also writes summary.json. That file is the history record for
 clan points and currencies. Later snapshots read prior *-prefix-summary.json
@@ -209,6 +211,20 @@ type snapshotOptions struct {
 	FileProfile string
 }
 
+func snapshotLinkedID(a *App) string {
+	if meta, ok, err := a.profileMetadata(); err == nil && ok {
+		return strings.TrimSpace(meta.LinkedAccountID)
+	}
+	return ""
+}
+
+func snapshotPS99ID(a *App) string {
+	if id, ok := a.configuredPS99UserID(""); ok {
+		return id
+	}
+	return ""
+}
+
 func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error {
 	if err := a.confirmRefresh(opt.Flags, "account snapshot"); err != nil {
 		return err
@@ -284,6 +300,9 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		LocalTimezone:   now.Location().String(),
 		ExportedAt:      now.Format(time.RFC3339),
 		Profile:         profileAlias,
+		ProfileAlias:    profileAlias,
+		LinkedAccountID: snapshotLinkedID(a),
+		PS99UserID:      snapshotPS99ID(a),
 		OutputDir:       absDir,
 		Prefix:          opt.Prefix,
 		Refresh:         opt.Flags.refresh,
@@ -366,6 +385,11 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 			profName := opt.artifact(stamp, collision, "prof.json")
 			curName := opt.artifact(stamp, collision, "currencies.csv")
 			if profErr != nil {
+				var idErr *config.IdentityError
+				if errors.As(profErr, &idErr) {
+					a.discardPartialSnapshot(absDir, &man)
+					return idErr
+				}
 				man.OK = false
 				a.notice("profile fetch failed: %v", profErr)
 				man.Files = append(man.Files,
@@ -509,6 +533,19 @@ func snapshotMachineJSON(cmd *cobra.Command, outputMode string, jsonFlag bool) (
 
 func failRec(name, kind string, err error) snapshot.FileRecord {
 	return snapshot.FileRecord{Name: name, RelPath: name, Kind: kind, OK: false, Error: err.Error()}
+}
+
+func (a *App) discardPartialSnapshot(absDir string, man *snapshot.Manifest) {
+	if man == nil {
+		return
+	}
+	for _, f := range man.Files {
+		name := strings.TrimSpace(f.Name)
+		if name == "" || strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
+			continue
+		}
+		_ = os.Remove(filepath.Join(absDir, name))
+	}
 }
 
 func failViewRec(name, kind, view string, err error, cs snapshot.ContentStatus) snapshot.FileRecord {
@@ -672,6 +709,11 @@ func (a *App) snapshotProfile(ctx context.Context, opt snapshotOptions) (output.
 	}
 	if err := mapAccountHTTP(res); err != nil {
 		return output.Envelope{}, nil, nil, err
+	}
+	if meta, ok, merr := a.profileMetadata(); merr == nil && ok {
+		if err := config.UpstreamConflict(meta, res.Data); err != nil {
+			return output.Envelope{}, nil, nil, err
+		}
 	}
 	source := a.accountSource(res)
 	source.Endpoint = "/v1/account/profile"

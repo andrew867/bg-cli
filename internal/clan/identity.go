@@ -55,24 +55,110 @@ func canonicalID(raw json.RawMessage) string {
 	return n.String()
 }
 
-// sameAccount reports whether a prior summary belongs to this snapshot's account.
-// A stored account id wins. The profile alias is used only when neither side
-// has an account id. Records with a different identity stay in the directory
-// and are not baselines.
-func sameAccount(accountID, profile, priorAccount, priorProfile string) bool {
-	if accountID != "" || priorAccount != "" {
-		return accountID != "" && accountID == priorAccount
+// BaselineIdentityRejected is the history reason when a prior snapshot is a
+// different account. Rates and inventory diffs must not use that file.
+const BaselineIdentityRejected = "previous snapshot was rejected because account identity differs"
+
+// HistoryIdentity is the account a snapshot belongs to.
+// LinkedAccountID is the BIG Games linked-account id.
+// PS99UserID is the Roblox/PS99 user id.
+// LegacyAccountID is the older summary accountId field. It is not a
+// linked-account id and is used only when both sides lack the newer ids.
+// Profile is the local alias and is never identity by itself.
+type HistoryIdentity struct {
+	LinkedAccountID string
+	PS99UserID      string
+	LegacyAccountID string
+	Profile         string
+	Conflict        bool
+}
+
+// SameHistory reports whether two snapshots are the same account.
+// The alias is not compared. A legacy accountId matches only when neither
+// side has a linked-account id or a PS99 user id.
+func SameHistory(a, b HistoryIdentity) bool {
+	ok, _ := CompareHistory(a, b)
+	return ok
+}
+
+// CompareHistory returns false and BaselineIdentityRejected when the accounts
+// differ or cannot be confirmed. Prefer an unavailable baseline over a diff
+// across accounts.
+func CompareHistory(a, b HistoryIdentity) (bool, string) {
+	if a.Conflict || b.Conflict {
+		return false, BaselineIdentityRejected
 	}
-	return profile == priorProfile
+	aL, bL := strings.TrimSpace(a.LinkedAccountID), strings.TrimSpace(b.LinkedAccountID)
+	aU, bU := strings.TrimSpace(a.PS99UserID), strings.TrimSpace(b.PS99UserID)
+	if aL != "" && bL != "" && aL != bL {
+		return false, BaselineIdentityRejected
+	}
+	if aU != "" && bU != "" && aU != bU {
+		return false, BaselineIdentityRejected
+	}
+	if aL != "" && bL != "" && aL == bL {
+		return true, ""
+	}
+	if aL == "" && bL == "" && aU != "" && bU != "" && aU == bU {
+		return true, ""
+	}
+	if aL == "" && bL == "" && aU == "" && bU == "" {
+		aA := strings.TrimSpace(a.LegacyAccountID)
+		bA := strings.TrimSpace(b.LegacyAccountID)
+		if aA != "" && aA == bA {
+			return true, ""
+		}
+		if aA == "" && bA == "" && strings.TrimSpace(a.Profile) == strings.TrimSpace(b.Profile) {
+			// No provider id was stored. Keep one alias's own history, including
+			// older summaries that recorded no alias. A different alias is not
+			// the same account.
+			return true, ""
+		}
+	}
+	return false, BaselineIdentityRejected
+}
+
+func (p Prior) historyIdentity() HistoryIdentity {
+	ps99 := strings.TrimSpace(p.PS99UserID)
+	user := strings.TrimSpace(p.UserID)
+	id := HistoryIdentity{
+		LinkedAccountID: strings.TrimSpace(p.LinkedAccountID),
+		PS99UserID:      ps99,
+		LegacyAccountID: strings.TrimSpace(p.AccountID),
+		Profile:         p.Profile,
+	}
+	if ps99 == "" {
+		id.PS99UserID = user
+	} else if user != "" && user != ps99 {
+		id.Conflict = true
+	}
+	return id
+}
+
+func (in Input) historyIdentity() HistoryIdentity {
+	ps99 := strings.TrimSpace(in.PS99UserID)
+	user := strings.TrimSpace(in.UserID)
+	id := HistoryIdentity{
+		LinkedAccountID: strings.TrimSpace(in.LinkedAccountID),
+		PS99UserID:      ps99,
+		LegacyAccountID: strings.TrimSpace(in.AccountID),
+		Profile:         in.Profile,
+	}
+	if ps99 == "" {
+		id.PS99UserID = user
+	} else if user != "" && user != ps99 {
+		id.Conflict = true
+	}
+	return id
 }
 
 // MatchingSession is the latest prior session for this account. A newer
-// summary from another account does not replace it.
-func MatchingSession(priors []Prior, accountID, profile string) string {
+// summary from another account does not replace it. The alias is not identity.
+func MatchingSession(priors []Prior, cur HistoryIdentity) string {
 	var best Prior
 	found := false
 	for _, p := range priors {
-		if !sameAccount(accountID, profile, p.AccountID, p.Profile) {
+		if !SameHistory(cur, p.historyIdentity()) {
 			continue
 		}
 		if !found || p.ExportedAt.After(best.ExportedAt) || (p.ExportedAt.Equal(best.ExportedAt) && p.File > best.File) {

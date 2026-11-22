@@ -27,13 +27,10 @@ func newAccountCmd(app *App) *cobra.Command {
 		Short: "Read private account data for the authorizing profile",
 		Long: `Account commands call official GET /v1/account/* endpoints using the access
 token stored for --profile. Those routes return only the Roblox account that
-authorized the token, including that player's cached profile and inventory.
-A second alias with the same clientId may use that token when its accountId
-and ps99UserId are the same account. When either id differs, the command
-stops and does not save the token owner's payloads under the other alias.
-Log in that alias to store its own token. Omitted scopes, expiry, and
-redirect URI still come from the profile that logged in. Data is a cached
-snapshot, not real time.
+authorized that token, including that player's cached profile and inventory.
+clientId does not grant another alias's token. Each profile uses its own
+keyring entry. An expired token is not replaced with another profile's token.
+Data is a cached snapshot, not real time.
 
 This client is unofficial and not endorsed by BIG Games.`,
 	}
@@ -92,7 +89,7 @@ func (a *App) resolveProfileToken(requiredScope string) (config.Profile, string,
 	if alias == "" {
 		return config.Profile{}, "", secrets, &ExitError{Code: exitcode.AuthRequired, Msg: "not logged in; run auth login"}
 	}
-	p, aliases, ok := config.BindAccount(cfg, alias)
+	p, _, ok := config.BindAccount(cfg, alias)
 	if !ok {
 		return config.Profile{}, "", secrets, &ExitError{Code: exitcode.AuthRequired, Msg: fmt.Sprintf("profile %q not found; run auth login", alias)}
 	}
@@ -102,23 +99,16 @@ func (a *App) resolveProfileToken(requiredScope string) (config.Profile, string,
 			Msg:  fmt.Sprintf("profile %q missing scope %s; run auth login again (defaults to all account scopes)", alias, requiredScope),
 		}
 	}
-	tok, _, err := a.tokenForAccount(cfg, p, aliases)
+	tok, err := a.ownAccountToken(p)
 	if err != nil {
-		if tokenMissing(err) {
-			if ferr := a.reauthRequired(cfg, p, aliases); ferr != nil {
-				return p, "", secrets, ferr
-			}
-			return p, "", secrets, &ExitError{Code: exitcode.AuthRequired, Msg: fmt.Sprintf("no access token for profile %q; run auth login", alias)}
-		}
-		return p, "", secrets, &ExitError{Code: exitcode.CredentialStore, Msg: err.Error()}
+		return p, "", secrets, err
 	}
 	secrets.Add(tok)
 	return p, tok, secrets, nil
 }
 
-// sharedAccountPayloadError reports a shared token that belongs to a different
-// Roblox account. A missing token is left for the caller so existing auth
-// errors stay unchanged. The check does not send the token anywhere.
+// sharedAccountPayloadError stops a snapshot before any file is written when
+// this alias has no usable access token. Another profile's token is not read.
 func (a *App) sharedAccountPayloadError() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -131,142 +121,67 @@ func (a *App) sharedAccountPayloadError() error {
 	if alias == "" {
 		return nil
 	}
-	p, aliases, ok := config.BindAccount(cfg, alias)
+	p, _, ok := config.BindAccount(cfg, alias)
 	if !ok {
 		return nil
 	}
-	return a.reauthRequired(cfg, p, aliases)
-}
-
-// foreignAccountPayload refuses to treat another profile's keyring token as
-// this alias's account data. GET /v1/account/* returns the player who
-// authorized the token. Official responses carry Cache-Control: private,
-// no-cache and are that player's cached save, so a different accountId or
-// ps99UserId must not be labeled with those bodies.
-func foreignAccountPayload(requested config.Profile, credentialAlias string, cfg *config.File) error {
-	if credentialAlias == "" || credentialAlias == requested.Alias || cfg == nil {
-		return nil
-	}
-	cred, ok := profileByAlias(cfg, credentialAlias)
-	if !ok || !robloxIdentityConflicts(requested, cred) {
-		return nil
-	}
-	return &ExitError{
-		Code: exitcode.AuthRequired,
-		Msg: fmt.Sprintf(
-			"profile %q is Roblox account %s, but the only access token is stored for profile %q (Roblox account %s). GET /v1/account/* returns only the player who authorized that token, including that player's cached profile and inventory. That token was not used, and those payloads were not saved as %s. Reauthorize %s with the same OAuth client. Login stores a separate access token in %s's own keyring entry and does not copy %s's token.\n  bg-cli auth login --profile %s",
-			requested.Alias, describeRoblox(requested), cred.Alias, describeRoblox(cred), requested.Alias, requested.Alias, requested.Alias, cred.Alias, requested.Alias,
-		),
-	}
-}
-
-func profileByAlias(cfg *config.File, alias string) (config.Profile, bool) {
-	if cfg == nil {
-		return config.Profile{}, false
-	}
-	if p, ok := cfg.Profiles[alias]; ok {
-		if strings.TrimSpace(p.Alias) == "" {
-			p.Alias = alias
-		}
-		return p, true
-	}
-	for key, p := range cfg.Profiles {
-		if p.Alias == alias {
-			if strings.TrimSpace(p.Alias) == "" {
-				p.Alias = key
-			}
-			return p, true
-		}
-	}
-	return config.Profile{}, false
-}
-
-func robloxIdentityConflicts(requested, credential config.Profile) bool {
-	return setIDsDiffer(requested.AccountID, credential.AccountID) || setIDsDiffer(requested.PS99UserID, credential.PS99UserID)
-}
-
-func setIDsDiffer(a, b string) bool {
-	a = strings.TrimSpace(a)
-	b = strings.TrimSpace(b)
-	return a != "" && b != "" && a != b
-}
-
-func describeRoblox(p config.Profile) string {
-	accountID := strings.TrimSpace(p.AccountID)
-	userID := strings.TrimSpace(p.PS99UserID)
-	switch {
-	case accountID != "" && userID != "" && accountID != userID:
-		return accountID + " (ps99 user " + userID + ")"
-	case accountID != "":
-		return accountID
-	case userID != "":
-		return "ps99 user " + userID
-	default:
-		return "unset"
-	}
-}
-
-// tokenForAccount returns a keyring token that may read this profile's account.
-// A peer alias is used only when it is the same Roblox account. A different
-// accountId or ps99UserId never receives that peer's token.
-func (a *App) tokenForAccount(cfg *config.File, requested config.Profile, aliases []string) (string, string, error) {
-	return a.tokenFromAliases(accountTokenAliases(cfg, requested, aliases))
-}
-
-// reauthRequired reports a same-client peer whose Roblox id differs and whose
-// token must not be reused. The peer token is not returned and not copied.
-func (a *App) reauthRequired(cfg *config.File, requested config.Profile, aliases []string) error {
-	if _, err := a.tokenStore().Get(requested.Alias); err == nil {
-		return nil
-	} else if !tokenMissing(err) {
-		return &ExitError{Code: exitcode.CredentialStore, Msg: err.Error()}
-	}
-	for _, name := range aliases {
-		if name == "" || name == requested.Alias {
-			continue
-		}
-		peer, ok := profileByAlias(cfg, name)
-		if !ok || !robloxIdentityConflicts(requested, peer) {
-			continue
-		}
-		if _, err := a.tokenStore().Get(name); err == nil {
-			return foreignAccountPayload(requested, name, cfg)
-		} else if !tokenMissing(err) {
-			return &ExitError{Code: exitcode.CredentialStore, Msg: err.Error()}
-		}
-	}
-	return nil
-}
-
-// accountTokenAliases drops peer aliases that are a different Roblox account.
-func accountTokenAliases(cfg *config.File, requested config.Profile, aliases []string) []string {
-	out := make([]string, 0, len(aliases))
-	for _, name := range aliases {
-		if name == "" {
-			continue
-		}
-		if name == requested.Alias {
-			out = append(out, name)
-			continue
-		}
-		peer, ok := profileByAlias(cfg, name)
-		if ok && robloxIdentityConflicts(requested, peer) {
-			continue
-		}
-		out = append(out, name)
-	}
-	if len(out) == 0 {
-		return []string{requested.Alias}
-	}
-	return out
-}
-
-// profileHasAccountToken reports whether this profile has a keyring entry that
-// account commands may use. A different Roblox id does not count.
-func (a *App) profileHasAccountToken(cfg *config.File, requested config.Profile, aliases []string) (bool, string, error) {
-	_, from, err := a.tokenForAccount(cfg, requested, aliases)
+	_, err = a.ownAccountToken(p)
 	if err == nil {
-		return true, from, nil
+		return nil
+	}
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) && (exitErr.Code == exitcode.AuthRequired || exitErr.Code == exitcode.CredentialStore) {
+		return exitErr
+	}
+	return err
+}
+
+// ownAccountToken returns the keyring entry for this alias only.
+// An expired token is not sent, and no other profile is consulted.
+// CredentialProfile does not select a bearer. The token value is returned
+// to the caller and must not be logged.
+func (a *App) ownAccountToken(p config.Profile) (string, error) {
+	tok, err := a.tokenStore().Get(p.Alias)
+	if err != nil {
+		if !tokenMissing(err) {
+			return "", &ExitError{Code: exitcode.CredentialStore, Msg: err.Error()}
+		}
+		if strings.TrimSpace(p.CredentialProfile) != "" {
+			return "", &ExitError{
+				Code: exitcode.AuthRequired,
+				Msg: fmt.Sprintf(
+					"profile %q has no access token. credentialProfile is not used to send another profile's bearer. One OAuth grant is one Roblox account, and GET /v1/account/* returns only the player who authorized the token.\n  bg-cli auth login --profile %s",
+					p.Alias, p.Alias,
+				),
+			}
+		}
+		return "", &ExitError{
+			Code: exitcode.AuthRequired,
+			Msg: fmt.Sprintf(
+				"profile %q has no access token. Another profile's token is not used. GET /v1/account/* returns only the Roblox account that authorized the token, including that player's cached profile and inventory.\n  bg-cli auth login --profile %s",
+				p.Alias, p.Alias,
+			),
+		}
+	}
+	if tokenExpired(p) {
+		return "", &ExitError{
+			Code: exitcode.AuthRequired,
+			Msg: fmt.Sprintf(
+				"profile %q access token is expired. Another profile's token is not used.\n  bg-cli auth login --profile %s",
+				p.Alias, p.Alias,
+			),
+		}
+	}
+	return tok, nil
+}
+
+// profileHasAccountToken reports whether this alias has its own keyring entry.
+// The owner is that alias, or empty when the entry is missing. A same-client
+// peer is not an owner.
+func (a *App) profileHasAccountToken(_ *config.File, requested config.Profile, _ []string) (bool, string, error) {
+	_, err := a.tokenStore().Get(requested.Alias)
+	if err == nil {
+		return true, requested.Alias, nil
 	}
 	if tokenMissing(err) {
 		return false, "", nil
@@ -274,25 +189,11 @@ func (a *App) profileHasAccountToken(cfg *config.File, requested config.Profile,
 	return false, "", err
 }
 
-// tokenFromAliases returns the first keyring token among aliases. The first
-// alias is the requested profile; later aliases share its OAuth client only
-// when accountTokenAliases kept them.
-func (a *App) tokenFromAliases(aliases []string) (token, from string, err error) {
-	var last error
-	for _, alias := range aliases {
-		tok, getErr := a.tokenStore().Get(alias)
-		if getErr == nil {
-			return tok, alias, nil
-		}
-		if !tokenMissing(getErr) {
-			return "", "", getErr
-		}
-		last = getErr
+func tokenExpired(p config.Profile) bool {
+	if p.ExpiresAt.IsZero() {
+		return false
 	}
-	if last == nil {
-		last = keyring.ErrNotFound
-	}
-	return "", "", last
+	return time.Now().UTC().After(p.ExpiresAt.UTC())
 }
 
 func tokenMissing(err error) bool {
@@ -581,6 +482,17 @@ func (a *App) runAccountView(ctx context.Context, req accountViewRequest) error 
 			UpstreamStatus: &st,
 		}))
 		return &ExitError{Code: exitcode.Upstream, Msg: msg}
+	}
+
+	if meta, ok, merr := a.profileMetadata(); merr == nil && ok {
+		if err := config.UpstreamConflict(meta, res.Data); err != nil {
+			_ = a.emit(output.NewError(req.Command, source, freshnessFromResult(res, nil), &output.ErrorBody{
+				Code:      "account_identity",
+				Message:   err.Error(),
+				Retryable: false,
+			}))
+			return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
+		}
 	}
 
 	if a.Flags.Output == "raw" {
