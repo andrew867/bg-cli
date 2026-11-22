@@ -31,13 +31,9 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 		linkedID = strings.TrimSpace(meta.LinkedAccountID)
 		credentialEpoch = strings.TrimSpace(meta.CredentialEpoch)
 	}
-	// --user-id selects the battle contribution row. It is not the account owner.
+	// --user-id selects the battle contribution row. It is not the account owner,
+	// including when the profile has no ps99UserId.
 	userID, userOK := clan.ResolveUserID(opt.UserID, accountUserID)
-	historyUserID := accountUserID
-	if historyUserID == "" {
-		// Older summaries stored the account id only in userId.
-		historyUserID = userID
-	}
 	var warnings []string
 	if !userOK {
 		msg := "player user id is not configured; contribution and rank omitted"
@@ -209,13 +205,7 @@ func (a *App) attachClanSnapshot(ctx context.Context, absDir, stamp, collision, 
 			sessionID += "-" + collision
 		}
 	default:
-		sessionID = clan.MatchingSession(scanned.Priors, clan.HistoryIdentity{
-			LinkedAccountID: linkedID,
-			PS99UserID:      historyUserID,
-			CredentialEpoch: credentialEpoch,
-			LegacyAccountID: accountID,
-			Profile:         profile,
-		})
+		sessionID = clan.MatchingSession(scanned.Priors, clan.NewHistoryIdentity(linkedID, accountUserID, userID, credentialEpoch, accountID, profile))
 		if sessionID == "" {
 			sessionID = clan.NewSessionID(prefix, stamp)
 		}

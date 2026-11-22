@@ -35,6 +35,7 @@ func (a *App) writeInventoryDiff(absDir, stamp, collision, prefix, fileProfile s
 			SessionID:       sum.SessionID,
 			AccountID:       sum.AccountID,
 			LinkedAccountID: sum.LinkedAccountID,
+			UserID:          sum.UserID,
 			PS99UserID:      sum.PS99UserID,
 			CredentialEpoch: sum.CredentialEpoch,
 			Profile:         sum.Profile,

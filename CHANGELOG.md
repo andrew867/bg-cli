@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Each profile uses only its own access token. The same `clientId` does not borrow another alias's bearer, including when the Roblox id matches or the token is expired. An old `credentialProfile` value is ignored. `GET /v1/account/*` returns only the player who authorized that token. Unless the account profile includes an identity field, login trusts the consent screen and stores the new token on the profile you named. It does not retarget an alias onto a different Roblox account. `auth login --profile alt1` creates that profile when it does not exist yet and uses the shared developer app. If saving the profile fails after a reauth, the previous access token is put back.
-- `--user-id` selects the battle contribution row. `ps99UserId` on the summary and the manifest stays the account id from the profile, so an override does not split history.
+- `--user-id` is the contribution and rank target. It is not account history, including when `ps99UserId` is empty. A matching credential epoch keeps the previous, session, finite windows, and inventory diff. `userId` is identity only for a summary that has neither `credentialEpoch` nor `ps99UserId`. A linked-account id, username, or display name is accepted only as a JSON string. A user id is a positive decimal integer.
 
 ### Changed
 

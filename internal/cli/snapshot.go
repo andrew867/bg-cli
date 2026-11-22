@@ -45,9 +45,12 @@ token. Another alias's token is not sent, including when the client id or
 the Roblox id matches. The snapshot stops before any file is written when
 this profile has no usable token. Log in that profile. File names keep the
 alias. History uses a provider-verified linkedAccountId when both snapshots
-have one. Otherwise a snapshot that has a credentialEpoch continues only
-that same epoch. Older summaries that both omit the epoch keep the previous
-identity rules. A different account is not used as a baseline.
+have one. A known ps99UserId that disagrees is inconsistent. Otherwise a
+snapshot that has a credentialEpoch continues that same epoch, and userId
+is not part of the decision. userId is the contribution target, including
+when ps99UserId is empty. Older summaries use userId as the owner only when
+both credentialEpoch and ps99UserId are absent. A different account is not
+used as a baseline.
 --user-id selects the battle contribution row and does not change ps99UserId.
 
 Every snapshot also writes summary.json. That file is the history record for

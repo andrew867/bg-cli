@@ -19,6 +19,7 @@ type PreviousRequest struct {
 	SessionID       string
 	AccountID       string
 	LinkedAccountID string
+	UserID          string
 	PS99UserID      string
 	CredentialEpoch string
 	Profile         string
@@ -103,10 +104,6 @@ func LoadPreviousInventory(req PreviousRequest) PreviousInventory {
 		out.Reason = "previous manifest is malformed"
 		return out
 	}
-	if man.Profile != "" && req.Profile != "" && !strings.EqualFold(man.Profile, req.Profile) {
-		out.Reason = "previous snapshot is a different account or session"
-		return out
-	}
 	var invName string
 	for _, rec := range man.Files {
 		if rec.Kind == "inventory-json" && rec.OK {
@@ -165,27 +162,14 @@ func sameSnapshotAccount(req PreviousRequest, head summaryHead) (bool, string) {
 	if strings.TrimSpace(req.SessionID) != "" && strings.TrimSpace(head.SessionID) != "" && req.SessionID != head.SessionID {
 		return false, "previous snapshot is a different account or session"
 	}
-	ps99 := strings.TrimSpace(head.PS99UserID)
-	if ps99 == "" {
-		ps99 = strings.TrimSpace(head.UserID)
-	}
 	profile := strings.TrimSpace(head.ProfileAlias)
 	if profile == "" {
 		profile = head.Profile
 	}
-	ok, reason := clan.CompareHistory(clan.HistoryIdentity{
-		LinkedAccountID: req.LinkedAccountID,
-		PS99UserID:      req.PS99UserID,
-		CredentialEpoch: req.CredentialEpoch,
-		LegacyAccountID: req.AccountID,
-		Profile:         req.Profile,
-	}, clan.HistoryIdentity{
-		LinkedAccountID: head.LinkedAccountID,
-		PS99UserID:      ps99,
-		CredentialEpoch: head.CredentialEpoch,
-		LegacyAccountID: head.AccountID,
-		Profile:         profile,
-	})
+	ok, reason := clan.CompareHistory(
+		clan.NewHistoryIdentity(req.LinkedAccountID, req.PS99UserID, req.UserID, req.CredentialEpoch, req.AccountID, req.Profile),
+		clan.NewHistoryIdentity(head.LinkedAccountID, head.PS99UserID, head.UserID, head.CredentialEpoch, head.AccountID, profile),
+	)
 	if !ok {
 		return false, reason
 	}

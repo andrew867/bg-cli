@@ -60,16 +60,17 @@ func canonicalID(raw json.RawMessage) string {
 const BaselineIdentityRejected = "previous snapshot was rejected because account identity differs"
 
 // HistoryIdentity is the account a snapshot belongs to.
-// LinkedAccountID is the BIG Games linked-account id when a trustworthy
-// OAuth source provided it. That match is provider-verified identity.
-// PS99UserID is metadata. It is not proof of which bearer wrote the file.
-// CredentialEpoch is the non-secret id of the OAuth grant that wrote the
-// snapshot. It is not a token hash. When provider-verified identity is
-// unavailable, a snapshot that has an epoch matches only the same epoch.
-// Two summaries that both omit the epoch stay readable against each other.
+// LinkedAccountID is provider identity, and only when the provider supplied it.
+// PS99UserID is owner metadata. It is not proof of which bearer wrote the file.
+// CredentialEpoch is the history lineage when LinkedAccountID is absent. It is
+// not a token hash. A matching non-empty epoch is enough; the contribution
+// user id is not part of it. A different epoch is a new lineage.
 // LegacyAccountID is the older summary accountId field. It is not a
 // linked-account id and is used only when both sides lack the newer ids.
 // Profile is the local alias and is never identity by itself.
+// A summary that has neither PS99UserID nor CredentialEpoch may have stored
+// the owner in userId. That fallback is applied by NewHistoryIdentity and is
+// not used for a summary that has an epoch.
 type HistoryIdentity struct {
 	LinkedAccountID string
 	PS99UserID      string
@@ -77,6 +78,24 @@ type HistoryIdentity struct {
 	LegacyAccountID string
 	Profile         string
 	Conflict        bool
+}
+
+// NewHistoryIdentity builds the one account identity used by history,
+// session selection, scan keys, and inventory baselines.
+// user is the contribution target. It becomes owner metadata only for a
+// summary that predates this model: both ps99 and credentialEpoch are empty.
+func NewHistoryIdentity(linked, ps99, user, epoch, legacyAccount, profile string) HistoryIdentity {
+	id := HistoryIdentity{
+		LinkedAccountID: strings.TrimSpace(linked),
+		PS99UserID:      strings.TrimSpace(ps99),
+		CredentialEpoch: strings.TrimSpace(epoch),
+		LegacyAccountID: strings.TrimSpace(legacyAccount),
+		Profile:         strings.TrimSpace(profile),
+	}
+	if id.PS99UserID == "" && id.CredentialEpoch == "" {
+		id.PS99UserID = strings.TrimSpace(user)
+	}
+	return id
 }
 
 // SameHistory reports whether two snapshots are the same account.
@@ -105,14 +124,18 @@ func CompareHistory(a, b HistoryIdentity) (bool, string) {
 	if aL != "" && bL != "" && aL == bL {
 		return true, ""
 	}
-	// No provider-verified linked account. A new grant's epoch starts a new
-	// lineage, including against an older summary that stored a user id on
-	// another account's payload. Legacy files with no epoch still match.
+	// No provider-verified linked account. A matching epoch is the lineage.
+	// Contribution userId is not compared. One empty epoch does not continue
+	// an older summary, including one that only shares a user id.
 	aE, bE := strings.TrimSpace(a.CredentialEpoch), strings.TrimSpace(b.CredentialEpoch)
-	if aE != "" || bE != "" {
-		if aE == "" || bE == "" || aE != bE {
-			return false, BaselineIdentityRejected
+	if aE != "" && bE != "" {
+		if aE == bE {
+			return true, ""
 		}
+		return false, BaselineIdentityRejected
+	}
+	if aE != "" || bE != "" {
+		return false, BaselineIdentityRejected
 	}
 	if aL == "" && bL == "" && aU != "" && bU != "" && aU == bU {
 		return true, ""
@@ -134,37 +157,11 @@ func CompareHistory(a, b HistoryIdentity) (bool, string) {
 }
 
 func (p Prior) historyIdentity() HistoryIdentity {
-	ps99 := strings.TrimSpace(p.PS99UserID)
-	user := strings.TrimSpace(p.UserID)
-	id := HistoryIdentity{
-		LinkedAccountID: strings.TrimSpace(p.LinkedAccountID),
-		PS99UserID:      ps99,
-		CredentialEpoch: strings.TrimSpace(p.CredentialEpoch),
-		LegacyAccountID: strings.TrimSpace(p.AccountID),
-		Profile:         p.Profile,
-	}
-	if ps99 == "" {
-		// Older summaries stored the account id only in userId.
-		id.PS99UserID = user
-	}
-	return id
+	return NewHistoryIdentity(p.LinkedAccountID, p.PS99UserID, p.UserID, p.CredentialEpoch, p.AccountID, p.Profile)
 }
 
 func (in Input) historyIdentity() HistoryIdentity {
-	ps99 := strings.TrimSpace(in.PS99UserID)
-	user := strings.TrimSpace(in.UserID)
-	id := HistoryIdentity{
-		LinkedAccountID: strings.TrimSpace(in.LinkedAccountID),
-		PS99UserID:      ps99,
-		CredentialEpoch: strings.TrimSpace(in.CredentialEpoch),
-		LegacyAccountID: strings.TrimSpace(in.AccountID),
-		Profile:         in.Profile,
-	}
-	if ps99 == "" {
-		// Older summaries stored the account id only in userId.
-		id.PS99UserID = user
-	}
-	return id
+	return NewHistoryIdentity(in.LinkedAccountID, in.PS99UserID, in.UserID, in.CredentialEpoch, in.AccountID, in.Profile)
 }
 
 // MatchingSession is the latest prior session for this account. A newer

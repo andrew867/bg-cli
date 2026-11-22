@@ -638,6 +638,67 @@ func TestPreviousInventoryRejectsSymlinkAndTraversal(t *testing.T) {
 	}
 }
 
+func TestPreviousInventoryFollowsContributionRule(t *testing.T) {
+	dir := t.TempDir()
+	const stamp = "2026-11-22-150000"
+	summary := `{
+		"schemaVersion":"1.0","localStamp":"` + stamp + `","exportedAt":"2026-11-22T15:00:00Z",
+		"sessionId":"sess","prefix":"ps99","profile":"main","userId":"111","credentialEpoch":"epoch-a",
+		"current":{"currenciesKnown":false,"statisticsKnown":false,"clan":{}}
+	}`
+	manifest := `{
+		"schemaVersion":"1.2","ok":true,"localStamp":"` + stamp + `","prefix":"ps99","profile":"main",
+		"files":[{"name":"` + stamp + `-ps99-inv.json","kind":"inventory-json","ok":true}],
+		"manifestFile":"` + stamp + `-ps99-manifest.json"
+	}`
+	inv := `{"status":"ok","data":{"inventory":{"items":[{"class":"Pet","id":"Foo","count":2,"rawData":{"id":"Foo","_am":2}}]}}}`
+	for name, body := range map[string]string{
+		stamp + "-ps99-summary.json":  summary,
+		stamp + "-ps99-manifest.json": manifest,
+		stamp + "-ps99-inv.json":      inv,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	same := LoadPreviousInventory(PreviousRequest{
+		Dir: dir, SummaryFile: stamp + "-ps99-summary.json", Prefix: "ps99",
+		SessionID: "sess", Profile: "main", UserID: "222", CredentialEpoch: "epoch-a",
+	})
+	if same.Reason != "" || same.File == "" {
+		t.Fatalf("same epoch rejected a different contribution target: %s", same.Reason)
+	}
+	other := LoadPreviousInventory(PreviousRequest{
+		Dir: dir, SummaryFile: stamp + "-ps99-summary.json", Prefix: "ps99",
+		SessionID: "sess", Profile: "main", UserID: "111", CredentialEpoch: "epoch-b",
+	})
+	if other.Items != nil || !strings.Contains(other.Reason, "account identity differs") {
+		t.Fatalf("different epoch was a baseline: %+v", other)
+	}
+	legacySummary := `{
+		"schemaVersion":"1.0","localStamp":"` + stamp + `","exportedAt":"2026-11-22T15:00:00Z",
+		"sessionId":"sess","prefix":"ps99","profile":"main","userId":"111",
+		"current":{"currenciesKnown":false,"statisticsKnown":false,"clan":{}}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, stamp+"-ps99-summary.json"), []byte(legacySummary), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	legacy := LoadPreviousInventory(PreviousRequest{
+		Dir: dir, SummaryFile: stamp + "-ps99-summary.json", Prefix: "ps99",
+		SessionID: "sess", Profile: "alt1", UserID: "111",
+	})
+	if legacy.Reason != "" {
+		t.Fatalf("legacy userId summaries were split: %s", legacy.Reason)
+	}
+	fresh := LoadPreviousInventory(PreviousRequest{
+		Dir: dir, SummaryFile: stamp + "-ps99-summary.json", Prefix: "ps99",
+		SessionID: "sess", Profile: "alt1", UserID: "111", CredentialEpoch: "epoch-a",
+	})
+	if fresh.Items != nil || !strings.Contains(fresh.Reason, "account identity differs") {
+		t.Fatalf("new epoch continued a legacy userId: %+v", fresh)
+	}
+}
+
 func TestAllocateStampReservesInventoryDiff(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "2026-01-01-000000-ps99-inventory-diff.json"), []byte("{}"), 0o644); err != nil {

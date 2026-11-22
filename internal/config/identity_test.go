@@ -40,6 +40,40 @@ func TestDiscoverProfileIgnoresLegacyAccountIDAlone(t *testing.T) {
 	}
 }
 
+func TestDiscoverProfileRejectsMalformedIdentity(t *testing.T) {
+	rejected := []string{
+		`{"linkedAccountId":{"id":"abc"},"Username":{"n":"A"},"DisplayName":{"n":"B"},"AccountID":{"id":"1"},"UserID":{"n":1}}`,
+		`{"linkedAccountId":["abc"],"Username":["A"],"DisplayName":["B"],"AccountID":["1"],"UserID":[1]}`,
+		`{"linkedAccountId":true,"Username":false,"DisplayName":true,"AccountID":true,"UserID":true}`,
+		`{"linkedAccountId":null,"Username":null,"DisplayName":null,"AccountID":null,"UserID":null}`,
+		`{"linkedAccountId":"{\"id\":\"abc\"}","Username":"{\"n\":1}","DisplayName":"[\"B\"]","AccountID":"{\"id\":1}"}`,
+		`{"UserID":0}`,
+		`{"UserID":-4}`,
+		`{"UserID":1.5}`,
+		`{"UserID":1e2}`,
+		`{"UserID":"0"}`,
+		`{"UserID":"-4"}`,
+		`{"UserID":"1.5"}`,
+		`{"UserID":"1e2"}`,
+		`{"UserID":"1E2"}`,
+		`{"linkedAccountId":1001,"UserID":"01"}`,
+	}
+	for _, body := range rejected {
+		got := DiscoverProfile(json.RawMessage(body))
+		if got.LinkedAccountID != "" || got.PS99UserID != "" || got.Username != "" || got.DisplayName != "" || got.Warning != "" {
+			t.Fatalf("invented identity from %s: %+v", body, got)
+		}
+	}
+	got := DiscoverProfile(json.RawMessage(`{"UserID":1001,"Username":" Player ","DisplayName":" Player One "}`))
+	if got.PS99UserID != "1001" || got.Username != "Player" || got.DisplayName != "Player One" {
+		t.Fatalf("number and trimmed names %+v", got)
+	}
+	got = DiscoverProfile(json.RawMessage(`{"UserID":" 1001 "}`))
+	if got.PS99UserID != "1001" {
+		t.Fatalf("decimal string %+v", got)
+	}
+}
+
 func TestDiscoverProfileRejectsZeroUserID(t *testing.T) {
 	got := DiscoverProfile(json.RawMessage(`{"UserID":0,"RobloxUserId":"-4"}`))
 	if got.PS99UserID != "" {

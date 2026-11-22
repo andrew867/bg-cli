@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"strings"
+	"unicode"
 )
 
 // GrantIdentity is what an OAuth-accessible account document positively says.
@@ -199,34 +201,104 @@ func profileConflictsGrant(p Profile, linked, ps99 string) bool {
 	return false
 }
 
+// rawString returns a JSON string. Objects, arrays, booleans, numbers, null,
+// and a string whose value is itself JSON are not identity.
 func rawString(top map[string]json.RawMessage, keys ...string) string {
 	for _, key := range keys {
 		raw, ok := top[key]
-		if !ok || len(raw) == 0 || string(raw) == "null" {
+		if !ok {
 			continue
 		}
-		s := strings.TrimSpace(string(raw))
-		if len(s) >= 2 && s[0] == '"' {
-			var str string
-			if json.Unmarshal(raw, &str) == nil {
-				s = strings.TrimSpace(str)
+		s, ok := jsonStringValue(raw)
+		if !ok {
+			if presentJSON(raw) {
+				return ""
 			}
+			continue
 		}
-		if s != "" {
-			return s
-		}
+		return s
 	}
 	return ""
 }
 
 func positiveID(top map[string]json.RawMessage, keys ...string) string {
-	s := rawString(top, keys...)
-	if s == "" {
-		return ""
+	for _, key := range keys {
+		raw, ok := top[key]
+		if !ok {
+			continue
+		}
+		if !presentJSON(raw) {
+			continue
+		}
+		id, ok := positiveJSONID(raw)
+		if !ok {
+			return ""
+		}
+		return id
 	}
-	n, ok := new(big.Int).SetString(s, 10)
+	return ""
+}
+
+func presentJSON(raw json.RawMessage) bool {
+	raw = bytes.TrimSpace(raw)
+	return len(raw) > 0 && string(raw) != "null"
+}
+
+func jsonStringValue(raw json.RawMessage) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) < 2 || raw[0] != '"' {
+		return "", false
+	}
+	var s string
+	if json.Unmarshal(raw, &s) != nil {
+		return "", false
+	}
+	s = strings.TrimSpace(s)
+	if s == "" || nestedJSONText(s) {
+		return "", false
+	}
+	return s, true
+}
+
+func nestedJSONText(s string) bool {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return false
+	}
+	switch t[0] {
+	case '{', '[':
+	default:
+		return false
+	}
+	var v any
+	return json.Unmarshal([]byte(t), &v) == nil
+}
+
+func positiveJSONID(raw json.RawMessage) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || raw[0] == '{' || raw[0] == '[' || raw[0] == 't' || raw[0] == 'f' {
+		return "", false
+	}
+	text := string(raw)
+	if raw[0] == '"' {
+		s, ok := jsonStringValue(raw)
+		if !ok {
+			return "", false
+		}
+		text = s
+	}
+	text = strings.TrimSpace(text)
+	if text == "" || text[0] < '1' || text[0] > '9' {
+		return "", false
+	}
+	for _, r := range text[1:] {
+		if !unicode.IsDigit(r) {
+			return "", false
+		}
+	}
+	n, ok := new(big.Int).SetString(text, 10)
 	if !ok || n.Sign() <= 0 {
-		return ""
+		return "", false
 	}
-	return n.String()
+	return n.String(), true
 }

@@ -777,6 +777,70 @@ func TestUserIDOverrideKeepsAccountHistory(t *testing.T) {
 	}
 }
 
+func TestUserIDDoesNotBecomeOwnerWhenPS99IsEmpty(t *testing.T) {
+	store := auth.NewMemoryStore()
+	t.Setenv("BG_CLI_CONFIG_DIR", t.TempDir())
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias: "main", ClientID: "cid", Scopes: auth.DefaultScopes,
+				IssuedAt:        time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+				ExpiresAt:       time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+				CredentialEpoch: "epoch-a",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("main", "synthetic_test_access_token_do_not_use"); err != nil {
+		t.Fatal(err)
+	}
+	first := time.Date(2026, 11, 22, 15, 0, 0, 0, time.UTC)
+	second := first.Add(time.Minute)
+	inv, ext := accountFixtureBytes(t)
+	profile := []byte(`{"status":"ok","data":{"Currency":{"Diamonds":{"id":"Diamonds","_am":1}}}}`)
+	srv := accountAndClanServer(t, inv, profile, ext, nil, inactiveClanBattleBody, 404, 200)
+	defer srv.Close()
+	dir := t.TempDir()
+	run := func(clock time.Time, user string) {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := Execute(Deps{
+			Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+			BaseURL: srv.URL, HTTPClient: srv.Client(),
+			Clock: output.FixedClock{T: clock},
+		}, []string{"account", "snapshot", "--profile", "main", "--dir", dir, "--prefix", "ps99", "--no-zip", "--user-id", user})
+		if code != 0 {
+			t.Fatalf("exit %d stderr=%s", code, stderr.String())
+		}
+	}
+	run(first, "111")
+	run(second, "222")
+	one := readSummary(t, dir, first)
+	two := readSummary(t, dir, second)
+	if one.PS99UserID != "" || two.PS99UserID != "" {
+		t.Fatalf("contribution stored as owner %q %q", one.PS99UserID, two.PS99UserID)
+	}
+	if one.UserID != "111" || two.UserID != "222" || one.CredentialEpoch != "epoch-a" || two.CredentialEpoch != "epoch-a" {
+		t.Fatalf("ids one=%s/%s two=%s/%s", one.UserID, one.CredentialEpoch, two.UserID, two.CredentialEpoch)
+	}
+	if one.SessionID == "" || one.SessionID != two.SessionID || !two.Windows.Previous.Valid {
+		t.Fatalf("history split session %q/%q previous %+v", one.SessionID, two.SessionID, two.Windows.Previous)
+	}
+	diffBody, err := os.ReadFile(filepath.Join(dir, stampName(second)+"-ps99-inventory-diff.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var diff snapshot.InventoryDiff
+	if err := json.Unmarshal(diffBody, &diff); err != nil {
+		t.Fatal(err)
+	}
+	if diff.Status != snapshot.DiffStatusOK || diff.Baseline == nil || !strings.Contains(diff.Baseline.File, stampName(first)) {
+		t.Fatalf("inventory baseline %+v %s", diff.Baseline, diff.Reason)
+	}
+}
+
 func TestConfigPS99ClanTagSuppliesClan(t *testing.T) {
 	store := auth.NewMemoryStore()
 	setupProfile(t, store, auth.DefaultScopes)
