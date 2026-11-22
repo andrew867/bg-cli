@@ -162,13 +162,14 @@ func Get(f *File, alias string) (Profile, bool) {
 // BindAccount resolves alias for authenticated use.
 //
 // The OS credential store keys the access token by the profile that ran
-// auth login. That credential belongs to the OAuth client (clientId), not
-// to the Roblox id. A hand-added alias with the same clientId is the same
-// API account even when accountId and ps99UserId differ. BindAccount then
-// returns the logged-in alias as a later credential candidate and copies
-// missing non-secret OAuth fields (scopes, expiry, redirect URI) onto the
-// result. It does not read the token and does not write config. Roblox
-// identity fields on the requested alias are left as written.
+// auth login. That credential belongs to the OAuth client (clientId).
+// BindAccount returns the logged-in alias as a later credential candidate
+// and copies missing non-secret OAuth fields (scopes, expiry, redirect URI)
+// onto the result. It does not read the token and does not write config.
+// Roblox identity fields on the requested alias are left as written.
+// Account payload commands still refuse that shared token when accountId
+// or ps99UserId differs: GET /v1/account/* returns the player who authorized
+// the token, not the other configured Roblox account.
 func BindAccount(f *File, alias string) (Profile, []string, bool) {
 	if f == nil {
 		return Profile{}, nil, false

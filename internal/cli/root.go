@@ -21,16 +21,18 @@ var Version = "0.2.7"
 
 // Deps are injectable collaborators for tests.
 type Deps struct {
-	Stdout     io.Writer
-	Stderr     io.Writer
-	TokenStore auth.TokenStore
-	Clock      output.Clock
-	HTTPClient *http.Client
-	BaseURL    string // tests inject local servers; production leaves empty
-	OpenURL    func(string) error
-	Env        func(string) string
-	IsTTY      func() bool
-	Now        func() time.Time
+	Stdout            io.Writer
+	Stderr            io.Writer
+	TokenStore        auth.TokenStore
+	Clock             output.Clock
+	HTTPClient        *http.Client
+	BaseURL           string // tests inject local servers; production leaves empty
+	OpenURL           func(string) error
+	OAuthAuthorizeURL string // tests only; production stays empty
+	OAuthTokenURL     string // tests only; production stays empty
+	Env               func(string) string
+	IsTTY             func() bool
+	Now               func() time.Time
 }
 
 // GlobalFlags are shared across commands.

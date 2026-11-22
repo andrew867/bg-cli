@@ -23,8 +23,9 @@ func newAuthCmd(app *App) *cobra.Command {
 
 One access token reads only the account that approved consent. Authorize each
 Roblox account under a distinct --profile alias. Another alias with the same
-clientId reuses that keyring token; a different Roblox id does not require a
-second login. Omitted scopes, expiry, and redirect URI come from the profile
+clientId and the same Roblox id can reuse that keyring token. A different
+accountId or ps99UserId needs its own login before account commands will
+read it. Omitted scopes, expiry, and redirect URI come from the profile
 that already has them.
 
 auth logout removes the local token only. To revoke server-side access, open
@@ -51,6 +52,14 @@ func newAuthLoginCmd(app *App) *cobra.Command {
 		Long: `Starts a loopback callback, opens the BIG Games consent page, exchanges the
 authorization code, and stores the access token in the OS credential store.
 
+Logging in a profile that already has a client id is a new authorization for
+that alias. The same OAuth client id is reused. The new access token is stored
+only under that profile's keyring entry. Another profile's token is not copied.
+
+When --client-id or --redirect-uri is omitted, the values already stored for
+this profile are used, including a redirect URI filled from the same client.
+A profile that has never been configured still needs both flags.
+
 By default every documented account read scope is requested. Pass --scopes to
 opt out and request a smaller set instead.
 
@@ -67,6 +76,10 @@ Auth commands do not support --output raw or --output csv.`,
 			profile := app.Flags.Profile
 			if profile == "" {
 				profile = config.DefaultProfile
+			}
+			clientID, redirectURI, err := app.resolveLoginParams(profile, clientID, redirectURI)
+			if err != nil {
+				return err
 			}
 			scopes, err := auth.ParseScopeList(scopesRaw)
 			if err != nil {
@@ -86,12 +99,16 @@ Auth commands do not support --output raw or --output csv.`,
 			ctx, cancel := context.WithTimeout(cmd.Context(), 6*time.Minute)
 			defer cancel()
 
+			app.notice("Authorizing profile %s. A new access token is stored only in that profile's keyring entry.", profile)
 			res, secrets, err := auth.Login(ctx, auth.LoginOptions{
 				Profile:      profile,
 				ClientID:     clientID,
 				RedirectURI:  redirectURI,
 				Scopes:       scopes,
 				NoOpen:       noOpen,
+				AuthorizeURL: app.Deps.OAuthAuthorizeURL,
+				TokenURL:     app.Deps.OAuthTokenURL,
+				HTTPClient:   app.Deps.HTTPClient,
 				TokenStore:   app.tokenStore(),
 				SecretSource: secretSrc,
 				Stderr:       app.stderr(),
@@ -131,13 +148,42 @@ Auth commands do not support --output raw or --output csv.`,
 			return app.emit(env)
 		},
 	}
-	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID (non-secret)")
-	cmd.Flags().StringVar(&redirectURI, "redirect-uri", "", "exact registered loopback redirect URI")
+	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID (non-secret; defaults to the client id already stored for this profile or the same client)")
+	cmd.Flags().StringVar(&redirectURI, "redirect-uri", "", "exact registered loopback redirect URI (defaults to the URI already stored for this client)")
 	cmd.Flags().StringVar(&scopesRaw, "scopes", "", "opt-out: request only these scopes (default: all seven account read scopes)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "print authorize URL instead of opening a browser")
-	_ = cmd.MarkFlagRequired("client-id")
-	_ = cmd.MarkFlagRequired("redirect-uri")
 	return cmd
+}
+
+// resolveLoginParams fills a reauth from the profile's saved OAuth client.
+// It reads no keyring token and does not copy one profile's access token to another.
+func (a *App) resolveLoginParams(profile, clientID, redirectURI string) (string, string, error) {
+	clientID = strings.TrimSpace(clientID)
+	redirectURI = strings.TrimSpace(redirectURI)
+	if clientID != "" && redirectURI != "" {
+		return clientID, redirectURI, nil
+	}
+	cfg, err := config.Load()
+	if err != nil && (clientID == "" || redirectURI == "") {
+		return "", "", exitf(exitcode.Usage, "client-id and redirect-uri are required\n  bg-cli auth login --profile %s --client-id <id> --redirect-uri <uri>", profile)
+	}
+	if cfg != nil {
+		if p, _, ok := config.BindAccount(cfg, profile); ok {
+			if clientID == "" {
+				clientID = strings.TrimSpace(p.ClientID)
+			}
+			if redirectURI == "" {
+				redirectURI = strings.TrimSpace(p.RedirectURI)
+			}
+		}
+	}
+	if clientID == "" {
+		return "", "", exitf(exitcode.Usage, "client-id is required\n  bg-cli auth login --profile %s --client-id <id> --redirect-uri <uri>", profile)
+	}
+	if redirectURI == "" {
+		return "", "", exitf(exitcode.Usage, "redirect-uri is required\n  bg-cli auth login --profile %s --client-id <id> --redirect-uri <uri>", profile)
+	}
+	return clientID, redirectURI, nil
 }
 
 func newAuthStatusCmd(app *App) *cobra.Command {
@@ -170,8 +216,7 @@ quota. Interactive runs print a warning; non-interactive runs require --yes.`,
 				return writeAuthError(app, "auth status", exitcode.AuthRequired, "not_logged_in", fmt.Sprintf("profile %q not found", profile))
 			}
 
-			_, credentialProfile, tokErr := app.tokenFromAliases(aliases)
-			hasToken := tokErr == nil
+			hasToken, credentialProfile, tokErr := app.profileHasAccountToken(cfg, p, aliases)
 			if tokErr != nil && !tokenMissing(tokErr) {
 				if strings.Contains(strings.ToLower(tokErr.Error()), "credential store") {
 					return writeAuthError(app, "auth status", exitcode.CredentialStore, "credential_store", tokErr.Error())

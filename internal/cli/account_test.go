@@ -285,24 +285,10 @@ func TestHandAddedProfileSharesClientCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var sawAlt bool
+	var accountCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/account/profile" {
-			t.Errorf("path %s", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if r.Header.Get("Authorization") != "Bearer "+mainToken {
-			t.Error("shared client request did not use the existing credential")
-		}
-		sawAlt = true
-		body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "account-profile-ok.json"))
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(body)
+		accountCalls++
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
@@ -311,14 +297,20 @@ func TestHandAddedProfileSharesClientCredential(t *testing.T) {
 		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
 		BaseURL: srv.URL, HTTPClient: srv.Client(), IsTTY: func() bool { return true },
 	}, []string{"account", "currencies", "--profile", "alt1"})
-	if code != 0 {
+	if code != exitcode.AuthRequired {
 		t.Fatalf("exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
-	if !sawAlt {
-		t.Fatal("expected an account request for alt1")
+	if accountCalls != 0 {
+		t.Fatalf("different Roblox id reused the shared token for an account request (%d)", accountCalls)
 	}
 	if strings.Contains(stdout.String(), mainToken) || strings.Contains(stderr.String(), mainToken) {
 		t.Fatal("token leaked")
+	}
+	if !strings.Contains(stderr.String(), `profile "alt1"`) || !strings.Contains(stderr.String(), "auth login --profile alt1") {
+		t.Fatalf("reason missing:\n%s", stderr.String())
+	}
+	if strings.Contains(stdout.String(), "123456789") || strings.Contains(stderr.String(), "123456789") {
+		t.Fatal("main profile body was emitted for alt1")
 	}
 
 	raw, err := os.ReadFile(filepath.Join(dir, config.ConfigFile))
@@ -354,8 +346,8 @@ func TestHandAddedProfileSharesClientCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := env.Data.(map[string]any)
-	if data["tokenPresent"] != true || data["credentialProfile"] != "main" {
-		t.Fatalf("status %#v", data)
+	if data["tokenPresent"] != false || data["credentialProfile"] != "" {
+		t.Fatalf("different Roblox id reported main's token as alt1's credential: %#v", data)
 	}
 	if data["redirectUri"] != "http://127.0.0.1:8765/callback" {
 		t.Fatalf("redirect %#v", data["redirectUri"])

@@ -112,9 +112,19 @@ One token never grants private access to another Roblox player. A second login i
 
 ## Same OAuth client, second alias
 
-The keyring entry belongs to the OAuth client (`clientId`), not to the Roblox id. You can add another profile in `config.json` for a different Roblox id without a second login and without pasting a token when that profile uses the same `clientId` as a profile that already logged in.
+The keyring entry belongs to the OAuth client (`clientId`). A hand-added profile may omit scopes, expiry, and `redirectUri`. bg-cli fills those from the profile that already logged in with the same `clientId`, including that callback. `accountId`, `ps99UserId`, and `ps99ClanTag` stay the values written on the alias you asked for.
 
-`alt1` below omits scopes, expiry, and `redirectUri`. bg-cli uses the values already stored on `main`, including that callback. `accountId` and `ps99UserId` stay the values written on `alt1`.
+`GET /v1/account/*` returns only the Roblox account that authorized the access token. The body is that player's cached save (`Cache-Control: private, no-cache`). It is not a lookup by the `accountId` stored on another alias.
+
+When `accountId` or `ps99UserId` differs, account commands do not send the other profile's token and do not write that profile's inventory or profile under this alias. Authorize the other Roblox account with a real login. The OAuth client id stays the one already stored. The new access token is written only to this alias's keyring entry. The other profile's token is not copied.
+
+```bash
+bg-cli auth login --profile alt1
+```
+
+`--client-id` and `--redirect-uri` can be omitted when they are already on the profile, including a redirect URI taken from the profile that logged in with the same client. The consent page is where the other Roblox account is chosen. Two aliases for the same Roblox id can still share one token.
+
+`alt1` below is a different Roblox account from `main`. Account reads for `alt1` fail until that login finishes. `auth status` reports no token for `alt1` while only `main` has one.
 
 ```json
 {
@@ -138,6 +148,6 @@ The keyring entry belongs to the OAuth client (`clientId`), not to the Roblox id
 }
 ```
 
-Account commands for `alt1` send the token stored for that client. `auth status` reports `credentialProfile` as the alias that holds the keyring entry. Logging out only `alt1` removes that alias and leaves the token in place. Logging out the alias that holds the token removes the shared credential.
+`auth status` reports `credentialProfile` as the alias whose keyring entry account commands will use. For a different Roblox id that entry is empty until `auth login` stores one. Logging out only `alt1` removes that alias and leaves `main`'s token in place. Logging out the alias that holds a shared token removes it. An account command for `alt1` uses a shared token only when the Roblox id matches. A different id is refused, and the token owner's payload is not printed or saved as `alt1`.
 
 A different `clientId` does not receive this token. Authorize that client with `auth login`. Do not put the access token or client secret in `config.json`.

@@ -47,7 +47,7 @@ Stdout carries data. Diagnostics go to stderr. Secrets are never printed.
 
 ## account
 
-Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching granted scope.
+Authenticated `GET` calls to `/v1/account/*`. Each command requires its matching granted scope. The response is the Roblox account that authorized the access token, including that player's cached profile and inventory. A second local profile with the same `clientId` can use that token when `accountId` and `ps99UserId` are the same account. When either id differs, the command exits 8, does not send the other profile's token, and does not print or save that profile's payloads. `auth login --profile <alias>` authorizes the other account with the same OAuth client and stores a separate keyring token. There is no account route that takes the other Roblox id.
 
 | Command | Endpoint | Default scope |
 | --- | --- | --- |

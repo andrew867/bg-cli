@@ -3,6 +3,11 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -218,6 +223,126 @@ func TestAuthProfileSetAndUnset(t *testing.T) {
 	code = Execute(Deps{Stdout: &stdout, Stderr: &stderr}, []string{"auth", "profile", "set", "--profile", "main"})
 	if code != exitcode.Usage || !strings.Contains(stderr.String()+stdout.String(), "auth profile set --profile main") {
 		t.Fatalf("exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestAuthLoginReauthStoresSeparateToken(t *testing.T) {
+	const mainToken = "synthetic_main_client_token"
+	const altToken = "synthetic_alt_reauth_token"
+	const clientSecret = "synthetic-client-secret"
+
+	reserve, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	redirectURI := "http://" + reserve.Addr().String() + "/callback"
+	_ = reserve.Close()
+
+	dir := t.TempDir()
+	t.Setenv("BG_CLI_CONFIG_DIR", dir)
+	if err := config.Save(&config.File{
+		DefaultProfile: "main",
+		Profiles: map[string]config.Profile{
+			"main": {
+				Alias: "main", ClientID: "same-client", Scopes: auth.DefaultScopes,
+				RedirectURI: redirectURI, AccountID: "111", PS99UserID: "111",
+				IssuedAt:  time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+				ExpiresAt: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+			},
+			"alt1": {
+				Alias: "alt1", ClientID: "same-client", AccountID: "222", PS99UserID: "222", PS99ClanTag: "ALT",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store := auth.NewMemoryStore()
+	if err := store.Set("main", mainToken); err != nil {
+		t.Fatal(err)
+	}
+
+	var opened string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("client_id") != "same-client" {
+			t.Errorf("client_id %q", q.Get("client_id"))
+		}
+		if strings.Contains(r.URL.RawQuery, mainToken) || strings.Contains(r.URL.RawQuery, clientSecret) {
+			t.Error("authorize URL contained a secret or the other profile's token")
+		}
+		cb := q.Get("redirect_uri") + "?code=" + url.QueryEscape("synthetic-auth-code") + "&state=" + url.QueryEscape(q.Get("state"))
+		http.Redirect(w, r, cb, http.StatusFound)
+	})
+	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":2592000,"scope":%q}`, altToken, auth.ScopeString(auth.DefaultScopes))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := Execute(Deps{
+		Stdout: &stdout, Stderr: &stderr, TokenStore: store,
+		HTTPClient:        srv.Client(),
+		OAuthAuthorizeURL: srv.URL + "/oauth/authorize",
+		OAuthTokenURL:     srv.URL + "/oauth/token",
+		Env: func(k string) string {
+			if k == auth.ClientSecretEnv {
+				return clientSecret
+			}
+			return ""
+		},
+		IsTTY: func() bool { return false },
+		OpenURL: func(u string) error {
+			opened = u
+			go func() {
+				c := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+				resp, err := c.Get(u)
+				if err != nil {
+					return
+				}
+				loc := resp.Header.Get("Location")
+				resp.Body.Close()
+				if r2, err := http.Get(loc); err == nil {
+					r2.Body.Close()
+				}
+			}()
+			return nil
+		},
+		Now: func() time.Time { return time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC) },
+	}, []string{"auth", "login", "--profile", "alt1"})
+	if code != 0 {
+		t.Fatalf("login exit %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if strings.Contains(opened, mainToken) || strings.Contains(stdout.String()+stderr.String(), mainToken) || strings.Contains(stdout.String()+stderr.String(), altToken) || strings.Contains(stdout.String()+stderr.String(), clientSecret) {
+		t.Fatal("token or client secret was printed or copied into the authorize URL")
+	}
+	gotMain, err := store.Get("main")
+	if err != nil || gotMain != mainToken {
+		t.Fatalf("main token changed: %q err=%v", gotMain, err)
+	}
+	gotAlt, err := store.Get("alt1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotAlt != altToken || gotAlt == mainToken {
+		t.Fatalf("alt token = %q", gotAlt)
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	alt := loaded.Profiles["alt1"]
+	if alt.AccountID != "222" || alt.PS99UserID != "222" || alt.ClientID != "same-client" || alt.PS99ClanTag != "ALT" {
+		t.Fatalf("reauth rewrote alt identity: %+v", alt)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, config.ConfigFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), mainToken) || strings.Contains(string(raw), altToken) || strings.Contains(string(raw), clientSecret) {
+		t.Fatal("secret written into config")
 	}
 }
 

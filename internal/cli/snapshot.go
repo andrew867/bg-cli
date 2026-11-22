@@ -39,6 +39,12 @@ When config.json has more than one profile, default file names include that
 profile alias, for example 2026-11-22-120000-alt1-ps99-inv.json. One profile
 keeps the current names. --zip-path is used exactly as given.
 
+GET /v1/account/* returns the Roblox account that authorized the token.
+If --profile names a different accountId or ps99UserId than the alias that
+holds that token, the snapshot stops before any file is written. The token
+owner's cached profile and inventory are not saved under the other label.
+Log in that profile. The same Roblox id can still use the shared token.
+
 Every snapshot also writes summary.json. That file is the history record for
 clan points and currencies. Later snapshots read prior *-prefix-summary.json
 files only. Raw inventory, profile, currency, and clan files are unchanged.
@@ -215,6 +221,9 @@ func (a *App) runAccountSnapshot(ctx context.Context, opt snapshotOptions) error
 		if err := clan.ValidateSessionID(opt.SessionID); err != nil {
 			return &ExitError{Code: exitcode.Usage, Msg: err.Error()}
 		}
+	}
+	if err := a.sharedAccountPayloadError(); err != nil {
+		return err
 	}
 	if err := snapshot.ValidatePrefix(opt.Prefix); err != nil {
 		return &ExitError{Code: exitcode.Usage, Msg: err.Error()}

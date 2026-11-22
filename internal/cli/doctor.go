@@ -91,7 +91,10 @@ and does not call the network.`,
 					}
 					tokPresent := false
 					credentialProfile := ""
-					if _, from, err := app.tokenFromAliases(credAliases); err == nil {
+					present, from, err := app.profileHasAccountToken(cfg, p, credAliases)
+					if err != nil && !tokenMissing(err) {
+						tokPresent = false
+					} else if present {
 						tokPresent = true
 						credentialProfile = from
 					}

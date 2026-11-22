@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (none)
 
+### Fixed
+
+- A profile that shares an OAuth client with another alias no longer uses that alias's access token when the Roblox id differs. `GET /v1/account/*` returns only the player who authorized the token, including that player's cached profile and inventory, so those bodies are not written under the other label. `auth login --profile alt1` reauthorizes that account with the same client id and stores a separate keyring token. It does not copy the other profile's token. The same Roblox id can still use the shared token.
+
 ## [0.2.7] - 2026-11-22
 
 ### Fixed
